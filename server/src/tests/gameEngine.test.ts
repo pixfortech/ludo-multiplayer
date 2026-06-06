@@ -6,7 +6,8 @@ import {
   startGame,
   removePlayer,
 } from "../game/gameEngine.js";
-import type { GameState } from "../game/gameTypes.js";
+import { getMovableTokens, canTokenMove } from "../game/moveValidator.js";
+import type { GameState, Token } from "../game/gameTypes.js";
 
 const P1 = "player1";
 const P2 = "player2";
@@ -229,5 +230,89 @@ describe("Player removal / disconnect safety", () => {
     expect(after.players).toHaveLength(1);
     expect(after.phase).toBe("finished");
     expect(after.winner).toBe("red");
+  });
+});
+
+describe("Legal token list", () => {
+  function makeToken(overrides: Partial<Token>): Token {
+    return { id: 0, color: "red", state: "active", position: 0, ...overrides };
+  }
+
+  it("base token is NOT movable without a 6", () => {
+    const t = makeToken({ state: "base", position: -1 });
+    expect(canTokenMove(t, 3)).toBe(false);
+  });
+
+  it("base token IS movable with a 6", () => {
+    const t = makeToken({ state: "base", position: -1 });
+    expect(canTokenMove(t, 6)).toBe(true);
+  });
+
+  it("active token is not movable if it would overshoot home (pos 56 + dice 3 > 58)", () => {
+    const t = makeToken({ position: 56 });
+    expect(canTokenMove(t, 3)).toBe(false);
+  });
+
+  it("active token IS movable for exact home entry (pos 56 + dice 2 = 58)", () => {
+    const t = makeToken({ position: 56 });
+    expect(canTokenMove(t, 2)).toBe(true);
+  });
+
+  it("home token is never movable", () => {
+    const t = makeToken({ state: "home", position: 58 });
+    expect(canTokenMove(t, 6)).toBe(false);
+  });
+
+  it("getMovableTokens returns only the movable subset", () => {
+    const state = cloneWithTokens(freshState());
+    // token 0 in base, token 1 active mid-track, token 2 near home, token 3 at home
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "base", position: -1 };
+    state.players[0].tokens[1] = { id: 1, color: "red", state: "active", position: 10 };
+    state.players[0].tokens[2] = { id: 2, color: "red", state: "active", position: 57 };
+    state.players[0].tokens[3] = { id: 3, color: "red", state: "home", position: 58 };
+    const movable = getMovableTokens(state.players[0], 1);
+    // dice=1: base→not movable, pos10+1=11≤58✓, pos57+1=58✓, home→not movable
+    expect(movable.map((t) => t.id)).toEqual([1, 2]);
+  });
+
+  it("turn passes automatically when no legal moves exist after roll", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0); // force roll = 1
+    const state = cloneWithTokens(freshState()); // all tokens in base, dice=1 → no moves
+    const after = rollDice(state, P1);
+    expect(after.currentPlayerIndex).toBe(1); // auto-advanced to P2
+    expect(after.diceRolled).toBe(false);
+    vi.restoreAllMocks();
+  });
+});
+
+describe("Typed error behaviour", () => {
+  it("rollDice returns unchanged state for wrong player", () => {
+    const state = freshState();
+    expect(rollDice(state, P2)).toStrictEqual(state);
+  });
+
+  it("rollDice returns unchanged state when dice already rolled", () => {
+    const state = withDice(freshState(), 3);
+    expect(rollDice(state, P1)).toStrictEqual(state);
+  });
+
+  it("rollDice returns unchanged state when phase is not playing", () => {
+    const state: GameState = { ...freshState(), phase: "finished" };
+    expect(rollDice(state, P1)).toStrictEqual(state);
+  });
+
+  it("moveToken returns unchanged state when dice not rolled", () => {
+    const state: GameState = { ...freshState(), diceRolled: false, diceValue: null };
+    expect(moveToken(state, P1, 0)).toStrictEqual(state);
+  });
+
+  it("moveToken returns unchanged state for a non-existent tokenId", () => {
+    const state = withDice(freshState(), 6);
+    expect(moveToken(state, P1, 99)).toStrictEqual(state);
+  });
+
+  it("moveToken returns unchanged state when wrong player acts", () => {
+    const state = withDice(freshState(), 6);
+    expect(moveToken(state, P2, 0)).toStrictEqual(state);
   });
 });
