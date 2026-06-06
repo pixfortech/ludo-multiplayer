@@ -6,26 +6,35 @@ import {
   startRoomGame,
   getPlayerRoom,
   removePlayerFromRoom,
+  registerSocketPlayer,
+  unregisterSocket,
+  getPlayerIdFromSocket,
+  markDisconnected,
+  resumePlayer,
 } from "../rooms/roomManager.js";
 import { rollDice, moveToken } from "../game/gameEngine.js";
 
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 export function registerSocketHandlers(io: Server, socket: AppSocket): void {
-  socket.on("createRoom", (maxPlayers) => {
+  socket.on("createRoom", (maxPlayers, clientPlayerId) => {
     if (maxPlayers < 2 || maxPlayers > 4) {
       socket.emit("error", "maxPlayers must be 2-4");
       return;
     }
-    const room = createRoom(socket.id, maxPlayers);
+    const playerId = clientPlayerId ?? socket.id;
+    registerSocketPlayer(socket.id, playerId);
+    const room = createRoom(playerId, maxPlayers);
     socket.join(room.id);
     socket.emit("roomCreated", room.id);
     socket.emit("roomJoined", { roomId: room.id, color: room.gameState.players[0].color });
     socket.emit("gameStateUpdate", room.gameState);
   });
 
-  socket.on("joinRoom", (roomId) => {
-    const result = joinRoom(roomId, socket.id);
+  socket.on("joinRoom", (roomId, clientPlayerId) => {
+    const playerId = clientPlayerId ?? socket.id;
+    registerSocketPlayer(socket.id, playerId);
+    const result = joinRoom(roomId, playerId);
     if (!result) {
       socket.emit("error", "Room not found or full");
       return;
@@ -33,36 +42,53 @@ export function registerSocketHandlers(io: Server, socket: AppSocket): void {
     socket.join(roomId);
     socket.emit("roomJoined", { roomId, color: result.color });
     io.to(roomId).emit("gameStateUpdate", result.room.gameState);
-    io.to(roomId).emit("playerJoined", { id: socket.id, color: result.color });
+    io.to(roomId).emit("playerJoined", { id: playerId, color: result.color });
   });
 
-  // Explicit snapshot request — the client calls this once GameRoom has mounted
-  // and attached its listeners, so it can never miss the initial broadcast.
+  socket.on("resume", (roomId, playerId) => {
+    const room = resumePlayer(roomId, playerId, socket.id);
+    if (!room) {
+      socket.emit("error", "Room or player not found");
+      return;
+    }
+    socket.join(roomId);
+    socket.emit("gameStateUpdate", room.gameState);
+    io.to(roomId).emit("gameStateUpdate", room.gameState);
+  });
+
   socket.on("requestState", () => {
-    const room = getPlayerRoom(socket.id);
+    const playerId = getPlayerIdFromSocket(socket.id);
+    if (!playerId) return;
+    const room = getPlayerRoom(playerId);
     if (!room) return;
     socket.emit("gameStateUpdate", room.gameState);
   });
 
   socket.on("startGame", () => {
-    const room = getPlayerRoom(socket.id);
+    const playerId = getPlayerIdFromSocket(socket.id);
+    if (!playerId) { socket.emit("error", "Not in a room"); return; }
+    const room = getPlayerRoom(playerId);
     if (!room) { socket.emit("error", "Not in a room"); return; }
-    const updated = startRoomGame(room.id, socket.id);
+    const updated = startRoomGame(room.id, playerId);
     if (!updated) { socket.emit("error", "Cannot start game"); return; }
     io.to(room.id).emit("gameStateUpdate", updated.gameState);
   });
 
   socket.on("rollDice", () => {
-    const room = getPlayerRoom(socket.id);
+    const playerId = getPlayerIdFromSocket(socket.id);
+    if (!playerId) { socket.emit("error", "Not in a room"); return; }
+    const room = getPlayerRoom(playerId);
     if (!room) { socket.emit("error", "Not in a room"); return; }
-    room.gameState = rollDice(room.gameState, socket.id);
+    room.gameState = rollDice(room.gameState, playerId);
     io.to(room.id).emit("gameStateUpdate", room.gameState);
   });
 
   socket.on("moveToken", (tokenId) => {
-    const room = getPlayerRoom(socket.id);
+    const playerId = getPlayerIdFromSocket(socket.id);
+    if (!playerId) { socket.emit("error", "Not in a room"); return; }
+    const room = getPlayerRoom(playerId);
     if (!room) { socket.emit("error", "Not in a room"); return; }
-    room.gameState = moveToken(room.gameState, socket.id, tokenId);
+    room.gameState = moveToken(room.gameState, playerId, tokenId);
     io.to(room.id).emit("gameStateUpdate", room.gameState);
     if (room.gameState.winner) {
       io.to(room.id).emit("gameOver", room.gameState.winner);
@@ -70,17 +96,26 @@ export function registerSocketHandlers(io: Server, socket: AppSocket): void {
   });
 
   socket.on("leaveRoom", () => {
-    const room = getPlayerRoom(socket.id);
+    const playerId = getPlayerIdFromSocket(socket.id);
+    if (!playerId) return;
+    const room = getPlayerRoom(playerId);
     if (!room) return;
     const roomId = room.id;
     socket.leave(roomId);
-    broadcastRemoval(io, roomId, socket.id);
+    unregisterSocket(socket.id);
+    broadcastRemoval(io, roomId, playerId);
   });
 
   socket.on("disconnect", () => {
-    const room = getPlayerRoom(socket.id);
+    const playerId = getPlayerIdFromSocket(socket.id);
+    if (!playerId) return;
+    const room = getPlayerRoom(playerId);
+    unregisterSocket(socket.id);
     if (!room) return;
-    broadcastRemoval(io, room.id, socket.id);
+    const updated = markDisconnected(room.id, playerId);
+    if (updated) {
+      io.to(room.id).emit("gameStateUpdate", updated.gameState);
+    }
   });
 }
 
