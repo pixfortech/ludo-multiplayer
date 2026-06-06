@@ -16,7 +16,7 @@ export interface Token {
 }
 
 export interface Player {
-  id: string;          // socket id
+  id: string;          // stable player id (persisted client-side); survives reconnect
   color: PlayerColor;
   tokens: Token[];
   connected: boolean;
@@ -26,6 +26,7 @@ export type GamePhase = "waiting" | "playing" | "finished";
 
 export interface GameState {
   roomId: string;
+  hostId: string;
   maxPlayers: number;
   players: Player[];
   currentPlayerIndex: number;
@@ -35,12 +36,16 @@ export interface GameState {
   consecutiveSixes: number;
   winner: PlayerColor | null;
   turnCount: number;
+  lastAction: string | null; // human-readable description of the most recent action
 }
 
-// Client → Server events
+// Client → Server events.
+// playerId params are optional for backward compatibility; clients that send a
+// persisted playerId gain reconnect/resume support.
 export interface ClientToServerEvents {
-  createRoom: (maxPlayers: number) => void;
-  joinRoom: (roomId: string) => void;
+  createRoom: (maxPlayers: number, playerId?: string) => void;
+  joinRoom: (roomId: string, playerId?: string) => void;
+  resume: (roomId: string, playerId: string) => void;
   startGame: () => void;
   rollDice: () => void;
   moveToken: (tokenId: number) => void;

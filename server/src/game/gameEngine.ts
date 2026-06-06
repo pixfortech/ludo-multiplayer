@@ -4,6 +4,8 @@ import { validateMove, checkCapture, getMovableTokens } from "./moveValidator.js
 
 const COLORS: PlayerColor[] = ["red", "blue", "green", "yellow"];
 
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 function makeTokens(color: PlayerColor): Token[] {
   return [0, 1, 2, 3].map((id) => ({
     id,
@@ -20,6 +22,7 @@ export function createInitialState(
 ): GameState {
   return {
     roomId,
+    hostId: players[0]?.id ?? "",
     maxPlayers,
     players: players.map((p) => ({
       id: p.id,
@@ -34,11 +37,17 @@ export function createInitialState(
     consecutiveSixes: 0,
     winner: null,
     turnCount: 0,
+    lastAction: null,
   };
 }
 
 export function startGame(state: GameState): GameState {
-  return { ...state, phase: "playing" };
+  const first = state.players[0];
+  return {
+    ...state,
+    phase: "playing",
+    lastAction: first ? `Game started — ${cap(first.color)} goes first` : "Game started",
+  };
 }
 
 export function rollDice(state: GameState, requestingPlayerId: string): GameState {
@@ -50,21 +59,36 @@ export function rollDice(state: GameState, requestingPlayerId: string): GameStat
 
   const value = Math.floor(Math.random() * 6) + 1;
   const consecutiveSixes = value === 6 ? state.consecutiveSixes + 1 : 0;
+  const who = cap(currentPlayer.color);
 
   // Three consecutive sixes: forfeit the third roll and end the turn.
   if (consecutiveSixes === 3) {
-    return advanceTurn({ ...state, diceValue: value, diceRolled: true, consecutiveSixes: 0 });
+    return advanceTurn({
+      ...state,
+      diceValue: value,
+      diceRolled: true,
+      consecutiveSixes: 0,
+      lastAction: `${who} rolled three 6s in a row — turn forfeited`,
+    });
   }
 
-  const newState: GameState = { ...state, diceValue: value, diceRolled: true, consecutiveSixes };
+  const movable = getMovableTokens(currentPlayer, value);
 
   // No movable tokens for this roll → pass the turn automatically.
-  const movable = getMovableTokens(currentPlayer, value);
   if (movable.length === 0) {
-    return advanceTurn(newState);
+    return advanceTurn({
+      ...state,
+      diceValue: value,
+      diceRolled: true,
+      consecutiveSixes,
+      lastAction: `${who} rolled ${value} but has no legal moves — turn passes`,
+    });
   }
 
-  return newState;
+  const lastAction =
+    value === 6 ? `${who} rolled a 6 — bonus turn` : `${who} rolled ${value}`;
+
+  return { ...state, diceValue: value, diceRolled: true, consecutiveSixes, lastAction };
 }
 
 export function moveToken(state: GameState, requestingPlayerId: string, tokenId: number): GameState {
@@ -80,22 +104,28 @@ export function moveToken(state: GameState, requestingPlayerId: string, tokenId:
   const players = state.players.map((p) => ({ ...p, tokens: p.tokens.map((t) => ({ ...t })) }));
   const player = players[state.currentPlayerIndex];
   const token = player.tokens.find((t) => t.id === tokenId)!;
+  const who = cap(player.color);
 
+  let leftBase = false;
   // Leave base
   if (token.state === "base") {
     token.state = "active";
     token.position = 0;
+    leftBase = true;
   } else {
     token.position += dice;
   }
 
   // Reached home (exact entry is enforced by validateMove/canTokenMove)
+  let reachedHome = false;
   if (token.position >= HOME_POSITION) {
     token.position = HOME_POSITION;
     token.state = "home";
+    reachedHome = true;
   }
 
   // Capture only applies to tokens still on the shared track.
+  let capturedColor: PlayerColor | null = null;
   if (token.state === "active") {
     const captured = checkCapture({ ...state, players }, player.color, token.position);
     if (captured) {
@@ -103,14 +133,21 @@ export function moveToken(state: GameState, requestingPlayerId: string, tokenId:
       const capturedToken = opp.tokens.find((t) => t.id === captured.tokenId)!;
       capturedToken.state = "base";
       capturedToken.position = -1;
+      capturedColor = captured.color;
     }
   }
 
-  const nextState: GameState = { ...state, players, diceRolled: true };
+  let lastAction: string;
+  if (capturedColor) lastAction = `${who} captured ${cap(capturedColor)}!`;
+  else if (reachedHome) lastAction = `${who} sent a token home`;
+  else if (leftBase) lastAction = `${who} brought a token out of base`;
+  else lastAction = `${who} moved a token ${dice}`;
+
+  const nextState: GameState = { ...state, players, diceRolled: true, lastAction };
 
   // Win: all four tokens home.
   if (player.tokens.every((t) => t.state === "home")) {
-    return { ...nextState, phase: "finished", winner: player.color };
+    return { ...nextState, phase: "finished", winner: player.color, lastAction: `${who} wins the game!` };
   }
 
   // Rolling a 6 grants another turn.
@@ -122,9 +159,19 @@ export function moveToken(state: GameState, requestingPlayerId: string, tokenId:
 }
 
 /**
- * Removes a player (on disconnect/leave) and keeps the game state valid:
+ * Marks a player connected/disconnected without removing them, so a refresh or
+ * brief drop can be resumed. Used by the socket layer on disconnect/resume.
+ */
+export function setConnected(state: GameState, playerId: string, connected: boolean): GameState {
+  const players = state.players.map((p) => (p.id === playerId ? { ...p, connected } : p));
+  return { ...state, players };
+}
+
+/**
+ * Removes a player (on explicit leave) and keeps the game state valid:
  * - currentPlayerIndex is adjusted so it always points at a real player;
  * - if the current player leaves, the turn moves cleanly to the next player;
+ * - the host is reassigned if the host left;
  * - if fewer than two players remain mid-game, the game ends safely (walkover)
  *   so rollDice/moveToken can never operate on a broken state.
  */
@@ -155,7 +202,9 @@ export function removePlayer(state: GameState, playerId: string): GameState {
   // Defensive clamp — the index can never point outside the array.
   currentPlayerIndex = Math.max(0, Math.min(currentPlayerIndex, players.length - 1));
 
-  let next: GameState = { ...state, players, currentPlayerIndex };
+  const hostId = state.hostId === playerId ? players[0].id : state.hostId;
+
+  let next: GameState = { ...state, players, currentPlayerIndex, hostId };
 
   if (turnReset) {
     next = { ...next, diceValue: null, diceRolled: false, consecutiveSixes: 0 };
@@ -163,7 +212,7 @@ export function removePlayer(state: GameState, playerId: string): GameState {
 
   // Not enough players to continue an in-progress game: end safely.
   if (players.length < 2 && state.phase === "playing") {
-    next = { ...next, phase: "finished", winner: players[0].color };
+    next = { ...next, phase: "finished", winner: players[0].color, lastAction: `${cap(players[0].color)} wins (opponents left)` };
   }
 
   return next;
