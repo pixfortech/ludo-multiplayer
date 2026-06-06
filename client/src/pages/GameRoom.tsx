@@ -20,6 +20,10 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
     socket.on("error", (msg) => setMessage(msg));
     socket.on("gameOver", (winner) => setMessage(`${winner.toUpperCase()} wins!`));
 
+    // Listeners are attached — ask the server for the authoritative snapshot
+    // so we never miss the initial broadcast (fixes the mount race).
+    socket.emit("requestState");
+
     return () => {
       socket.off("gameStateUpdate");
       socket.off("error");
@@ -68,7 +72,7 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
       {gameState?.phase === "waiting" && (
         <div className="flex flex-col items-center gap-3">
           <p className="text-gray-400">
-            {gameState.players.length} / {gameState.players.length} player(s) joined. Waiting…
+            {gameState.players.length} / {gameState.maxPlayers} players joined. Waiting…
           </p>
           <button
             className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded font-medium"

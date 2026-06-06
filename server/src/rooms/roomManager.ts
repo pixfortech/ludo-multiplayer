@@ -1,13 +1,13 @@
 import { nanoid } from "nanoid";
 import type { Room, PlayerColor } from "../game/gameTypes.js";
-import { createInitialState, assignColors, startGame } from "../game/gameEngine.js";
+import { createInitialState, assignColors, startGame, removePlayer } from "../game/gameEngine.js";
 
 const rooms = new Map<string, Room>();
 
 export function createRoom(hostId: string, maxPlayers: number): Room {
   const id = nanoid(6).toUpperCase();
   const color = assignColors(maxPlayers)[0];
-  const state = createInitialState(id, [{ id: hostId, color }]);
+  const state = createInitialState(id, [{ id: hostId, color }], maxPlayers);
   const room: Room = { id, hostId, maxPlayers, gameState: state };
   rooms.set(id, room);
   return room;
@@ -46,13 +46,28 @@ export function getRoom(roomId: string): Room | undefined {
   return rooms.get(roomId);
 }
 
-export function removePlayerFromRoom(roomId: string, playerId: string): void {
+/**
+ * Removes a player from a room. Returns the updated room, or null if the room
+ * became empty and was deleted. The game state's currentPlayerIndex is kept
+ * valid by the engine, and the host is reassigned if the host left.
+ */
+export function removePlayerFromRoom(roomId: string, playerId: string): Room | null {
   const room = rooms.get(roomId);
-  if (!room) return;
-  room.gameState.players = room.gameState.players.filter((p) => p.id !== playerId);
+  if (!room) return null;
+
+  room.gameState = removePlayer(room.gameState, playerId);
+
   if (room.gameState.players.length === 0) {
     rooms.delete(roomId);
+    return null;
   }
+
+  // Keep the room controllable if the host left.
+  if (room.hostId === playerId) {
+    room.hostId = room.gameState.players[0].id;
+  }
+
+  return room;
 }
 
 export function getPlayerRoom(playerId: string): Room | undefined {

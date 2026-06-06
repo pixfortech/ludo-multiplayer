@@ -36,6 +36,14 @@ export function registerSocketHandlers(io: Server, socket: AppSocket): void {
     io.to(roomId).emit("playerJoined", { id: socket.id, color: result.color });
   });
 
+  // Explicit snapshot request — the client calls this once GameRoom has mounted
+  // and attached its listeners, so it can never miss the initial broadcast.
+  socket.on("requestState", () => {
+    const room = getPlayerRoom(socket.id);
+    if (!room) return;
+    socket.emit("gameStateUpdate", room.gameState);
+  });
+
   socket.on("startGame", () => {
     const room = getPlayerRoom(socket.id);
     if (!room) { socket.emit("error", "Not in a room"); return; }
@@ -47,36 +55,42 @@ export function registerSocketHandlers(io: Server, socket: AppSocket): void {
   socket.on("rollDice", () => {
     const room = getPlayerRoom(socket.id);
     if (!room) { socket.emit("error", "Not in a room"); return; }
-    const newState = rollDice(room.gameState, socket.id);
-    room.gameState = newState;
-    io.to(room.id).emit("gameStateUpdate", newState);
+    room.gameState = rollDice(room.gameState, socket.id);
+    io.to(room.id).emit("gameStateUpdate", room.gameState);
   });
 
   socket.on("moveToken", (tokenId) => {
     const room = getPlayerRoom(socket.id);
     if (!room) { socket.emit("error", "Not in a room"); return; }
-    const newState = moveToken(room.gameState, socket.id, tokenId);
-    room.gameState = newState;
-    io.to(room.id).emit("gameStateUpdate", newState);
-    if (newState.winner) {
-      io.to(room.id).emit("gameOver", newState.winner);
+    room.gameState = moveToken(room.gameState, socket.id, tokenId);
+    io.to(room.id).emit("gameStateUpdate", room.gameState);
+    if (room.gameState.winner) {
+      io.to(room.id).emit("gameOver", room.gameState.winner);
     }
   });
 
   socket.on("leaveRoom", () => {
     const room = getPlayerRoom(socket.id);
     if (!room) return;
-    socket.leave(room.id);
-    removePlayerFromRoom(room.id, socket.id);
-    io.to(room.id).emit("playerLeft", socket.id);
-    const updated = getPlayerRoom(socket.id);
-    if (updated) io.to(room.id).emit("gameStateUpdate", updated.gameState);
+    const roomId = room.id;
+    socket.leave(roomId);
+    broadcastRemoval(io, roomId, socket.id);
   });
 
   socket.on("disconnect", () => {
     const room = getPlayerRoom(socket.id);
     if (!room) return;
-    removePlayerFromRoom(room.id, socket.id);
-    io.to(room.id).emit("playerLeft", socket.id);
+    broadcastRemoval(io, room.id, socket.id);
   });
+}
+
+function broadcastRemoval(io: Server, roomId: string, playerId: string): void {
+  const updated = removePlayerFromRoom(roomId, playerId);
+  io.to(roomId).emit("playerLeft", playerId);
+  if (updated) {
+    io.to(roomId).emit("gameStateUpdate", updated.gameState);
+    if (updated.gameState.winner) {
+      io.to(roomId).emit("gameOver", updated.gameState.winner);
+    }
+  }
 }

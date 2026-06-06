@@ -11,7 +11,9 @@
     "install:server": "npm install --prefix server",
     "install:all": "npm install && npm run install:client && npm run install:server",
     "build:client": "npm run build --prefix client",
-    "build:server": "npm run build --prefix server"
+    "build:server": "npm run build --prefix server",
+    "build": "npm run build:server && npm run build:client",
+    "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix client"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
