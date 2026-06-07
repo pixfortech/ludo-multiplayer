@@ -129,10 +129,14 @@ export default function ClassicLudoBoard({ gameState, myColor, onMoveToken }: Pr
                 className={`rounded-[3px] ${startColor ? "" : "bg-white"}`}
               >
                 {startColor ? (
+                  // Start cells are safe too — paint the colour and overlay a star
+                  // so all 8 safe cells visibly carry the marker.
                   <div
-                    className="h-full w-full rounded-[3px]"
+                    className="flex h-full w-full items-center justify-center rounded-[3px]"
                     style={{ backgroundColor: PLAYER_COLORS[startColor].hex }}
-                  />
+                  >
+                    <SafeCellIcon variant="onColor" />
+                  </div>
                 ) : safe ? (
                   <SafeCellIcon />
                 ) : null}

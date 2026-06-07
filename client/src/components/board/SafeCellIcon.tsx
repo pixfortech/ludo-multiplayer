@@ -1,9 +1,13 @@
 // Star marker drawn on safe (capture-proof) track cells.
-export default function SafeCellIcon() {
+//   • "muted"   → grey star on the plain white safe cells (the 4 star squares).
+//   • "onColor" → light star drawn on top of the 4 coloured start squares, so
+//                 every one of the 8 safe cells visibly carries a star.
+export default function SafeCellIcon({ variant = "muted" }: { variant?: "muted" | "onColor" }) {
+  const tone = variant === "onColor" ? "text-white/90" : "text-slate-400/70";
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-3/5 w-3/5 text-slate-400/70"
+      className={`h-3/5 w-3/5 ${tone}`}
       fill="currentColor"
       aria-hidden
     >

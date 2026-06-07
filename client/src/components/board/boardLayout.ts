@@ -30,10 +30,16 @@ export const START_OFFSETS: Record<PlayerColor, number> = {
   yellow: 39,
 };
 
-// Absolute track indices that cannot be captured (4 coloured starts + 4 stars).
+// Absolute track indices that cannot be captured. These are the 4 coloured
+// start cells (0, 13, 26, 39) plus the 4 "star" cells exactly 8 steps after
+// each start (8, 21, 34, 47). This set MUST stay identical to the server's
+// SAFE_CELLS in server/src/game/boardConfig.ts — the server is authoritative
+// for captures; this copy only paints the markers in the right place.
 export const SAFE_ABS = new Set<number>([0, 8, 13, 21, 26, 34, 39, 47]);
 
-// The coloured start cell index for each colour (also a safe cell).
+// The coloured start cell index for each colour (also a safe cell). Each start
+// is 13 cells (one quarter-loop) after the previous, matching the server's
+// START_OFFSETS so TRACK[START_OFFSETS[color]] is that colour's start square.
 export const START_ABS: Record<number, PlayerColor> = {
   0: "red",
   13: "blue",
@@ -41,7 +47,13 @@ export const START_ABS: Record<number, PlayerColor> = {
   39: "yellow",
 };
 
-// 52-cell shared track, clockwise. TRACK[abs] → grid coordinate.
+// 52-cell shared track, clockwise, TRACK[abs] → (row,col) on the 15×15 grid.
+// Tokens travel in increasing index order and wrap 51 → 0. The path runs along
+// the two outer lines of each cross arm; the middle line of each arm is that
+// colour's private home lane (below). At the four inner cross corners the path
+// "cuts" diagonally (e.g. {6,5} → {5,6}) — this is the standard Ludo turn where
+// no orthogonal cell exists between adjacent arms. Each colour's start square is
+// marked, and the home lane is entered after local step 51 (see tokenCoord).
 export const TRACK: Coord[] = [
   { row: 6, col: 1 }, { row: 6, col: 2 }, { row: 6, col: 3 }, { row: 6, col: 4 }, { row: 6, col: 5 }, // 0-4
   { row: 5, col: 6 }, { row: 4, col: 6 }, { row: 3, col: 6 }, { row: 2, col: 6 }, { row: 1, col: 6 }, // 5-9
