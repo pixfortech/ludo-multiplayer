@@ -32,6 +32,7 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
   }, []);
 
   const myPlayer = gameState?.players.find((p) => p.color === myColor);
+  const isHost = myPlayer !== undefined && myPlayer.id === gameState?.hostId;
   const isMyTurn =
     gameState !== null &&
     gameState.phase === "playing" &&
@@ -74,12 +75,17 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
           <p className="text-gray-400">
             {gameState.players.length} / {gameState.maxPlayers} players joined. Waiting…
           </p>
-          <button
-            className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded font-medium"
-            onClick={handleStartGame}
-          >
-            Start Game
-          </button>
+          {isHost ? (
+            <button
+              className="bg-green-600 hover:bg-green-700 px-6 py-2 rounded font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={handleStartGame}
+              disabled={gameState.players.length < 2}
+            >
+              {gameState.players.length < 2 ? "Waiting for players…" : "Start Game"}
+            </button>
+          ) : (
+            <p className="text-gray-500 text-sm">Waiting for the host to start…</p>
+          )}
         </div>
       )}
 

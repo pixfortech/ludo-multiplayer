@@ -27,16 +27,20 @@ export function createRoom(hostId: string, maxPlayers: number): Room {
   return room;
 }
 
-export function joinRoom(roomId: string, playerId: string): { room: Room; color: PlayerColor } | null {
+export function joinRoom(
+  roomId: string,
+  playerId: string,
+  onError?: (reason: string) => void
+): { room: Room; color: PlayerColor } | null {
   const room = rooms.get(roomId);
-  if (!room) return null;
-  if (room.gameState.phase !== "waiting") return null;
-  if (room.gameState.players.length >= room.maxPlayers) return null;
-  if (room.gameState.players.some((p) => p.id === playerId)) return null;
+  if (!room) { onError?.("Room not found"); return null; }
+  if (room.gameState.phase !== "waiting") { onError?.("Game has already started"); return null; }
+  if (room.gameState.players.length >= room.maxPlayers) { onError?.("Room is full"); return null; }
+  if (room.gameState.players.some((p) => p.id === playerId)) { onError?.("Already in this room"); return null; }
 
   const usedColors = new Set(room.gameState.players.map((p) => p.color));
   const color = assignColors(room.maxPlayers).find((c) => !usedColors.has(c));
-  if (!color) return null;
+  if (!color) { onError?.("No colors available"); return null; }
 
   room.gameState.players.push({
     id: playerId,
@@ -51,6 +55,7 @@ export function joinRoom(roomId: string, playerId: string): { room: Room; color:
 export function startRoomGame(roomId: string, requesterId: string): Room | null {
   const room = rooms.get(roomId);
   if (!room) return null;
+  if (room.gameState.phase !== "waiting") return null;
   if (room.hostId !== requesterId) return null;
   if (room.gameState.players.length < 2) return null;
   room.gameState = startGame(room.gameState);

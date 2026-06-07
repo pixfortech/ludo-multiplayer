@@ -34,11 +34,8 @@ export function registerSocketHandlers(io: Server, socket: AppSocket): void {
   socket.on("joinRoom", (roomId, clientPlayerId) => {
     const playerId = clientPlayerId ?? socket.id;
     registerSocketPlayer(socket.id, playerId);
-    const result = joinRoom(roomId, playerId);
-    if (!result) {
-      socket.emit("error", "Room not found or full");
-      return;
-    }
+    const result = joinRoom(roomId, playerId, (reason) => socket.emit("error", reason));
+    if (!result) return;
     socket.join(roomId);
     socket.emit("roomJoined", { roomId, color: result.color });
     io.to(roomId).emit("gameStateUpdate", result.room.gameState);
@@ -69,6 +66,9 @@ export function registerSocketHandlers(io: Server, socket: AppSocket): void {
     if (!playerId) { socket.emit("error", "Not in a room"); return; }
     const room = getPlayerRoom(playerId);
     if (!room) { socket.emit("error", "Not in a room"); return; }
+    if (room.gameState.phase !== "waiting") { socket.emit("error", "Game has already started"); return; }
+    if (room.hostId !== playerId) { socket.emit("error", "Only the host can start the game"); return; }
+    if (room.gameState.players.length < 2) { socket.emit("error", "At least 2 players are required to start"); return; }
     const updated = startRoomGame(room.id, playerId);
     if (!updated) { socket.emit("error", "Cannot start game"); return; }
     io.to(room.id).emit("gameStateUpdate", updated.gameState);

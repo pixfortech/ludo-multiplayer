@@ -51,10 +51,24 @@ describe("joinRoom restrictions", () => {
     expect(joinRoom("NOPE00", "p1")).toBeNull();
   });
 
+  it("emits specific error for a non-existent room", () => {
+    const errors: string[] = [];
+    joinRoom("NOPE00", "p1", (r) => errors.push(r));
+    expect(errors).toContain("Room not found");
+  });
+
   it("returns null when the room is full", () => {
     const room = createRoom("h", 2);
     joinRoom(room.id, "p2");
     expect(joinRoom(room.id, "p3")).toBeNull();
+  });
+
+  it("emits specific error when room is full", () => {
+    const room = createRoom("hFull", 2);
+    joinRoom(room.id, "p2");
+    const errors: string[] = [];
+    joinRoom(room.id, "p3", (r) => errors.push(r));
+    expect(errors).toContain("Room is full");
   });
 
   it("returns null when the game is already in progress", () => {
@@ -64,10 +78,27 @@ describe("joinRoom restrictions", () => {
     expect(joinRoom(room.id, "newcomer")).toBeNull();
   });
 
+  it("emits specific error when game already started", () => {
+    const room = createRoom("hAA", 2);
+    joinRoom(room.id, "gAA");
+    startRoomGame(room.id, "hAA");
+    const errors: string[] = [];
+    joinRoom(room.id, "newcomer", (r) => errors.push(r));
+    expect(errors).toContain("Game has already started");
+  });
+
   it("rejects a duplicate playerId", () => {
     const room = createRoom("hB", 3);
     joinRoom(room.id, "dup");
     expect(joinRoom(room.id, "dup")).toBeNull();
+  });
+
+  it("emits specific error for duplicate playerId", () => {
+    const room = createRoom("hBB", 3);
+    joinRoom(room.id, "dupdup");
+    const errors: string[] = [];
+    joinRoom(room.id, "dupdup", (r) => errors.push(r));
+    expect(errors).toContain("Already in this room");
   });
 
   it("second player receives a distinct color", () => {
@@ -157,6 +188,41 @@ describe("removePlayerFromRoom", () => {
     expect(updated!.gameState.currentPlayerIndex).toBeLessThan(
       updated!.gameState.players.length
     );
+  });
+});
+
+// ── 5b. startGame typed error conditions ────────────────────────────────────
+// These mirror the explicit pre-checks in the startGame socket handler.
+
+describe("startGame typed error conditions", () => {
+  it("host with ≥2 players: startRoomGame succeeds", () => {
+    const room = createRoom("hostSG1", 2);
+    joinRoom(room.id, "guestSG1");
+    expect(startRoomGame(room.id, "hostSG1")).not.toBeNull();
+  });
+
+  it("non-host: startRoomGame returns null → handler emits 'Only the host can start the game'", () => {
+    const room = createRoom("hostSG2", 2);
+    joinRoom(room.id, "guestSG2");
+    // Verify the condition the handler checks
+    expect(room.hostId).toBe("hostSG2");
+    expect(room.hostId).not.toBe("guestSG2");
+    expect(startRoomGame(room.id, "guestSG2")).toBeNull();
+  });
+
+  it("fewer than 2 players: startRoomGame returns null → handler emits 'At least 2 players are required'", () => {
+    const room = createRoom("hostSG3", 2);
+    expect(room.gameState.players.length).toBe(1);
+    expect(startRoomGame(room.id, "hostSG3")).toBeNull();
+  });
+
+  it("game already started: phase is playing → handler emits 'Game has already started'", () => {
+    const room = createRoom("hostSG4", 2);
+    joinRoom(room.id, "guestSG4");
+    startRoomGame(room.id, "hostSG4");
+    expect(room.gameState.phase).toBe("playing");
+    // Calling again while playing should fail
+    expect(startRoomGame(room.id, "hostSG4")).toBeNull();
   });
 });
 
