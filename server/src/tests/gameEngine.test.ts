@@ -716,6 +716,55 @@ describe("Auto-move: single legal token", () => {
   });
 });
 
+describe("Auto-move metadata fields", () => {
+  it("auto-move sets lastMoveWasAuto and lastAutoMoveType correctly for a track move", () => {
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    state.players[0].tokens[1] = { id: 1, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[2] = { id: 2, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[3] = { id: 3, color: "red", state: "base", position: -1 };
+    const after = rollDice(state, P1, 3);
+    expect(after.lastMoveWasAuto).toBe(true);
+    expect(after.lastAutoMoveType).toBe("move");
+    expect(after.lastAutoMovedTokenId).toBe(0);
+    expect(after.lastAutoMoveFrom).toBe(5);
+    expect(after.lastAutoMoveTo).toBe(8); // 5 + 3
+  });
+
+  it("auto-open sets lastAutoMoveType to 'open'", () => {
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "base", position: -1 };
+    state.players[0].tokens[1] = { id: 1, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[2] = { id: 2, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[3] = { id: 3, color: "red", state: "home", position: 58 };
+    const after = rollDice(state, P1, 6);
+    expect(after.lastMoveWasAuto).toBe(true);
+    expect(after.lastAutoMoveType).toBe("open");
+    expect(after.lastAutoMoveFrom).toBe(-1); // was in base
+    expect(after.lastAutoMoveTo).toBe(0);    // entered track
+  });
+
+  it("manual move clears lastMoveWasAuto", () => {
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    state.players[0].tokens[1] = { id: 1, color: "red", state: "active", position: 10 };
+    const rolled = rollDice(state, P1, 3); // >1 legal tokens, no auto-move
+    const after = moveToken(rolled, P1, 0);
+    expect(after.lastMoveWasAuto).toBe(false);
+    expect(after.lastAutoMoveType).toBeNull();
+    expect(after.lastAutoMovedTokenId).toBeNull();
+  });
+
+  it("forfeit clears auto-move metadata", () => {
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    const s: GameState = { ...state, consecutiveSixes: 2, diceRolled: false };
+    const after = rollDice(s, P1, 6);
+    expect(after.lastMoveWasAuto).toBe(false);
+    expect(after.lastAutoMoveType).toBeNull();
+  });
+});
+
 describe("dice module", () => {
   it("rollD6 always returns an integer in [1, 6]", () => {
     for (let i = 0; i < 200; i++) {

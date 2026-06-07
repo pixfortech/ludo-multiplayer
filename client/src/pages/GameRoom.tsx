@@ -11,7 +11,24 @@ import { getPlayerId } from "../identity";
 // Keep the roll animation visible for at least this long, then clear it as soon
 // as the authoritative state arrives. A hard cap stops it ever sticking.
 const MIN_ROLL_MS = 450;
+
+function autoMoveToast(state: GameState): string {
+  if (!state.lastMoveWasAuto) return "";
+  // "Roll again" suffix when the same player retains the turn.
+  const extra = state.lastRollBy === state.players[state.currentPlayerIndex]?.color
+    ? " Roll again."
+    : "";
+  switch (state.lastAutoMoveType) {
+    case "open":    return `Only one token could open — moved automatically.${extra}`;
+    case "capture": return `Auto-captured!${extra}`;
+    case "home":    return `Token reached home automatically.${extra}`;
+    case "move":    return `Only one move available — token moved automatically.${extra}`;
+    default:        return "";
+  }
+}
 const ROLL_SAFETY_MS = 2500;
+// Extra delay after dice animation ends before revealing auto-moved token position.
+const AUTO_MOVE_REVEAL_MS = 650;
 
 interface Props {
   roomId: string;
@@ -22,11 +39,16 @@ interface Props {
 
 export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Props) {
   const [gameState, setGameState] = useState<GameState | null>(null);
+  // Board/player-panel state — lags behind gameState during auto-move staging so
+  // the token only moves visually after the dice result has been visible.
+  const [displayedGameState, setDisplayedGameState] = useState<GameState | null>(null);
   const [message, setMessage] = useState("");      // errors / game-over
   const [turnMsg, setTurnMsg] = useState(notice);  // turn-transition / entry info
   const [copied, setCopied] = useState(false);
   const [rolling, setRolling] = useState(false);  // local animation while awaiting server
   const [newTurnColor, setNewTurnColor] = useState<PlayerColor | null>(null);
+  // True while we are delaying a board update to show dice result first.
+  const [autoStaging, setAutoStaging] = useState(false);
 
   // Track previous currentPlayerIndex to detect turn advances.
   const prevIndexRef = useRef<number | null>(null);
@@ -39,6 +61,7 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
   const pendingRollRef = useRef(false);
   const rollStartRef = useRef(0);
   const rollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoStagingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function stopRollingSoon() {
     const elapsed = Date.now() - rollStartRef.current;
@@ -65,7 +88,40 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
       socket.emit("requestState");
     };
 
-    socket.on("gameStateUpdate", setGameState);
+    const handleGameState = (newState: GameState) => {
+      setGameState(newState);
+
+      // Auto-move staging: if this update is the result of our own roll triggering
+      // an auto-move, delay the board update so the player sees the dice result
+      // first, then the token movement after a short pause.
+      if (newState.lastMoveWasAuto && pendingRollRef.current) {
+        pendingRollRef.current = false;
+        stopRollingSoon(); // let dice animation wind down to show the number
+
+        const elapsed = Date.now() - rollStartRef.current;
+        const diceAnimRemaining = Math.max(0, MIN_ROLL_MS - elapsed);
+        const totalDelay = diceAnimRemaining + AUTO_MOVE_REVEAL_MS;
+
+        if (autoStagingTimerRef.current) clearTimeout(autoStagingTimerRef.current);
+        setAutoStaging(true);
+        autoStagingTimerRef.current = setTimeout(() => {
+          setDisplayedGameState(newState);
+          setAutoStaging(false);
+          setTurnMsg(autoMoveToast(newState));
+        }, totalDelay);
+      } else {
+        // Normal update (manual move, other player's action, reconnect): apply immediately.
+        setDisplayedGameState(newState);
+        if (pendingRollRef.current) {
+          pendingRollRef.current = false;
+          stopRollingSoon();
+        }
+        // Show auto-move toast for other players' auto-moves too.
+        if (newState.lastMoveWasAuto) setTurnMsg(autoMoveToast(newState));
+      }
+    };
+
+    socket.on("gameStateUpdate", handleGameState);
     socket.on("connect", reattach);
     // A rejected roll must never leave the dice stuck spinning.
     socket.on("error", (msg) => {
@@ -80,11 +136,12 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
     reattach();
 
     return () => {
-      socket.off("gameStateUpdate");
+      socket.off("gameStateUpdate", handleGameState);
       socket.off("connect", reattach);
       socket.off("error");
       socket.off("gameOver");
       if (rollTimerRef.current) clearTimeout(rollTimerRef.current);
+      if (autoStagingTimerRef.current) clearTimeout(autoStagingTimerRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -108,17 +165,19 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
     if (prev !== null && prev !== curr && gameState.phase === "playing") {
       const newPlayer = gameState.players[curr];
       if (newPlayer) {
-        // Flash the new player's card.
-        setNewTurnColor(newPlayer.color);
-        setTimeout(() => setNewTurnColor(null), 900);
+        // Auto-move turn changes are announced via the staging toast after the
+        // board reveals; skip the card flash and action message here.
+        if (!gameState.lastMoveWasAuto) {
+          setNewTurnColor(newPlayer.color);
+          setTimeout(() => setNewTurnColor(null), 900);
 
-        // Spell out *why* the turn moved when the server auto-advanced.
-        const action = gameState.lastAction ?? "";
-        const nextName = COLOR_LABEL[newPlayer.color];
-        if (action.includes("no legal moves")) {
-          setTurnMsg(`No legal moves — ${nextName}'s turn`);
-        } else if (action.includes("forfeited")) {
-          setTurnMsg(`Three 6s forfeited — ${nextName}'s turn`);
+          const action = gameState.lastAction ?? "";
+          const nextName = COLOR_LABEL[newPlayer.color];
+          if (action.includes("no legal moves")) {
+            setTurnMsg(`No legal moves — ${nextName}'s turn`);
+          } else if (action.includes("forfeited")) {
+            setTurnMsg(`Three 6s forfeited — ${nextName}'s turn`);
+          }
         }
       }
     }
@@ -160,7 +219,7 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
   const movePending = gameState !== null && gameState.diceRolled && gameState.diceValue !== null;
 
   function handleRollDice() {
-    if (!isMyTurn || gameState?.diceRolled || rolling) return;
+    if (!isMyTurn || gameState?.diceRolled || rolling || autoStaging) return;
     pendingRollRef.current = true;
     rollStartRef.current = Date.now();
     setRolling(true);
@@ -171,7 +230,7 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
   }
 
   function handleMoveToken(tokenId: number) {
-    if (isMyTurn && gameState?.diceRolled) socket.emit("moveToken", tokenId);
+    if (isMyTurn && gameState?.diceRolled && !autoStaging) socket.emit("moveToken", tokenId);
   }
 
   function handleLeave() {
@@ -188,6 +247,10 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
       setMessage("Couldn't copy — copy the code manually.");
     }
   }
+
+  // The board and player panels render the displayed state (which lags behind
+  // during auto-move staging). All dice and button logic uses authoritative state.
+  const boardState = displayedGameState ?? gameState;
 
   const joined = gameState?.players.length ?? 0;
   const maxP = gameState?.maxPlayers ?? 0;
@@ -270,7 +333,7 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
             <div className="aspect-square w-full max-w-[68dvh] lg:max-w-[calc(100dvh-7rem)]">
               <Card className="flex h-full w-full items-center justify-center p-2 sm:p-3">
                 <ClassicLudoBoard
-                  gameState={gameState}
+                  gameState={(boardState ?? gameState)!}
                   myColor={myColor}
                   onMoveToken={handleMoveToken}
                 />
@@ -283,7 +346,7 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
             <Dice
               displayValue={displayValue}
               pending={movePending}
-              canRoll={isMyTurn && !gameState.diceRolled}
+              canRoll={isMyTurn && !gameState.diceRolled && !autoStaging}
               isMyTurn={isMyTurn}
               rolling={rolling}
               isSix={isSix}
@@ -292,11 +355,11 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
               onRoll={handleRollDice}
             />
             <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-1">
-              {gameState.players.map((p) => (
+              {(boardState ?? gameState).players.map((p) => (
                 <PlayerPanel
                   key={p.id}
                   player={p}
-                  isActive={gameState.players[gameState.currentPlayerIndex]?.id === p.id}
+                  isActive={(boardState ?? gameState).players[(boardState ?? gameState).currentPlayerIndex]?.id === p.id}
                   isMe={p.color === myColor}
                   isHost={p.id === gameState.hostId}
                   isNewTurn={newTurnColor === p.color}

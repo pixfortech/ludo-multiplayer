@@ -44,6 +44,14 @@ export interface GameState {
   // can keep showing what was rolled (instead of a blank die) after an auto-pass.
   lastRollValue: number | null;
   lastRollBy: PlayerColor | null;
+  // Auto-move metadata. Set by server when exactly one legal token is moved
+  // automatically on roll. Client uses these to stage the board update after
+  // the dice animation completes, so the player sees dice → then token move.
+  lastMoveWasAuto: boolean;
+  lastAutoMoveType: "open" | "move" | "capture" | "home" | null;
+  lastAutoMovedTokenId: number | null;
+  lastAutoMoveFrom: number | null;
+  lastAutoMoveTo: number | null;
 }
 
 // Optional personalisation sent when creating or joining a room. All fields are

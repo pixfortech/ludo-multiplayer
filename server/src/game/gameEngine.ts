@@ -7,6 +7,15 @@ const COLORS: PlayerColor[] = ["red", "blue", "green", "yellow"];
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Spread into any state where no auto-move just happened.
+const CLEAR_AUTO_META = {
+  lastMoveWasAuto: false as const,
+  lastAutoMoveType: null as null,
+  lastAutoMovedTokenId: null as null,
+  lastAutoMoveFrom: null as null,
+  lastAutoMoveTo: null as null,
+};
+
 function makeTokens(color: PlayerColor): Token[] {
   return [0, 1, 2, 3].map((id) => ({
     id,
@@ -42,6 +51,7 @@ export function createInitialState(
     lastAction: null,
     lastRollValue: null,
     lastRollBy: null,
+    ...CLEAR_AUTO_META,
   };
 }
 
@@ -79,6 +89,7 @@ export function rollDice(state: GameState, requestingPlayerId: string, forcedVal
     return advanceTurn({
       ...state,
       ...roll,
+      ...CLEAR_AUTO_META,
       diceValue: value,
       diceRolled: true,
       consecutiveSixes: 0,
@@ -93,6 +104,7 @@ export function rollDice(state: GameState, requestingPlayerId: string, forcedVal
     return advanceTurn({
       ...state,
       ...roll,
+      ...CLEAR_AUTO_META,
       diceValue: value,
       diceRolled: true,
       consecutiveSixes,
@@ -102,14 +114,14 @@ export function rollDice(state: GameState, requestingPlayerId: string, forcedVal
 
   // Exactly one legal token → auto-move it (server-authoritative, no client prompt).
   if (movable.length === 1) {
-    const preMove: GameState = { ...state, ...roll, diceValue: value, diceRolled: true, consecutiveSixes };
+    const preMove: GameState = { ...state, ...roll, ...CLEAR_AUTO_META, diceValue: value, diceRolled: true, consecutiveSixes };
     return applyMove(preMove, state.currentPlayerIndex, movable[0].id, value, true);
   }
 
   const lastAction =
     value === 6 ? `${who} rolled a 6 — bonus turn` : `${who} rolled ${value}`;
 
-  return { ...state, ...roll, diceValue: value, diceRolled: true, consecutiveSixes, lastAction };
+  return { ...state, ...roll, ...CLEAR_AUTO_META, diceValue: value, diceRolled: true, consecutiveSixes, lastAction };
 }
 
 /**
@@ -129,6 +141,8 @@ function applyMove(
   const player = players[playerIdx];
   const token = player.tokens.find((t) => t.id === tokenId)!;
   const who = cap(player.color);
+
+  const prevPosition = token.position; // captured before mutation for auto-move metadata
 
   let leftBase = false;
   if (token.state === "base") {
@@ -160,6 +174,18 @@ function applyMove(
 
   const keepTurn = dice === 6 || capturedColor !== null;
 
+  // Structured metadata for the client staging layer.
+  const autoMeta = auto
+    ? {
+        lastMoveWasAuto: true as const,
+        lastAutoMoveType: (capturedColor ? "capture" : reachedHome ? "home" : leftBase ? "open" : "move") as
+          "open" | "move" | "capture" | "home",
+        lastAutoMovedTokenId: tokenId,
+        lastAutoMoveFrom: prevPosition,
+        lastAutoMoveTo: token.position,
+      }
+    : CLEAR_AUTO_META;
+
   let lastAction: string;
   if (auto) {
     if (capturedColor) lastAction = `${who} rolled ${dice} and auto-captured ${cap(capturedColor)}'s token — Roll again`;
@@ -173,7 +199,7 @@ function applyMove(
     else lastAction = `${who} moved a token ${dice}`;
   }
 
-  const nextState: GameState = { ...state, players, diceRolled: true, lastAction };
+  const nextState: GameState = { ...state, ...autoMeta, players, diceRolled: true, lastAction };
 
   if (player.tokens.every((t) => t.state === "home")) {
     return { ...nextState, phase: "finished", winner: player.color, lastAction: `${who} wins the game!` };
