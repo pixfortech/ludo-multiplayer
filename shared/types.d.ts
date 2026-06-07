@@ -49,10 +49,27 @@ export interface JoinOptions {
   preferredColor?: PlayerColor;
 }
 
+// Lightweight, read-only snapshot used to preview a room before joining.
+// Exposes only what the join form needs — never tokens or internal ids.
+export interface RoomPreviewPlayer {
+  name: string;
+  color: PlayerColor;
+  connected: boolean;
+}
+
+export interface RoomPreview {
+  roomId: string;
+  maxPlayers: number;
+  phase: GamePhase;
+  players: RoomPreviewPlayer[];
+  availableColors: PlayerColor[];
+}
+
 // Client → Server events.
 export interface ClientToServerEvents {
   createRoom: (maxPlayers: number, opts?: JoinOptions) => void;
   joinRoom: (roomId: string, opts?: JoinOptions) => void;
+  getRoomInfo: (roomId: string) => void;
   resume: (roomId: string, playerId: string) => void;
   startGame: () => void;
   rollDice: () => void;
@@ -67,6 +84,8 @@ export interface ServerToClientEvents {
   // `reassigned` is true when the preferred colour was taken and the server
   // assigned the next available colour instead.
   roomJoined: (payload: { roomId: string; color: PlayerColor; name: string; reassigned: boolean }) => void;
+  // Response to getRoomInfo; preview is null when the room does not exist.
+  roomInfo: (payload: { roomId: string; preview: RoomPreview | null }) => void;
   gameStateUpdate: (state: GameState) => void;
   playerJoined: (player: { id: string; color: PlayerColor; name: string }) => void;
   playerLeft: (playerId: string) => void;

@@ -5,6 +5,7 @@ import {
   joinRoom,
   startRoomGame,
   getPlayerRoom,
+  getRoomPreview,
   removePlayerFromRoom,
   registerSocketPlayer,
   unregisterSocket,
@@ -55,6 +56,11 @@ export function registerSocketHandlers(io: Server, socket: AppSocket): void {
     });
     io.to(roomId).emit("gameStateUpdate", result.room.gameState);
     io.to(roomId).emit("playerJoined", { id: playerId, color: result.color, name: result.name });
+  });
+
+  socket.on("getRoomInfo", (roomId) => {
+    const normalized = (roomId ?? "").trim().toUpperCase();
+    socket.emit("roomInfo", { roomId: normalized, preview: getRoomPreview(normalized) });
   });
 
   socket.on("resume", (roomId, playerId) => {

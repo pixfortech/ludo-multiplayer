@@ -11,6 +11,7 @@ import {
   registerSocketPlayer,
   unregisterSocket,
   sanitizeName,
+  getRoomPreview,
 } from "../rooms/roomManager.js";
 
 // Each test creates rooms with unique IDs via nanoid; isolate state by using
@@ -162,6 +163,45 @@ describe("colour selection", () => {
   it("defaults to a sensible name when none is provided", () => {
     const room = createRoom("hNoName", 2);
     expect(room.gameState.players[0].name).toBe("Player");
+  });
+});
+
+// ── 3c. Room preview (join-form colour availability) ────────────────────────
+
+describe("getRoomPreview", () => {
+  it("returns null for an unknown room", () => {
+    expect(getRoomPreview("NOPE00")).toBeNull();
+  });
+
+  it("exposes seated players (name, colour, connected) and free colours", () => {
+    const room = createRoom("hPrev", 4, { name: "Aman", preferredColor: "red" });
+    joinRoom(room.id, "gPrev", { name: "Rahul", preferredColor: "blue" });
+    const preview = getRoomPreview(room.id)!;
+
+    expect(preview.roomId).toBe(room.id);
+    expect(preview.maxPlayers).toBe(4);
+    expect(preview.phase).toBe("waiting");
+    expect(preview.players).toEqual([
+      { name: "Aman", color: "red", connected: true },
+      { name: "Rahul", color: "blue", connected: true },
+    ]);
+    // red + blue taken; green + yellow remain for a 4-player table.
+    expect(preview.availableColors).toEqual(["green", "yellow"]);
+  });
+
+  it("does not leak tokens or player ids", () => {
+    const room = createRoom("hPrev2", 2, { name: "Aman" });
+    const seat = getRoomPreview(room.id)!.players[0] as unknown as Record<string, unknown>;
+    expect(seat).not.toHaveProperty("id");
+    expect(seat).not.toHaveProperty("tokens");
+    expect(Object.keys(seat).sort()).toEqual(["color", "connected", "name"]);
+  });
+
+  it("reflects a started game's phase", () => {
+    const room = createRoom("hPrev3", 2);
+    joinRoom(room.id, "gPrev3");
+    startRoomGame(room.id, "hPrev3");
+    expect(getRoomPreview(room.id)!.phase).toBe("playing");
   });
 });
 

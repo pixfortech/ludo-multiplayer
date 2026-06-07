@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import type { Room, PlayerColor } from "../game/gameTypes.js";
+import type { Room, PlayerColor, RoomPreview } from "../game/gameTypes.js";
 import { createInitialState, assignColors, startGame, removePlayer, setConnected } from "../game/gameEngine.js";
 
 const rooms = new Map<string, Room>();
@@ -102,6 +102,27 @@ export function startRoomGame(roomId: string, requesterId: string): Room | null 
 
 export function getRoom(roomId: string): Room | undefined {
   return rooms.get(roomId);
+}
+
+/**
+ * Read-only snapshot for the join form: who's already seated, which colours
+ * remain, and whether the room can still be joined. Returns null if unknown.
+ */
+export function getRoomPreview(roomId: string): RoomPreview | null {
+  const room = rooms.get(roomId);
+  if (!room) return null;
+  const used = new Set(room.gameState.players.map((p) => p.color));
+  return {
+    roomId: room.id,
+    maxPlayers: room.maxPlayers,
+    phase: room.gameState.phase,
+    players: room.gameState.players.map((p) => ({
+      name: p.name,
+      color: p.color,
+      connected: p.connected,
+    })),
+    availableColors: assignColors(room.maxPlayers).filter((c) => !used.has(c)),
+  };
 }
 
 export function markDisconnected(roomId: string, playerId: string): Room | undefined {
