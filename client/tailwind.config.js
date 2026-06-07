@@ -40,6 +40,11 @@ export default {
           from: { transform: "scale(0.96) translateX(-6px)", opacity: "0.5" },
           to: { transform: "scale(1) translateX(0)", opacity: "1" },
         },
+        // Gentle bob for decorative hero vectors
+        float: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-9px)" },
+        },
       },
       animation: {
         blob: "blob 14s ease-in-out infinite",
@@ -48,6 +53,7 @@ export default {
         shake: "shake 0.55s ease-in-out",
         "six-throb": "six-throb 0.85s ease-in-out infinite",
         "turn-in": "turn-in 0.35s ease-out both",
+        float: "float 5s ease-in-out infinite",
       },
     },
   },

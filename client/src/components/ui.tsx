@@ -2,6 +2,7 @@
 // All variant styles are full, static class strings so Tailwind can detect them.
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { useFullscreen } from "../hooks/useFullscreen";
 
 type Variant = "primary" | "success" | "secondary" | "ghost" | "danger";
 
@@ -82,6 +83,54 @@ export function StatusDot({ connected }: { connected: boolean }) {
         }`}
       />
     </span>
+  );
+}
+
+/**
+ * Premium full-screen toggle. Hides itself where the browser blocks the
+ * Fullscreen API. Keyboard-focusable with a clear label for screen readers.
+ */
+export function FullscreenToggle({
+  className = "",
+  showLabel = false,
+}: {
+  className?: string;
+  showLabel?: boolean;
+}) {
+  const { isFullscreen, supported, toggle } = useFullscreen();
+  if (!supported) return null;
+
+  const label = isFullscreen ? "Exit full screen" : "Full screen";
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      title={label}
+      aria-label={label}
+      aria-pressed={isFullscreen}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl bg-white/5 text-slate-300 ring-1 ring-white/10 transition hover:bg-white/10 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/60 ${
+        showLabel ? "px-3 py-2 text-xs font-semibold" : "h-9 w-9"
+      } ${className}`}
+    >
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        {isFullscreen ? (
+          <>
+            <path d="M9 9H4M9 9V4M9 9 4 4" />
+            <path d="M15 9h5M15 9V4m0 5 5-5" />
+            <path d="M9 15H4m5 0v5m0-5-5 5" />
+            <path d="M15 15h5m-5 0v5m0-5 5 5" />
+          </>
+        ) : (
+          <>
+            <path d="M4 9V4h5" />
+            <path d="M20 9V4h-5" />
+            <path d="M4 15v5h5" />
+            <path d="M20 15v5h-5" />
+          </>
+        )}
+      </svg>
+      {showLabel && <span>{isFullscreen ? "Exit" : "Full screen"}</span>}
+    </button>
   );
 }
 
