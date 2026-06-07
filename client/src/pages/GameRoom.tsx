@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { socket } from "../socket";
 import type { GameState, PlayerColor, Player } from "../types";
-import LudoBoard from "../components/LudoBoard";
+import ClassicLudoBoard from "../components/board/ClassicLudoBoard";
 import PlayerPanel from "../components/PlayerPanel";
 import Dice from "../components/Dice";
 import { Button, Card, Badge, StatusDot, Toast } from "../components/ui";
@@ -135,7 +135,7 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
       {gameState && !isWaiting && (
         <div className="grid animate-fade-in-up gap-4 lg:grid-cols-[1fr_320px]">
           <Card className="p-4 sm:p-5">
-            <LudoBoard
+            <ClassicLudoBoard
               gameState={gameState}
               myColor={myColor}
               onMoveToken={handleMoveToken}
