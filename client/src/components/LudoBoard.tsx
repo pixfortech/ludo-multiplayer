@@ -1,11 +1,12 @@
 import type { GameState, PlayerColor, Token } from "../types";
 import TokenComponent from "./Token";
+import { colorTokens, COLOR_LABEL } from "../theme";
 
 /**
- * Minimal functional board: shows each player's tokens grouped by state.
- * A proper SVG/canvas board with cell-by-cell positions is Phase 2.
- * This shell lets the game be played (all logic is server-side) and
- * gives clear click targets for token selection.
+ * Functional board placeholder: tokens grouped per player by state, with clear
+ * click targets for selection. All movement logic remains server-authoritative.
+ * The full polygon Ludo board is a later UI batch — this is styled to look
+ * premium inside the room layout in the meantime.
  */
 
 interface Props {
@@ -14,19 +15,9 @@ interface Props {
   onMoveToken: (tokenId: number) => void;
 }
 
-const SECTION_BG: Record<string, string> = {
-  red: "bg-red-900/40",
-  blue: "bg-blue-900/40",
-  green: "bg-green-900/40",
-  yellow: "bg-yellow-900/40",
-};
-
 export default function LudoBoard({ gameState, myColor, onMoveToken }: Props) {
-  const isMyTurn =
-    gameState.phase === "playing" &&
-    gameState.players[gameState.currentPlayerIndex]?.color === myColor;
-
-  const myPlayer = gameState.players.find((p) => p.color === myColor);
+  const current = gameState.players[gameState.currentPlayerIndex];
+  const isMyTurn = gameState.phase === "playing" && current?.color === myColor;
 
   function isSelectable(token: Token): boolean {
     if (!isMyTurn || !gameState.diceRolled || gameState.diceValue === null) return false;
@@ -36,41 +27,72 @@ export default function LudoBoard({ gameState, myColor, onMoveToken }: Props) {
   }
 
   return (
-    <div className="flex-1 bg-gray-800 rounded-xl p-4">
-      <h3 className="text-center text-sm text-gray-400 mb-4">
-        {gameState.phase === "waiting" && "Waiting for players…"}
-        {gameState.phase === "playing" &&
-          `${gameState.players[gameState.currentPlayerIndex]?.color?.toUpperCase()}'s turn`}
-        {gameState.phase === "finished" && `${gameState.winner?.toUpperCase()} wins!`}
-      </h3>
-
-      <div className="grid grid-cols-2 gap-3">
-        {gameState.players.map((player) => (
-          <div key={player.id} className={`${SECTION_BG[player.color]} rounded-lg p-3`}>
-            <p className="text-xs font-medium capitalize mb-2">
-              {player.color} {player.color === myColor ? "(you)" : ""}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {player.tokens.map((token) => (
-                <div key={token.id} className="flex flex-col items-center gap-0.5">
-                  <TokenComponent
-                    token={token}
-                    selectable={player.color === myColor && isSelectable(token)}
-                    onSelect={onMoveToken}
-                  />
-                  <span className="text-[9px] text-gray-400">
-                    {token.state === "base" ? "B" : token.state === "home" ? "H" : token.position}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+    <div className="flex h-full flex-col">
+      {/* Status banner */}
+      <div className="mb-4 flex items-center justify-center">
+        {gameState.phase === "playing" && current && (
+          <span
+            className={`rounded-full px-4 py-1.5 text-sm font-bold ${colorTokens(current.color).soft} ${colorTokens(current.color).text}`}
+          >
+            {current.color === myColor
+              ? "Your turn"
+              : `${COLOR_LABEL[current.color]}'s turn`}
+          </span>
+        )}
+        {gameState.phase === "finished" && gameState.winner && (
+          <span className="rounded-full bg-amber-400/15 px-4 py-1.5 text-sm font-bold text-amber-200">
+            🏆 {COLOR_LABEL[gameState.winner]} wins!
+          </span>
+        )}
       </div>
 
-      {isMyTurn && gameState.diceRolled && myPlayer && (
-        <p className="text-center text-xs text-green-400 mt-3">
-          Click a highlighted token to move it
+      {/* Per-player token groups */}
+      <div className="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
+        {gameState.players.map((player) => {
+          const c = colorTokens(player.color);
+          const isCurrent = player.id === current?.id;
+          return (
+            <div
+              key={player.id}
+              className={`rounded-2xl border p-3.5 transition-all ${c.soft} ${
+                isCurrent ? `${c.border} ring-1 ${c.ring}` : "border-white/10"
+              }`}
+            >
+              <div className="mb-3 flex items-center gap-2">
+                <span className={`h-3.5 w-3.5 rounded-full ${c.solid}`} />
+                <span className="text-xs font-bold">
+                  {COLOR_LABEL[player.color]}
+                  {player.color === myColor && (
+                    <span className="ml-1 font-normal text-slate-400">(you)</span>
+                  )}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2.5">
+                {player.tokens.map((token) => (
+                  <div key={token.id} className="flex flex-col items-center gap-1">
+                    <TokenComponent
+                      token={token}
+                      selectable={player.color === myColor && isSelectable(token)}
+                      onSelect={onMoveToken}
+                    />
+                    <span className="text-[9px] font-medium text-slate-500">
+                      {token.state === "base"
+                        ? "base"
+                        : token.state === "home"
+                          ? "home"
+                          : token.position}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {isMyTurn && gameState.diceRolled && (
+        <p className="mt-4 text-center text-xs font-medium text-emerald-300">
+          Tap a highlighted token to move it
         </p>
       )}
     </div>

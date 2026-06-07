@@ -1,11 +1,5 @@
 import type { Token as TokenType } from "../types";
-
-const COLOR_MAP: Record<string, string> = {
-  red: "bg-red-500",
-  blue: "bg-blue-500",
-  green: "bg-green-500",
-  yellow: "bg-yellow-400",
-};
+import { colorTokens } from "../theme";
 
 interface Props {
   token: TokenType;
@@ -14,14 +8,19 @@ interface Props {
 }
 
 export default function Token({ token, selectable, onSelect }: Props) {
+  const c = colorTokens(token.color);
   return (
     <button
-      className={`w-6 h-6 rounded-full border-2 border-white ${COLOR_MAP[token.color]} ${
-        selectable ? "ring-2 ring-white cursor-pointer" : "cursor-default opacity-80"
+      className={`flex h-8 w-8 items-center justify-center rounded-full border-2 border-white/80 text-[10px] font-bold text-white/90 shadow-md transition-all ${c.solid} ${
+        selectable
+          ? `cursor-pointer ring-2 ring-offset-2 ring-offset-slate-900 ${c.ring} hover:scale-110 animate-pulse`
+          : "cursor-default opacity-90"
       }`}
       disabled={!selectable}
       onClick={() => onSelect(token.id)}
       title={`${token.color} token ${token.id} (${token.state})`}
-    />
+    >
+      {token.id + 1}
+    </button>
   );
 }
