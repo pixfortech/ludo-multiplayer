@@ -1,61 +1,110 @@
-import { useState, useEffect, useRef } from "react";
 import { Card } from "./ui";
 
 interface Props {
-  value: number | null;
+  diceValue: number | null;
   canRoll: boolean;
   isMyTurn: boolean;
-  rolling: boolean; // true while local animation is running before server responds
-  isSix: boolean;   // true immediately after rolling 6 (before moving)
+  rolling: boolean; // local animation while awaiting the server result
+  isSix: boolean;   // server result was a 6 (bonus turn pending a move)
   lastAction: string | null;
   onRoll: () => void;
 }
 
-const FACES = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"] as const;
+// Classic pip layout on a 3×3 grid (indices 0–8, reading left→right, top→bottom).
+const PIP_MAP: Record<number, number[]> = {
+  1: [4],
+  2: [0, 8],
+  3: [0, 4, 8],
+  4: [0, 2, 6, 8],
+  5: [0, 2, 4, 6, 8],
+  6: [0, 2, 3, 5, 6, 8],
+};
 
-function randomFace(): string {
-  return FACES[Math.floor(Math.random() * 6)];
+/**
+ * One consistent dice face. The tile, dot style, and grid never change between
+ * states — only which pips are lit. `rolling` hides the pips (no fake values);
+ * `muted` shows a faint resting dot while idle.
+ */
+function DiceFace({ value, rolling }: { value: number | null; rolling: boolean }) {
+  const lit = !rolling && value !== null ? PIP_MAP[value] ?? [] : [];
+  const idle = !rolling && value === null;
+
+  return (
+    <div className="grid h-full w-full grid-cols-3 grid-rows-3 gap-0.5 p-2.5">
+      {Array.from({ length: 9 }).map((_, i) => {
+        const on = lit.includes(i);
+        return (
+          <span key={i} className="flex items-center justify-center">
+            <span
+              className={`h-2.5 w-2.5 rounded-full transition-opacity ${
+                on
+                  ? "bg-slate-900"
+                  : idle && i === 4
+                    ? "bg-slate-900/20" // faint centre dot = die at rest
+                    : "bg-transparent"
+              }`}
+            />
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
-export default function Dice({ value, canRoll, isMyTurn, rolling, isSix, lastAction, onRoll }: Props) {
-  const [displayFace, setDisplayFace] = useState<string>(value !== null ? FACES[value - 1] : "🎲");
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+export default function Dice({
+  diceValue,
+  canRoll,
+  isMyTurn,
+  rolling,
+  isSix,
+  lastAction,
+  onRoll,
+}: Props) {
+  // Same tile in every state; only animation/glow classes are layered on.
+  const tileBase =
+    "relative flex h-20 w-20 items-center justify-center rounded-2xl shadow-xl transition-all select-none";
+  const tileClass = rolling
+    ? `${tileBase} bg-white animate-shake scale-105`
+    : isSix
+      ? `${tileBase} bg-white ring-4 ring-amber-400 animate-six-throb scale-105`
+      : `${tileBase} bg-white`;
 
-  // While rolling: cycle random faces; when done, lock to the real server value.
-  useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (rolling) {
-      timerRef.current = setInterval(() => setDisplayFace(randomFace()), 75);
-    } else {
-      setDisplayFace(value !== null ? FACES[value - 1] : "🎲");
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [rolling, value]);
+  const headerText = isSix
+    ? "Six! Move a token and roll again."
+    : isMyTurn
+      ? "Your move"
+      : "Dice";
 
-  // Classify the lastAction text for colour-coded display.
-  const isTurnPass = !!lastAction && (lastAction.includes("turn passes") || lastAction.includes("turn forfeited"));
+  const isTurnPass =
+    !!lastAction &&
+    (lastAction.includes("turn passes") || lastAction.includes("turn forfeited"));
   const actionColour = isSix
     ? "text-amber-300 font-semibold"
     : isTurnPass
       ? "text-sky-300 font-semibold"
       : "text-slate-400";
 
-  const diceBase =
-    "flex h-20 w-20 items-center justify-center rounded-2xl text-6xl shadow-xl transition-all select-none";
-  const diceClass = rolling
-    ? `${diceBase} animate-shake bg-white text-slate-900 scale-105`
-    : isSix
-      ? `${diceBase} bg-amber-400 text-slate-900 animate-six-throb scale-105`
-      : `${diceBase} bg-white text-slate-900`;
+  const showBadge = !rolling && diceValue !== null;
 
   return (
     <Card className="flex flex-col items-center gap-3 p-5">
-      <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-        {isMyTurn ? (isSix ? "Six! Roll again after moving" : "Your move") : "Dice"}
+      <span className="text-center text-xs font-semibold uppercase tracking-widest text-slate-400">
+        {headerText}
       </span>
 
-      <div className={diceClass} aria-label={`Dice showing ${displayFace}`}>
-        {displayFace}
+      <div className={tileClass} aria-label={diceValue ? `Dice showing ${diceValue}` : "Dice"}>
+        <DiceFace value={diceValue} rolling={rolling} />
+
+        {/* Result number badge — same tile stays fixed underneath. */}
+        {showBadge && (
+          <span
+            className={`absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full text-xs font-extrabold text-white shadow-md ${
+              isSix ? "bg-amber-500 ring-2 ring-amber-300" : "bg-indigo-500"
+            }`}
+          >
+            {diceValue}
+          </span>
+        )}
       </div>
 
       <button
@@ -63,13 +112,7 @@ export default function Dice({ value, canRoll, isMyTurn, rolling, isSix, lastAct
         disabled={!canRoll || rolling}
         onClick={onRoll}
       >
-        {rolling
-          ? "Rolling…"
-          : canRoll
-            ? "Roll dice"
-            : isMyTurn
-              ? "Move a token"
-              : "Waiting…"}
+        {rolling ? "Rolling…" : canRoll ? "Roll dice" : isMyTurn ? "Move a token" : "Waiting…"}
       </button>
 
       {lastAction && (

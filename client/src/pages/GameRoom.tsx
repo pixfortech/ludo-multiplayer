@@ -190,7 +190,7 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
 
           <div className="flex flex-col gap-3">
             <Dice
-              value={gameState.diceValue}
+              diceValue={gameState.diceValue}
               canRoll={isMyTurn && !gameState.diceRolled}
               isMyTurn={isMyTurn}
               rolling={rolling}
