@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { socket } from "../socket";
 import type { GameState, PlayerColor, Player } from "../types";
 import ClassicLudoBoard from "../components/board/ClassicLudoBoard";
@@ -15,19 +15,20 @@ interface Props {
 
 export default function GameRoom({ roomId, myColor, onLeave }: Props) {
   const [gameState, setGameState] = useState<GameState | null>(null);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState("");      // errors / game-over
+  const [turnMsg, setTurnMsg] = useState("");      // turn-transition info
   const [copied, setCopied] = useState(false);
+  const [rolling, setRolling] = useState(false);  // local animation while awaiting server
+  const [newTurnColor, setNewTurnColor] = useState<PlayerColor | null>(null);
+
+  // Track previous currentPlayerIndex to detect turn advances.
+  const prevIndexRef = useRef<number | null>(null);
 
   useEffect(() => {
     socket.on("gameStateUpdate", setGameState);
     socket.on("error", (msg) => setMessage(msg));
-    socket.on("gameOver", (winner) =>
-      setMessage(`${COLOR_LABEL[winner]} wins the game! 🎉`)
-    );
-
-    // Listeners attached — request the authoritative snapshot (mount-race fix).
+    socket.on("gameOver", (winner) => setMessage(`${COLOR_LABEL[winner]} wins! 🎉`));
     socket.emit("requestState");
-
     return () => {
       socket.off("gameStateUpdate");
       socket.off("error");
@@ -35,12 +36,48 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
     };
   }, []);
 
-  // Auto-dismiss transient messages so they don't linger like a stuck alert.
+  // React to incoming game state: stop rolling animation, detect turn change.
+  useEffect(() => {
+    if (!gameState) return;
+
+    // Stop rolling animation once dice value arrives.
+    if (rolling && gameState.diceValue !== null) {
+      setRolling(false);
+    }
+
+    const prev = prevIndexRef.current;
+    const curr = gameState.currentPlayerIndex;
+
+    if (prev !== null && prev !== curr && gameState.phase === "playing") {
+      const newPlayer = gameState.players[curr];
+      if (newPlayer) {
+        // Flash the new player's card.
+        setNewTurnColor(newPlayer.color);
+        setTimeout(() => setNewTurnColor(null), 900);
+
+        // Show a prominent turn-pass message when the server auto-advanced.
+        if (gameState.lastAction?.includes("turn passes") || gameState.lastAction?.includes("turn forfeited")) {
+          const nextName = COLOR_LABEL[newPlayer.color];
+          setTurnMsg(`Turn passed to ${nextName}`);
+        }
+      }
+    }
+
+    prevIndexRef.current = curr;
+  }, [gameState]);
+
+  // Auto-dismiss toast messages.
   useEffect(() => {
     if (!message) return;
     const t = setTimeout(() => setMessage(""), 4500);
     return () => clearTimeout(t);
   }, [message]);
+
+  useEffect(() => {
+    if (!turnMsg) return;
+    const t = setTimeout(() => setTurnMsg(""), 2800);
+    return () => clearTimeout(t);
+  }, [turnMsg]);
 
   const myPlayer = gameState?.players.find((p) => p.color === myColor);
   const isHost = myPlayer !== undefined && myPlayer.id === gameState?.hostId;
@@ -49,16 +86,22 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
     gameState.phase === "playing" &&
     gameState.players[gameState.currentPlayerIndex]?.color === myColor;
 
+  const isSix =
+    gameState?.diceValue === 6 &&
+    gameState.diceRolled === true &&
+    gameState.phase === "playing";
+
   function handleRollDice() {
-    if (isMyTurn && !gameState?.diceRolled) socket.emit("rollDice");
+    if (isMyTurn && !gameState?.diceRolled && !rolling) {
+      setRolling(true);
+      socket.emit("rollDice");
+      // Safety: cancel local animation after 2.5 s if server doesn't respond.
+      setTimeout(() => setRolling(false), 2500);
+    }
   }
 
   function handleMoveToken(tokenId: number) {
     if (isMyTurn && gameState?.diceRolled) socket.emit("moveToken", tokenId);
-  }
-
-  function handleStartGame() {
-    socket.emit("startGame");
   }
 
   function handleLeave() {
@@ -79,29 +122,21 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
   const joined = gameState?.players.length ?? 0;
   const maxP = gameState?.maxPlayers ?? 0;
   const isWaiting = gameState?.phase === "waiting";
-  const messageKind = message.includes("wins") ? "success" : "error";
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-4 px-4 py-5">
       {/* Header */}
       <Card className="flex items-center justify-between gap-3 px-4 py-3">
         <div className="flex items-center gap-3">
-          <span className="font-display text-xl font-extrabold tracking-tight">
-            Ludo
-          </span>
+          <span className="font-display text-xl font-extrabold tracking-tight">Ludo</span>
           <div className="hidden items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 sm:flex">
-            <span className="text-[11px] uppercase tracking-wide text-slate-400">
-              Room
-            </span>
-            <span className="font-mono text-sm font-bold tracking-widest">
-              {roomId}
-            </span>
+            <span className="text-[11px] uppercase tracking-wide text-slate-400">Room</span>
+            <span className="font-mono text-sm font-bold tracking-widest">{roomId}</span>
           </div>
         </div>
-
         <div className="flex items-center gap-3">
           <span className="rounded-full bg-white/5 px-3 py-1 text-xs font-semibold text-slate-300">
-            {joined}/{maxP} players
+            {joined}/{maxP}
           </span>
           {myPlayer && <StatusDot connected={myPlayer.connected} />}
           <Button variant="ghost" className="px-3 py-2 text-rose-300" onClick={handleLeave}>
@@ -110,9 +145,20 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
         </div>
       </Card>
 
+      {/* Error / game-over toast */}
       {message && (
-        <Toast kind={messageKind} onDismiss={() => setMessage("")}>
+        <Toast
+          kind={message.includes("wins") ? "success" : "error"}
+          onDismiss={() => setMessage("")}
+        >
           {message}
+        </Toast>
+      )}
+
+      {/* Turn-pass info toast */}
+      {turnMsg && (
+        <Toast kind="info" onDismiss={() => setTurnMsg("")}>
+          {turnMsg}
         </Toast>
       )}
 
@@ -127,7 +173,7 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
           isHost={isHost}
           copied={copied}
           onCopy={copyCode}
-          onStart={handleStartGame}
+          onStart={() => socket.emit("startGame")}
         />
       )}
 
@@ -147,6 +193,8 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
               value={gameState.diceValue}
               canRoll={isMyTurn && !gameState.diceRolled}
               isMyTurn={isMyTurn}
+              rolling={rolling}
+              isSix={isSix}
               lastAction={gameState.lastAction}
               onRoll={handleRollDice}
             />
@@ -155,11 +203,11 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
                 <PlayerPanel
                   key={p.id}
                   player={p}
-                  isActive={
-                    gameState.players[gameState.currentPlayerIndex]?.id === p.id
-                  }
+                  isActive={gameState.players[gameState.currentPlayerIndex]?.id === p.id}
                   isMe={p.color === myColor}
                   isHost={p.id === gameState.hostId}
+                  isNewTurn={newTurnColor === p.color}
+                  isSix={isSix}
                 />
               ))}
             </div>
@@ -170,7 +218,7 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
   );
 }
 
-// ── Lobby ────────────────────────────────────────────────────────────────────
+// ── Lobby (unchanged structure, no new logic) ─────────────────────────────────
 
 interface LobbyProps {
   roomId: string;
@@ -184,52 +232,30 @@ interface LobbyProps {
   onStart: () => void;
 }
 
-function Lobby({
-  roomId,
-  players,
-  maxPlayers,
-  hostId,
-  myColor,
-  isHost,
-  copied,
-  onCopy,
-  onStart,
-}: LobbyProps) {
+function Lobby({ roomId, players, maxPlayers, hostId, myColor, isHost, copied, onCopy, onStart }: LobbyProps) {
   const emptySlots = Math.max(0, maxPlayers - players.length);
   const canStart = players.length >= 2;
 
   return (
     <div className="flex animate-fade-in-up flex-col gap-4">
-      {/* Room code */}
       <Card className="flex flex-col items-center gap-3 p-6 text-center">
         <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">
           Share this room code
         </span>
-        <div className="font-mono text-5xl font-extrabold tracking-[0.3em] text-white">
-          {roomId}
-        </div>
+        <div className="font-mono text-5xl font-extrabold tracking-[0.3em] text-white">{roomId}</div>
         <Button variant="secondary" onClick={onCopy} className="px-4 py-2">
           {copied ? "Copied ✓" : "Copy code"}
         </Button>
       </Card>
 
-      {/* Players */}
       <Card className="p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-base font-bold">Players</h2>
-          <span className="text-xs font-semibold text-slate-400">
-            {players.length}/{maxPlayers} joined
-          </span>
+          <span className="text-xs font-semibold text-slate-400">{players.length}/{maxPlayers} joined</span>
         </div>
-
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           {players.map((p) => (
-            <PlayerSlot
-              key={p.id}
-              player={p}
-              isHost={p.id === hostId}
-              isMe={p.color === myColor}
-            />
+            <PlayerSlot key={p.id} player={p} isHost={p.id === hostId} isMe={p.color === myColor} />
           ))}
           {Array.from({ length: emptySlots }).map((_, i) => (
             <EmptySlot key={`empty-${i}`} />
@@ -237,7 +263,6 @@ function Lobby({
         </div>
       </Card>
 
-      {/* Start control */}
       <div className="flex flex-col items-center gap-2">
         {isHost ? (
           <Button
@@ -259,20 +284,10 @@ function Lobby({
   );
 }
 
-function PlayerSlot({
-  player,
-  isHost,
-  isMe,
-}: {
-  player: Player;
-  isHost: boolean;
-  isMe: boolean;
-}) {
+function PlayerSlot({ player, isHost, isMe }: { player: Player; isHost: boolean; isMe: boolean }) {
   const c = colorTokens(player.color);
   return (
-    <div
-      className={`flex items-center gap-3 rounded-2xl border ${c.border} ${c.soft} px-3.5 py-3`}
-    >
+    <div className={`flex items-center gap-3 rounded-2xl border ${c.border} ${c.soft} px-3.5 py-3`}>
       <span className={`h-8 w-8 shrink-0 rounded-full ${c.solid} shadow-lg ${c.glow}`} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
@@ -284,9 +299,7 @@ function PlayerSlot({
           {player.connected ? "Connected" : "Reconnecting…"}
         </div>
       </div>
-      {isHost && (
-        <Badge className="bg-amber-400/20 text-amber-200">★ Host</Badge>
-      )}
+      {isHost && <Badge className="bg-amber-400/20 text-amber-200">★ Host</Badge>}
     </div>
   );
 }
