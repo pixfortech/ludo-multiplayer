@@ -377,6 +377,167 @@ describe("Typed error behaviour", () => {
   });
 });
 
+describe("Capture — extra turn", () => {
+  it("capture on a non-6 roll keeps the current player's turn", () => {
+    // Red at local 1, dice 3 → lands on local 4, abs (0+4)%52=4 (not safe).
+    // Blue at local 43: abs (13+43)%52=56%52=4 → same cell → capture.
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 1 };
+    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 43 };
+    const setup: GameState = { ...state, diceValue: 3, diceRolled: true };
+    const after = moveToken(setup, P1, 0);
+
+    expect(after.players[1].tokens[0].state).toBe("base");  // Blue returned to base
+    expect(after.players[1].tokens[0].position).toBe(-1);
+    expect(after.currentPlayerIndex).toBe(0);               // Red keeps the turn
+    expect(after.diceRolled).toBe(false);                    // ready to roll again
+    expect(after.diceValue).toBeNull();
+    expect(after.lastAction).toMatch(/captured/i);
+    expect(after.lastAction).toMatch(/roll again/i);
+  });
+
+  it("capture on a 6 also keeps the turn (both conditions true)", () => {
+    // Red at local 0, dice 6 → local 6, abs 6 (not safe).
+    // Blue at local 45: abs (13+45)%52=58%52=6 → capture.
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 0 };
+    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 45 };
+    const setup: GameState = { ...state, diceValue: 6, diceRolled: true, consecutiveSixes: 1 };
+    const after = moveToken(setup, P1, 0);
+
+    expect(after.players[1].tokens[0].state).toBe("base");
+    expect(after.currentPlayerIndex).toBe(0);   // Red keeps turn
+    expect(after.diceRolled).toBe(false);
+  });
+
+  it("non-capture non-6 move passes the turn", () => {
+    // Red at local 0, dice 3 → abs 3, no Blue active tokens nearby.
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 0 };
+    const setup: GameState = { ...state, diceValue: 3, diceRolled: true };
+    const after = moveToken(setup, P1, 0);
+
+    expect(after.currentPlayerIndex).toBe(1);  // turn passes to Blue
+    expect(after.diceRolled).toBe(false);
+  });
+});
+
+describe("Home lane traversal and home counter", () => {
+  function atPos(state: GameState, playerIdx: number, pos: number): GameState {
+    const s = cloneWithTokens(state);
+    s.players[playerIdx].tokens[0] = { ...s.players[playerIdx].tokens[0], state: "active", position: pos };
+    return s;
+  }
+
+  it("token at position 51 with dice 1 enters the home lane (position 52, still active)", () => {
+    const setup: GameState = { ...atPos(freshState(), 0, 51), diceValue: 1, diceRolled: true };
+    const after = moveToken(setup, P1, 0);
+    expect(after.players[0].tokens[0].position).toBe(52);
+    expect(after.players[0].tokens[0].state).toBe("active");
+  });
+
+  it("token at position 57 with dice 1 reaches final home (position 58, state home)", () => {
+    const setup: GameState = { ...atPos(freshState(), 0, 57), diceValue: 1, diceRolled: true };
+    const after = moveToken(setup, P1, 0);
+    expect(after.players[0].tokens[0].state).toBe("home");
+    expect(after.players[0].tokens[0].position).toBe(58);
+  });
+
+  it("token at position 52 with dice 6 reaches final home (52+6=58, exact)", () => {
+    const setup: GameState = { ...atPos(freshState(), 0, 52), diceValue: 6, diceRolled: true, consecutiveSixes: 1 };
+    const after = moveToken(setup, P1, 0);
+    expect(after.players[0].tokens[0].state).toBe("home");
+    expect(after.players[0].tokens[0].position).toBe(58);
+  });
+
+  it("token at position 53 with dice 6 is blocked — overshoot rejected (53+6=59>58)", () => {
+    const setup: GameState = { ...atPos(freshState(), 0, 53), diceValue: 6, diceRolled: true };
+    const after = moveToken(setup, P1, 0);
+    expect(after.players[0].tokens[0].position).toBe(53); // unchanged
+  });
+
+  it("home counter is 1 after one token reaches position 58", () => {
+    const setup: GameState = { ...atPos(freshState(), 0, 57), diceValue: 1, diceRolled: true };
+    const after = moveToken(setup, P1, 0);
+    const homeCount = after.players[0].tokens.filter((t) => t.state === "home").length;
+    expect(homeCount).toBe(1);
+  });
+
+  it("home counter is 0 while token is still in the home lane (position 56)", () => {
+    const setup: GameState = { ...atPos(freshState(), 0, 55), diceValue: 1, diceRolled: true };
+    const after = moveToken(setup, P1, 0);
+    expect(after.players[0].tokens[0].position).toBe(56);
+    const homeCount = after.players[0].tokens.filter((t) => t.state === "home").length;
+    expect(homeCount).toBe(0);
+  });
+
+  // Colour-specific home lane entry: each colour uses the same position arithmetic
+  // (backend is colour-agnostic for lane traversal), but we test all four explicitly.
+  it("blue token enters home lane at position 52", () => {
+    const s = startGame(createInitialState("r", [{ id: P1, color: "red" }, { id: P2, color: "blue" }], 2));
+    const setup: GameState = {
+      ...atPos(s, 1, 51),
+      currentPlayerIndex: 1,
+      diceValue: 1,
+      diceRolled: true,
+    };
+    const after = moveToken(setup, P2, 0);
+    expect(after.players[1].tokens[0].position).toBe(52);
+    expect(after.players[1].tokens[0].state).toBe("active");
+  });
+
+  it("green token enters home lane at position 52", () => {
+    const P3 = "player3";
+    const s = startGame(createInitialState("r", [
+      { id: P1, color: "red" }, { id: P2, color: "blue" }, { id: P3, color: "green" },
+    ], 3));
+    const setup: GameState = {
+      ...atPos(s, 2, 51),
+      currentPlayerIndex: 2,
+      diceValue: 1,
+      diceRolled: true,
+    };
+    const after = moveToken(setup, P3, 0);
+    expect(after.players[2].tokens[0].position).toBe(52);
+    expect(after.players[2].tokens[0].state).toBe("active");
+  });
+
+  it("yellow token enters home lane at position 52", () => {
+    const P3 = "player3";
+    const P4 = "player4";
+    const s = startGame(createInitialState("r", [
+      { id: P1, color: "red" }, { id: P2, color: "blue" },
+      { id: P3, color: "green" }, { id: P4, color: "yellow" },
+    ], 4));
+    const setup: GameState = {
+      ...atPos(s, 3, 51),
+      currentPlayerIndex: 3,
+      diceValue: 1,
+      diceRolled: true,
+    };
+    const after = moveToken(setup, P4, 0);
+    expect(after.players[3].tokens[0].position).toBe(52);
+    expect(after.players[3].tokens[0].state).toBe("active");
+  });
+
+  it("no capture is possible inside the home lane (position 52–57 is off shared track)", () => {
+    // Blue has a token at absolute position matching green's home lane step — but
+    // green is past HOME_COLUMN_START so checkCapture returns undefined.
+    const P3 = "player3";
+    const s = startGame(createInitialState("r", [
+      { id: P1, color: "red" }, { id: P2, color: "blue" }, { id: P3, color: "green" },
+    ], 3));
+    const state = cloneWithTokens(s);
+    state.players[2].tokens[0] = { id: 0, color: "green", state: "active", position: 53 };
+    // Blue nearby on shared track — must not be captured by green's home lane move.
+    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 5 };
+    const setup: GameState = { ...state, currentPlayerIndex: 2, diceValue: 1, diceRolled: true };
+    const after = moveToken(setup, P3, 0);
+    expect(after.players[1].tokens[0].state).toBe("active"); // Blue not captured
+    expect(after.players[2].tokens[0].position).toBe(54);
+  });
+});
+
 describe("dice module", () => {
   it("rollD6 always returns a value in [1, 6]", () => {
     for (let i = 0; i < 200; i++) {

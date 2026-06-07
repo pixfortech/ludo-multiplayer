@@ -139,8 +139,11 @@ export function moveToken(state: GameState, requestingPlayerId: string, tokenId:
     }
   }
 
+  // Extra turn is granted for rolling a 6 OR capturing an opponent token.
+  const keepTurn = dice === 6 || capturedColor !== null;
+
   let lastAction: string;
-  if (capturedColor) lastAction = `${who} captured ${cap(capturedColor)}!`;
+  if (capturedColor) lastAction = `${who} captured ${cap(capturedColor)}! Roll again`;
   else if (reachedHome) lastAction = `${who} sent a token home`;
   else if (leftBase) lastAction = `${who} brought a token out of base`;
   else lastAction = `${who} moved a token ${dice}`;
@@ -152,12 +155,12 @@ export function moveToken(state: GameState, requestingPlayerId: string, tokenId:
     return { ...nextState, phase: "finished", winner: player.color, lastAction: `${who} wins the game!` };
   }
 
-  // Rolling a 6 grants another turn — same player rolls again.
-  if (dice === 6) {
+  // Extra turn (6 rolled or capture made) — same player rolls again.
+  if (keepTurn) {
     return { ...nextState, diceRolled: false, diceValue: null };
   }
 
-  // Any other roll ends the turn: advance and announce the next player clearly.
+  // No bonus — advance turn and announce the next player clearly.
   const advanced = advanceTurn(nextState);
   const next = advanced.players[advanced.currentPlayerIndex];
   return { ...advanced, lastAction: next ? `${lastAction} · ${cap(next.color)}'s turn` : lastAction };
