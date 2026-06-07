@@ -17,7 +17,7 @@ function makeTokens(color: PlayerColor): Token[] {
 
 export function createInitialState(
   roomId: string,
-  players: { id: string; color: PlayerColor }[],
+  players: { id: string; color: PlayerColor; name?: string }[],
   maxPlayers: number
 ): GameState {
   return {
@@ -26,6 +26,7 @@ export function createInitialState(
     maxPlayers,
     players: players.map((p) => ({
       id: p.id,
+      name: p.name ?? cap(p.color),
       color: p.color,
       tokens: makeTokens(p.color),
       connected: true,
@@ -150,12 +151,15 @@ export function moveToken(state: GameState, requestingPlayerId: string, tokenId:
     return { ...nextState, phase: "finished", winner: player.color, lastAction: `${who} wins the game!` };
   }
 
-  // Rolling a 6 grants another turn.
+  // Rolling a 6 grants another turn — same player rolls again.
   if (dice === 6) {
     return { ...nextState, diceRolled: false, diceValue: null };
   }
 
-  return advanceTurn(nextState);
+  // Any other roll ends the turn: advance and announce the next player clearly.
+  const advanced = advanceTurn(nextState);
+  const next = advanced.players[advanced.currentPlayerIndex];
+  return { ...advanced, lastAction: next ? `${lastAction} · ${cap(next.color)}'s turn` : lastAction };
 }
 
 /**

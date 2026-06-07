@@ -17,29 +17,44 @@ import { rollDice, moveToken } from "../game/gameEngine.js";
 type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 export function registerSocketHandlers(io: Server, socket: AppSocket): void {
-  socket.on("createRoom", (maxPlayers, clientPlayerId) => {
+  socket.on("createRoom", (maxPlayers, opts) => {
     if (maxPlayers < 2 || maxPlayers > 4) {
       socket.emit("error", "maxPlayers must be 2-4");
       return;
     }
-    const playerId = clientPlayerId ?? socket.id;
+    const playerId = opts?.playerId ?? socket.id;
     registerSocketPlayer(socket.id, playerId);
-    const room = createRoom(playerId, maxPlayers);
+    const room = createRoom(playerId, maxPlayers, { name: opts?.name, preferredColor: opts?.preferredColor });
+    const host = room.gameState.players[0];
     socket.join(room.id);
     socket.emit("roomCreated", room.id);
-    socket.emit("roomJoined", { roomId: room.id, color: room.gameState.players[0].color });
+    socket.emit("roomJoined", {
+      roomId: room.id,
+      color: host.color,
+      name: host.name,
+      reassigned: opts?.preferredColor !== undefined && opts.preferredColor !== host.color,
+    });
     socket.emit("gameStateUpdate", room.gameState);
   });
 
-  socket.on("joinRoom", (roomId, clientPlayerId) => {
-    const playerId = clientPlayerId ?? socket.id;
+  socket.on("joinRoom", (roomId, opts) => {
+    const playerId = opts?.playerId ?? socket.id;
     registerSocketPlayer(socket.id, playerId);
-    const result = joinRoom(roomId, playerId, (reason) => socket.emit("error", reason));
+    const result = joinRoom(roomId, playerId, {
+      name: opts?.name,
+      preferredColor: opts?.preferredColor,
+      onError: (reason) => socket.emit("error", reason),
+    });
     if (!result) return;
     socket.join(roomId);
-    socket.emit("roomJoined", { roomId, color: result.color });
+    socket.emit("roomJoined", {
+      roomId,
+      color: result.color,
+      name: result.name,
+      reassigned: result.reassigned,
+    });
     io.to(roomId).emit("gameStateUpdate", result.room.gameState);
-    io.to(roomId).emit("playerJoined", { id: playerId, color: result.color });
+    io.to(roomId).emit("playerJoined", { id: playerId, color: result.color, name: result.name });
   });
 
   socket.on("resume", (roomId, playerId) => {

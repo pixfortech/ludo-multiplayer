@@ -6,6 +6,34 @@ const rooms = new Map<string, Room>();
 // transient socket.id → durable playerId
 const socketToPlayer = new Map<string, string>();
 
+const MAX_NAME_LENGTH = 16;
+
+/** Authoritative name cleanup: collapse whitespace, trim, cap length, fallback. */
+export function sanitizeName(raw?: string): string {
+  const cleaned = (raw ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_NAME_LENGTH);
+  return cleaned || "Player";
+}
+
+/**
+ * Pick a colour for a joining player: honour the preferred colour when it's both
+ * valid for the table size and still free, otherwise the next available colour.
+ */
+function pickColor(
+  maxPlayers: number,
+  used: Set<PlayerColor>,
+  preferred?: PlayerColor
+): PlayerColor | undefined {
+  const available = assignColors(maxPlayers).filter((c) => !used.has(c));
+  if (preferred && available.includes(preferred)) return preferred;
+  return available[0];
+}
+
+interface JoinParams {
+  name?: string;
+  preferredColor?: PlayerColor;
+  onError?: (reason: string) => void;
+}
+
 export function registerSocketPlayer(socketId: string, playerId: string): void {
   socketToPlayer.set(socketId, playerId);
 }
@@ -18,10 +46,15 @@ export function getPlayerIdFromSocket(socketId: string): string | undefined {
   return socketToPlayer.get(socketId);
 }
 
-export function createRoom(hostId: string, maxPlayers: number): Room {
+export function createRoom(
+  hostId: string,
+  maxPlayers: number,
+  opts: { name?: string; preferredColor?: PlayerColor } = {}
+): Room {
   const id = nanoid(6).toUpperCase();
-  const color = assignColors(maxPlayers)[0];
-  const state = createInitialState(id, [{ id: hostId, color }], maxPlayers);
+  const color = pickColor(maxPlayers, new Set(), opts.preferredColor) ?? assignColors(maxPlayers)[0];
+  const name = sanitizeName(opts.name);
+  const state = createInitialState(id, [{ id: hostId, color, name }], maxPlayers);
   const room: Room = { id, hostId, maxPlayers, gameState: state };
   rooms.set(id, room);
   return room;
@@ -30,8 +63,9 @@ export function createRoom(hostId: string, maxPlayers: number): Room {
 export function joinRoom(
   roomId: string,
   playerId: string,
-  onError?: (reason: string) => void
-): { room: Room; color: PlayerColor } | null {
+  opts: JoinParams = {}
+): { room: Room; color: PlayerColor; name: string; reassigned: boolean } | null {
+  const { onError, preferredColor } = opts;
   const room = rooms.get(roomId);
   if (!room) { onError?.("Room not found"); return null; }
   if (room.gameState.phase !== "waiting") { onError?.("Game has already started"); return null; }
@@ -39,17 +73,21 @@ export function joinRoom(
   if (room.gameState.players.some((p) => p.id === playerId)) { onError?.("Already in this room"); return null; }
 
   const usedColors = new Set(room.gameState.players.map((p) => p.color));
-  const color = assignColors(room.maxPlayers).find((c) => !usedColors.has(c));
+  const color = pickColor(room.maxPlayers, usedColors, preferredColor);
   if (!color) { onError?.("No colors available"); return null; }
+
+  const name = sanitizeName(opts.name);
+  const reassigned = preferredColor !== undefined && preferredColor !== color;
 
   room.gameState.players.push({
     id: playerId,
+    name,
     color,
     tokens: [0, 1, 2, 3].map((id) => ({ id, color, state: "base", position: -1 })),
     connected: true,
   });
 
-  return { room, color };
+  return { room, color, name, reassigned };
 }
 
 export function startRoomGame(roomId: string, requesterId: string): Room | null {

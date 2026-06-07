@@ -6,6 +6,7 @@ import PlayerPanel from "../components/PlayerPanel";
 import Dice from "../components/Dice";
 import { Button, Card, Badge, StatusDot, Toast, FullscreenToggle } from "../components/ui";
 import { colorTokens, COLOR_LABEL } from "../theme";
+import { getPlayerId } from "../identity";
 
 // Keep the roll animation visible for at least this long, then clear it as soon
 // as the authoritative state arrives. A hard cap stops it ever sticking.
@@ -15,19 +16,25 @@ const ROLL_SAFETY_MS = 2500;
 interface Props {
   roomId: string;
   myColor: PlayerColor;
+  notice?: string;   // one-off info shown on entry (e.g. colour reassignment)
   onLeave: () => void;
 }
 
-export default function GameRoom({ roomId, myColor, onLeave }: Props) {
+export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Props) {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [message, setMessage] = useState("");      // errors / game-over
-  const [turnMsg, setTurnMsg] = useState("");      // turn-transition info
+  const [turnMsg, setTurnMsg] = useState(notice);  // turn-transition / entry info
   const [copied, setCopied] = useState(false);
   const [rolling, setRolling] = useState(false);  // local animation while awaiting server
   const [newTurnColor, setNewTurnColor] = useState<PlayerColor | null>(null);
 
   // Track previous currentPlayerIndex to detect turn advances.
   const prevIndexRef = useRef<number | null>(null);
+  // Keep onLeave reachable from listeners registered once on mount.
+  const onLeaveRef = useRef(onLeave);
+  onLeaveRef.current = onLeave;
+  // Mirror of gameState for use inside mount-only listeners.
+  const gameStateRef = useRef<GameState | null>(null);
   // A roll we've sent and are waiting on; cleared by the next authoritative state.
   const pendingRollRef = useRef(false);
   const rollStartRef = useRef(0);
@@ -47,16 +54,34 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
   }
 
   useEffect(() => {
+    const playerId = getPlayerId();
+
+    // Re-attach this (possibly new) socket to our durable player on every
+    // connect. This is what lets the turn keep flowing after a reconnect: the
+    // server re-maps socket.id → playerId, so our rolls/moves stop being
+    // silently rejected as "not the current player".
+    const reattach = () => {
+      socket.emit("resume", roomId, playerId);
+      socket.emit("requestState");
+    };
+
     socket.on("gameStateUpdate", setGameState);
+    socket.on("connect", reattach);
     // A rejected roll must never leave the dice stuck spinning.
     socket.on("error", (msg) => {
       stopRollingNow();
       setMessage(msg);
+      // A resume that can't find the room/player means the session is gone
+      // (e.g. server restarted) — return home cleanly instead of a dead board.
+      if (/not found/i.test(msg) && !gameStateRef.current) onLeaveRef.current();
     });
     socket.on("gameOver", (winner) => setMessage(`${COLOR_LABEL[winner]} wins! 🎉`));
-    socket.emit("requestState");
+
+    reattach();
+
     return () => {
       socket.off("gameStateUpdate");
+      socket.off("connect", reattach);
       socket.off("error");
       socket.off("gameOver");
       if (rollTimerRef.current) clearTimeout(rollTimerRef.current);
@@ -66,6 +91,7 @@ export default function GameRoom({ roomId, myColor, onLeave }: Props) {
 
   // React to incoming game state: stop rolling animation, detect turn change.
   useEffect(() => {
+    gameStateRef.current = gameState;
     if (!gameState) return;
 
     // The server resolved our roll the moment any fresh state arrives — whether
@@ -332,11 +358,13 @@ function PlayerSlot({ player, isHost, isMe }: { player: Player; isHost: boolean;
       <span className={`h-8 w-8 shrink-0 rounded-full ${c.solid} shadow-lg ${c.glow}`} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="truncate font-bold">{COLOR_LABEL[player.color]}</span>
+          <span className="truncate font-bold">{player.name}</span>
           {isMe && <span className="text-xs text-slate-400">(you)</span>}
         </div>
         <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-400">
           <StatusDot connected={player.connected} />
+          <span className={c.text}>{COLOR_LABEL[player.color]}</span>
+          <span className="text-slate-600">·</span>
           {player.connected ? "Connected" : "Reconnecting…"}
         </div>
       </div>

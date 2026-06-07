@@ -2,26 +2,37 @@ import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { socket, connect } from "../socket";
 import { Button, Card, Toast, FullscreenToggle } from "../components/ui";
-import { PLAYER_PALETTE, PLAYABLE_COUNTS, MAX_VISUAL_PLAYERS } from "../theme";
+import { PLAYER_PALETTE, PLAYABLE_COUNTS, MAX_VISUAL_PLAYERS, COLOR_LABEL, colorTokens } from "../theme";
 import type { PlayerColor } from "../types";
 import PolygonBoardPreview from "../components/board/PolygonBoardPreview";
 import { POLYGON_NAMES } from "../components/board/polygonLayout";
+import { getPlayerId, loadName, saveName } from "../identity";
 
 interface Props {
-  onRoomJoined: (roomId: string, color: PlayerColor) => void;
+  onRoomJoined: (roomId: string, color: PlayerColor, notice?: string) => void;
 }
 
 const PLAYABLE = new Set<number>(PLAYABLE_COUNTS);
+// The four colours the server can actually run today, in seat order.
+const PLAYABLE_COLORS: PlayerColor[] = ["red", "blue", "green", "yellow"];
 
 export default function Home({ onRoomJoined }: Props) {
   const [joinCode, setJoinCode] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(2);
   const [error, setError] = useState("");
   const [previewCount, setPreviewCount] = useState(6);
+  const [name, setName] = useState(loadName());
+  const [createColor, setCreateColor] = useState<PlayerColor | undefined>(undefined);
+  const [joinColor, setJoinColor] = useState<PlayerColor | undefined>(undefined);
 
   useEffect(() => {
     connect();
-    socket.on("roomJoined", ({ roomId, color }) => onRoomJoined(roomId, color));
+    socket.on("roomJoined", ({ roomId, color, reassigned }) => {
+      const notice = reassigned
+        ? `That colour was taken — you're playing ${COLOR_LABEL[color]}.`
+        : "";
+      onRoomJoined(roomId, color, notice);
+    });
     socket.on("error", (msg) => setError(msg));
     return () => {
       socket.off("roomCreated");
@@ -30,9 +41,26 @@ export default function Home({ onRoomJoined }: Props) {
     };
   }, [onRoomJoined]);
 
+  // Drop a create-colour preference that's no longer valid for the table size.
+  useEffect(() => {
+    if (createColor && PLAYABLE_COLORS.indexOf(createColor) >= maxPlayers) {
+      setCreateColor(undefined);
+    }
+  }, [maxPlayers, createColor]);
+
+  function commitName(): string {
+    const trimmed = name.trim();
+    saveName(trimmed);
+    return trimmed;
+  }
+
   function handleCreate() {
     setError("");
-    socket.emit("createRoom", maxPlayers);
+    socket.emit("createRoom", maxPlayers, {
+      playerId: getPlayerId(),
+      name: commitName(),
+      preferredColor: createColor,
+    });
   }
 
   function handleJoin() {
@@ -41,7 +69,11 @@ export default function Home({ onRoomJoined }: Props) {
       setError("Enter a room code to join.");
       return;
     }
-    socket.emit("joinRoom", joinCode.trim());
+    socket.emit("joinRoom", joinCode.trim(), {
+      playerId: getPlayerId(),
+      name: commitName(),
+      preferredColor: joinColor,
+    });
   }
 
   const previewPlayable = previewCount <= 4;
@@ -86,6 +118,8 @@ export default function Home({ onRoomJoined }: Props) {
           Pick your table size and invite friends with the room code.
         </p>
 
+        <NameField value={name} onChange={setName} />
+
         <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">
           Players
         </label>
@@ -119,6 +153,16 @@ export default function Home({ onRoomJoined }: Props) {
           })}
         </div>
 
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Preferred colour <span className="text-slate-600">· optional</span>
+        </label>
+        <ColorPicker
+          value={createColor}
+          onChange={setCreateColor}
+          enabledCount={maxPlayers}
+          className="mb-5"
+        />
+
         <Button variant="primary" fullWidth onClick={handleCreate}>
           Create room
         </Button>
@@ -134,6 +178,11 @@ export default function Home({ onRoomJoined }: Props) {
           Got a code from a friend? Drop it in below.
         </p>
 
+        <NameField value={name} onChange={setName} />
+
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Room code
+        </label>
         <input
           className="mb-4 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-center text-2xl font-bold uppercase tracking-[0.4em] text-white placeholder:tracking-normal placeholder:text-slate-600 focus:border-indigo-400/60 focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
           placeholder="CODE"
@@ -145,9 +194,22 @@ export default function Home({ onRoomJoined }: Props) {
           autoCapitalize="characters"
         />
 
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Preferred colour <span className="text-slate-600">· optional</span>
+        </label>
+        <ColorPicker
+          value={joinColor}
+          onChange={setJoinColor}
+          enabledCount={PLAYABLE_COLORS.length}
+          className="mb-5"
+        />
+
         <Button variant="secondary" fullWidth onClick={handleJoin}>
           Join room
         </Button>
+        <p className="mt-2.5 text-center text-[11px] text-slate-500">
+          If your colour is taken, the next free one is assigned automatically.
+        </p>
       </Card>
 
       {/* Features */}
@@ -248,6 +310,82 @@ function Pill({ children }: { children: ReactNode }) {
     <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-slate-300">
       {children}
     </span>
+  );
+}
+
+function NameField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <>
+      <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+        Your name
+      </label>
+      <input
+        className="mb-4 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold text-white placeholder:font-normal placeholder:text-slate-600 focus:border-indigo-400/60 focus:outline-none focus:ring-2 focus:ring-indigo-400/30"
+        placeholder="Player"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        maxLength={16}
+        autoCapitalize="words"
+      />
+    </>
+  );
+}
+
+/**
+ * Optional colour preference. Only colours playable at the current table size
+ * are enabled; the rest are dimmed. "Auto" lets the server choose.
+ */
+function ColorPicker({
+  value,
+  onChange,
+  enabledCount,
+  className = "",
+}: {
+  value: PlayerColor | undefined;
+  onChange: (c: PlayerColor | undefined) => void;
+  enabledCount: number;
+  className?: string;
+}) {
+  return (
+    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
+      <button
+        type="button"
+        onClick={() => onChange(undefined)}
+        className={`flex h-10 items-center rounded-2xl px-3 text-xs font-bold transition-all ${
+          value === undefined
+            ? "bg-white/20 text-white ring-2 ring-white/40"
+            : "bg-white/5 text-slate-400 hover:bg-white/10"
+        }`}
+      >
+        Auto
+      </button>
+      {PLAYABLE_COLORS.map((c, i) => {
+        const enabled = i < enabledCount;
+        const selected = value === c;
+        const t = colorTokens(c);
+        return (
+          <button
+            key={c}
+            type="button"
+            disabled={!enabled}
+            onClick={() => onChange(c)}
+            title={enabled ? COLOR_LABEL[c] : "Needs a larger table"}
+            aria-label={COLOR_LABEL[c]}
+            aria-pressed={selected}
+            className={`relative flex h-10 w-10 items-center justify-center rounded-2xl transition-all ${
+              selected ? `scale-105 ring-2 ${t.ring} ring-offset-2 ring-offset-slate-900` : ""
+            } ${enabled ? "hover:scale-105" : "cursor-not-allowed opacity-25"}`}
+            style={{ backgroundColor: t.hex }}
+          >
+            {selected && (
+              <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

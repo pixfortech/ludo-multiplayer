@@ -17,6 +17,7 @@ export interface Token {
 
 export interface Player {
   id: string;          // stable player id (persisted client-side); survives reconnect
+  name: string;        // display name, sanitised server-side (1–16 chars, fallback "Player")
   color: PlayerColor;
   tokens: Token[];
   connected: boolean;
@@ -39,12 +40,19 @@ export interface GameState {
   lastAction: string | null; // human-readable description of the most recent action
 }
 
+// Optional personalisation sent when creating or joining a room. All fields are
+// optional for backward compatibility; clients that send a persisted playerId
+// gain reconnect/resume support, and name/preferredColor drive personalisation.
+export interface JoinOptions {
+  playerId?: string;
+  name?: string;
+  preferredColor?: PlayerColor;
+}
+
 // Client → Server events.
-// playerId params are optional for backward compatibility; clients that send a
-// persisted playerId gain reconnect/resume support.
 export interface ClientToServerEvents {
-  createRoom: (maxPlayers: number, playerId?: string) => void;
-  joinRoom: (roomId: string, playerId?: string) => void;
+  createRoom: (maxPlayers: number, opts?: JoinOptions) => void;
+  joinRoom: (roomId: string, opts?: JoinOptions) => void;
   resume: (roomId: string, playerId: string) => void;
   startGame: () => void;
   rollDice: () => void;
@@ -56,9 +64,11 @@ export interface ClientToServerEvents {
 // Server → Client events
 export interface ServerToClientEvents {
   roomCreated: (roomId: string) => void;
-  roomJoined: (payload: { roomId: string; color: PlayerColor }) => void;
+  // `reassigned` is true when the preferred colour was taken and the server
+  // assigned the next available colour instead.
+  roomJoined: (payload: { roomId: string; color: PlayerColor; name: string; reassigned: boolean }) => void;
   gameStateUpdate: (state: GameState) => void;
-  playerJoined: (player: { id: string; color: PlayerColor }) => void;
+  playerJoined: (player: { id: string; color: PlayerColor; name: string }) => void;
   playerLeft: (playerId: string) => void;
   error: (message: string) => void;
   gameOver: (winner: PlayerColor) => void;

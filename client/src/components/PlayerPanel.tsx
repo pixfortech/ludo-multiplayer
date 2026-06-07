@@ -45,12 +45,14 @@ export default function PlayerPanel({
         />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-bold">{COLOR_LABEL[player.color]}</span>
+            <span className="truncate text-sm font-bold">{player.name}</span>
             {isMe && <span className="text-[11px] text-slate-400">(you)</span>}
             {isHost && <Badge className="bg-amber-400/20 text-amber-200">★</Badge>}
           </div>
           <div className="mt-0.5 flex items-center gap-1.5 text-[10px]">
             <StatusDot connected={player.connected} />
+            <span className={`font-semibold ${c.text}`}>{COLOR_LABEL[player.color]}</span>
+            <span className="text-slate-600">·</span>
             {isActive ? (
               <span className={`font-bold ${sixActive ? "text-amber-300" : c.text}`}>
                 {isMe ? "Your turn" : "Their turn"}

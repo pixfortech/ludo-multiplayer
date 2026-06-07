@@ -10,6 +10,7 @@ import {
   getPlayerIdFromSocket,
   registerSocketPlayer,
   unregisterSocket,
+  sanitizeName,
 } from "../rooms/roomManager.js";
 
 // Each test creates rooms with unique IDs via nanoid; isolate state by using
@@ -53,7 +54,7 @@ describe("joinRoom restrictions", () => {
 
   it("emits specific error for a non-existent room", () => {
     const errors: string[] = [];
-    joinRoom("NOPE00", "p1", (r) => errors.push(r));
+    joinRoom("NOPE00", "p1", { onError: (r) => errors.push(r) });
     expect(errors).toContain("Room not found");
   });
 
@@ -67,7 +68,7 @@ describe("joinRoom restrictions", () => {
     const room = createRoom("hFull", 2);
     joinRoom(room.id, "p2");
     const errors: string[] = [];
-    joinRoom(room.id, "p3", (r) => errors.push(r));
+    joinRoom(room.id, "p3", { onError: (r) => errors.push(r) });
     expect(errors).toContain("Room is full");
   });
 
@@ -83,7 +84,7 @@ describe("joinRoom restrictions", () => {
     joinRoom(room.id, "gAA");
     startRoomGame(room.id, "hAA");
     const errors: string[] = [];
-    joinRoom(room.id, "newcomer", (r) => errors.push(r));
+    joinRoom(room.id, "newcomer", { onError: (r) => errors.push(r) });
     expect(errors).toContain("Game has already started");
   });
 
@@ -97,7 +98,7 @@ describe("joinRoom restrictions", () => {
     const room = createRoom("hBB", 3);
     joinRoom(room.id, "dupdup");
     const errors: string[] = [];
-    joinRoom(room.id, "dupdup", (r) => errors.push(r));
+    joinRoom(room.id, "dupdup", { onError: (r) => errors.push(r) });
     expect(errors).toContain("Already in this room");
   });
 
@@ -106,6 +107,61 @@ describe("joinRoom restrictions", () => {
     const result = joinRoom(room.id, "gC");
     expect(result).not.toBeNull();
     expect(result!.color).not.toBe(room.gameState.players[0].color);
+  });
+});
+
+// ── 3b. Player personalisation: name + colour selection ─────────────────────
+
+describe("name sanitisation", () => {
+  it("trims surrounding whitespace", () => {
+    expect(sanitizeName("  Aman  ")).toBe("Aman");
+  });
+  it("collapses internal whitespace runs", () => {
+    expect(sanitizeName("Aman   Kumar")).toBe("Aman Kumar");
+  });
+  it("truncates to 16 characters", () => {
+    expect(sanitizeName("ABCDEFGHIJKLMNOPQRSTUV")).toBe("ABCDEFGHIJKLMNOP");
+    expect(sanitizeName("ABCDEFGHIJKLMNOPQRSTUV").length).toBe(16);
+  });
+  it("falls back to 'Player' for empty/blank/undefined", () => {
+    expect(sanitizeName("")).toBe("Player");
+    expect(sanitizeName("   ")).toBe("Player");
+    expect(sanitizeName(undefined)).toBe("Player");
+  });
+});
+
+describe("colour selection", () => {
+  it("host's preferred colour is honoured when valid", () => {
+    const room = createRoom("hPref", 4, { preferredColor: "green", name: "Host" });
+    expect(room.gameState.players[0].color).toBe("green");
+    expect(room.gameState.players[0].name).toBe("Host");
+  });
+
+  it("guest's preferred colour is honoured when still free", () => {
+    const room = createRoom("hPref2", 4, { preferredColor: "red" });
+    const result = joinRoom(room.id, "gPref2", { preferredColor: "green", name: "Guest" });
+    expect(result!.color).toBe("green");
+    expect(result!.reassigned).toBe(false);
+    expect(result!.name).toBe("Guest");
+  });
+
+  it("reassigns the next available colour when the preferred one is taken", () => {
+    const room = createRoom("hPref3", 4, { preferredColor: "red" });
+    const result = joinRoom(room.id, "gPref3", { preferredColor: "red" });
+    expect(result!.color).not.toBe("red");
+    expect(result!.reassigned).toBe(true); // client is informed of the swap
+  });
+
+  it("stores the sanitised name on the authoritative player record", () => {
+    const room = createRoom("hName", 2, { name: "  Aman  " });
+    expect(room.gameState.players[0].name).toBe("Aman");
+    const result = joinRoom(room.id, "gName", { name: "x".repeat(40) });
+    expect(result!.room.gameState.players[1].name.length).toBe(16);
+  });
+
+  it("defaults to a sensible name when none is provided", () => {
+    const room = createRoom("hNoName", 2);
+    expect(room.gameState.players[0].name).toBe("Player");
   });
 });
 

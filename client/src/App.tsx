@@ -3,18 +3,31 @@ import Home from "./pages/Home";
 import GameRoom from "./pages/GameRoom";
 import { Background } from "./components/ui";
 import type { PlayerColor } from "./types";
+import { loadSession, saveSession, clearSession } from "./identity";
 
 type AppView = "home" | "game";
 
 export default function App() {
-  const [view, setView] = useState<AppView>("home");
-  const [roomId, setRoomId] = useState<string>("");
-  const [myColor, setMyColor] = useState<PlayerColor>("red");
+  // Restore an in-progress session after a refresh (same tab) so the player can
+  // resume their game instead of dropping back to the home screen.
+  const saved = loadSession();
+  const [view, setView] = useState<AppView>(saved ? "game" : "home");
+  const [roomId, setRoomId] = useState<string>(saved?.roomId ?? "");
+  const [myColor, setMyColor] = useState<PlayerColor>(saved?.color ?? "red");
+  const [notice, setNotice] = useState<string>("");
 
-  function handleRoomJoined(id: string, color: PlayerColor) {
+  function handleRoomJoined(id: string, color: PlayerColor, message = "") {
     setRoomId(id);
     setMyColor(color);
+    setNotice(message);
+    saveSession({ roomId: id, color });
     setView("game");
+  }
+
+  function handleLeave() {
+    clearSession();
+    setNotice("");
+    setView("home");
   }
 
   return (
@@ -26,7 +39,8 @@ export default function App() {
           <GameRoom
             roomId={roomId}
             myColor={myColor}
-            onLeave={() => setView("home")}
+            notice={notice}
+            onLeave={handleLeave}
           />
         )}
       </div>

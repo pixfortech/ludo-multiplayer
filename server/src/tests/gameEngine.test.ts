@@ -101,6 +101,75 @@ describe("Six rules", () => {
   });
 });
 
+describe("Post-six turn flow (regression: turn must pass after a non-six move)", () => {
+  const roll = (v: number) => vi.spyOn(Math, "random").mockReturnValue((v - 1) / 6);
+
+  it("six → move → same player rolls again → one → move → turn passes to Blue", () => {
+    let s = freshState();
+
+    // 1. Red rolls a 6.
+    roll(6);
+    s = rollDice(s, P1);
+    vi.restoreAllMocks();
+    expect(s.currentPlayerIndex).toBe(0);
+    expect(s.diceValue).toBe(6);
+    expect(s.consecutiveSixes).toBe(1);
+
+    // 2. Red moves token 0 out of base; 3. Red retains the turn for the bonus roll.
+    s = moveToken(s, P1, 0);
+    expect(s.players[0].tokens[0].state).toBe("active");
+    expect(s.currentPlayerIndex).toBe(0); // still Red
+    expect(s.diceRolled).toBe(false);     // ready to roll again
+    expect(s.diceValue).toBeNull();
+
+    // 4. Red rolls a 1.
+    roll(1);
+    s = rollDice(s, P1);
+    vi.restoreAllMocks();
+    expect(s.currentPlayerIndex).toBe(0);
+    expect(s.diceValue).toBe(1);
+    expect(s.consecutiveSixes).toBe(0); // non-six resets the streak
+
+    // 5. Red moves the same token; 6. the turn now passes to Blue.
+    s = moveToken(s, P1, 0);
+    expect(s.currentPlayerIndex).toBe(1);  // Blue
+    expect(s.diceRolled).toBe(false);
+    expect(s.diceValue).toBeNull();
+    expect(s.consecutiveSixes).toBe(0);
+    expect(s.lastAction).toMatch(/Blue.*turn/i); // clearly names the next player
+  });
+
+  it("six → move → six again → move keeps the turn with Red (under the three-six cap)", () => {
+    let s = freshState();
+
+    roll(6); s = rollDice(s, P1); vi.restoreAllMocks();
+    s = moveToken(s, P1, 0); // token 0 out of base
+    expect(s.currentPlayerIndex).toBe(0);
+
+    roll(6); s = rollDice(s, P1); vi.restoreAllMocks();
+    expect(s.consecutiveSixes).toBe(2);
+    s = moveToken(s, P1, 1); // bring a second token out on the second six
+    expect(s.currentPlayerIndex).toBe(0); // Red still holds the turn
+    expect(s.diceRolled).toBe(false);
+    expect(s.consecutiveSixes).toBe(2);   // streak preserved until a move-less roll
+  });
+
+  it("three consecutive sixes still forfeits even mid-sequence", () => {
+    let s = freshState();
+
+    roll(6); s = rollDice(s, P1); vi.restoreAllMocks();
+    s = moveToken(s, P1, 0);
+    roll(6); s = rollDice(s, P1); vi.restoreAllMocks();
+    s = moveToken(s, P1, 1);
+    expect(s.consecutiveSixes).toBe(2);
+
+    roll(6); s = rollDice(s, P1); vi.restoreAllMocks(); // third six
+    expect(s.currentPlayerIndex).toBe(1); // forfeited to Blue
+    expect(s.consecutiveSixes).toBe(0);
+    expect(s.lastAction).toMatch(/forfeit/i);
+  });
+});
+
 describe("Capture rules", () => {
   it("captures opponent token on a non-safe cell", () => {
     const state = cloneWithTokens(freshState());
