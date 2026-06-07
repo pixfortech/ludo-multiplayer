@@ -172,7 +172,8 @@ function applyMove(
     }
   }
 
-  const keepTurn = dice === 6 || capturedColor !== null;
+  // Home entry, capture, and rolling a 6 each grant the same player another turn.
+  const keepTurn = dice === 6 || capturedColor !== null || reachedHome;
 
   // Structured metadata for the client staging layer.
   const autoMeta = auto
@@ -189,12 +190,12 @@ function applyMove(
   let lastAction: string;
   if (auto) {
     if (capturedColor) lastAction = `${who} rolled ${dice} and auto-captured ${cap(capturedColor)}'s token — Roll again`;
-    else if (reachedHome) lastAction = `${who} rolled ${dice} and auto-moved a token home`;
+    else if (reachedHome) lastAction = `${who} rolled ${dice} and auto-moved a token home — Roll again`;
     else if (leftBase) lastAction = `${who} rolled 6 and auto-opened token ${tokenId} — Roll again`;
     else lastAction = `${who} rolled ${dice} and auto-moved token ${tokenId}`;
   } else {
     if (capturedColor) lastAction = `${who} captured ${cap(capturedColor)}! Roll again`;
-    else if (reachedHome) lastAction = `${who} sent a token home`;
+    else if (reachedHome) lastAction = `${who} sent a token home — Roll again`;
     else if (leftBase) lastAction = `${who} brought a token out of base`;
     else lastAction = `${who} moved a token ${dice}`;
   }

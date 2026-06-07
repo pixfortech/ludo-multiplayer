@@ -13,7 +13,7 @@ import { getPlayerId } from "../identity";
 const MIN_ROLL_MS = 450;
 
 function autoMoveToast(state: GameState): string {
-  if (!state.lastMoveWasAuto) return "";
+  if (!state.lastMoveWasAuto || state.phase === "finished") return "";
   // "Roll again" suffix when the same player retains the turn.
   const extra = state.lastRollBy === state.players[state.currentPlayerIndex]?.color
     ? " Roll again."

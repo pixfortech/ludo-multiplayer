@@ -464,6 +464,51 @@ describe("Home lane traversal and home counter", () => {
     expect(homeCount).toBe(0);
   });
 
+  it("non-6 home entry keeps the turn (home bonus) — manual", () => {
+    // Two legal tokens: one enters home on this roll, others still on track.
+    // Verifies that reaching home grants an extra turn even with a non-6 dice.
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 57 };
+    state.players[0].tokens[1] = { id: 1, color: "red", state: "active", position: 5 };
+    state.players[0].tokens[2] = { id: 2, color: "red", state: "base", position: -1 };
+    state.players[0].tokens[3] = { id: 3, color: "red", state: "base", position: -1 };
+    const setup: GameState = { ...state, diceValue: 1, diceRolled: true };
+    const after = moveToken(setup, P1, 0); // token 0: 57+1=58 → home
+    expect(after.players[0].tokens[0].state).toBe("home");
+    expect(after.players[0].tokens[0].position).toBe(58);
+    expect(after.currentPlayerIndex).toBe(0); // same player keeps turn
+    expect(after.diceRolled).toBe(false);     // ready to roll again
+    expect(after.diceValue).toBeNull();
+    expect(after.lastAction).toMatch(/sent a token home.*roll again/i);
+  });
+
+  it("mid-lane token (home lane, not final) does NOT give home bonus", () => {
+    // Token at 55, dice 1 → pos 56 (home lane, not pos 58) → no home bonus.
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 55 };
+    const setup: GameState = { ...state, diceValue: 1, diceRolled: true };
+    const after = moveToken(setup, P1, 0);
+    expect(after.players[0].tokens[0].position).toBe(56);
+    expect(after.players[0].tokens[0].state).toBe("active"); // still active in home lane
+    expect(after.currentPlayerIndex).toBe(1); // turn passes (no home bonus for mid-lane)
+  });
+
+  it("home bonus does not fire on the winning move (game-over overrides)", () => {
+    // All 4 tokens home → game ends, phase=finished, no extra turn.
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens = [
+      { id: 0, color: "red", state: "active", position: 57 },
+      { id: 1, color: "red", state: "home", position: 58 },
+      { id: 2, color: "red", state: "home", position: 58 },
+      { id: 3, color: "red", state: "home", position: 58 },
+    ];
+    const setup: GameState = { ...state, diceValue: 1, diceRolled: true };
+    const after = moveToken(setup, P1, 0);
+    expect(after.phase).toBe("finished");
+    expect(after.winner).toBe("red");
+    expect(after.lastAction).toMatch(/wins/i);
+  });
+
   // Colour-specific home lane entry: each colour uses the same position arithmetic
   // (backend is colour-agnostic for lane traversal), but we test all four explicitly.
   it("blue token enters home lane at position 52", () => {
@@ -660,8 +705,8 @@ describe("Auto-move: single legal token", () => {
     expect(after.lastAction).toMatch(/roll again/i);
   });
 
-  it("auto-move into home grants no extra turn (non-6 home entry passes turn)", () => {
-    // Token 3 stays in base so NOT all 4 tokens reach home → no win, just turn passes.
+  it("auto-move into home grants home bonus turn (same player rolls again)", () => {
+    // Token 3 stays in base so NOT all 4 tokens reach home → no win, home bonus applies.
     const state = cloneWithTokens(freshState());
     state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 57 };
     state.players[0].tokens[1] = { id: 1, color: "red", state: "home", position: 58 };
@@ -670,8 +715,10 @@ describe("Auto-move: single legal token", () => {
     const after = rollDice(state, P1, 1);
     expect(after.players[0].tokens[0].state).toBe("home");
     expect(after.players[0].tokens[0].position).toBe(58);
-    expect(after.currentPlayerIndex).toBe(1); // turn passes after non-6 home entry
-    expect(after.lastAction).toMatch(/auto-moved.*home/i);
+    expect(after.currentPlayerIndex).toBe(0); // home bonus: same player rolls again
+    expect(after.diceRolled).toBe(false);
+    expect(after.diceValue).toBeNull();
+    expect(after.lastAction).toMatch(/auto-moved.*home.*roll again/i);
   });
 
   it("does NOT auto-move when multiple tokens are legal (player must choose)", () => {
