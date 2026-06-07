@@ -25,9 +25,9 @@ export const GRID = 15;
 
 export const START_OFFSETS: Record<PlayerColor, number> = {
   red: 0,
-  blue: 13,
+  yellow: 13,
   green: 26,
-  yellow: 39,
+  blue: 39,
 };
 
 // Absolute track indices that cannot be captured. These are the 4 coloured
@@ -42,9 +42,9 @@ export const SAFE_ABS = new Set<number>([0, 8, 13, 21, 26, 34, 39, 47]);
 // START_OFFSETS so TRACK[START_OFFSETS[color]] is that colour's start square.
 export const START_ABS: Record<number, PlayerColor> = {
   0: "red",
-  13: "blue",
+  13: "yellow",
   26: "green",
-  39: "yellow",
+  39: "blue",
 };
 
 // 52-cell shared track, clockwise, TRACK[abs] → (row,col) on the 15×15 grid.
@@ -55,18 +55,17 @@ export const START_ABS: Record<number, PlayerColor> = {
 // no orthogonal cell exists between adjacent arms. Each colour's start square is
 // marked, and the home lane is entered after local step 51 (see tokenCoord).
 export const TRACK: Coord[] = [
-  { row: 6, col: 1 }, { row: 6, col: 2 }, { row: 6, col: 3 }, { row: 6, col: 4 }, { row: 6, col: 5 }, // 0-4
-  { row: 5, col: 6 }, { row: 4, col: 6 }, { row: 3, col: 6 }, { row: 2, col: 6 }, { row: 1, col: 6 }, // 5-9
-  { row: 0, col: 6 }, { row: 0, col: 7 }, { row: 0, col: 8 },                                          // 10-12
-  { row: 1, col: 8 }, { row: 2, col: 8 }, { row: 3, col: 8 }, { row: 4, col: 8 }, { row: 5, col: 8 }, // 13-17
-  { row: 6, col: 9 }, { row: 6, col: 10 }, { row: 6, col: 11 }, { row: 6, col: 12 }, { row: 6, col: 13 }, // 18-22
-  { row: 6, col: 14 }, { row: 7, col: 14 }, { row: 8, col: 14 },                                       // 23-25
-  { row: 8, col: 13 }, { row: 8, col: 12 }, { row: 8, col: 11 }, { row: 8, col: 10 }, { row: 8, col: 9 }, // 26-30
-  { row: 9, col: 8 }, { row: 10, col: 8 }, { row: 11, col: 8 }, { row: 12, col: 8 }, { row: 13, col: 8 }, // 31-35
-  { row: 14, col: 8 }, { row: 14, col: 7 }, { row: 14, col: 6 },                                       // 36-38
-  { row: 13, col: 6 }, { row: 12, col: 6 }, { row: 11, col: 6 }, { row: 10, col: 6 }, { row: 9, col: 6 }, // 39-43
-  { row: 8, col: 5 }, { row: 8, col: 4 }, { row: 8, col: 3 }, { row: 8, col: 2 }, { row: 8, col: 1 }, // 44-48
-  { row: 8, col: 0 }, { row: 7, col: 0 }, { row: 6, col: 0 },                                          // 49-51
+  { row: 6, col: 1 }, { row: 6, col: 0 }, { row: 7, col: 0 }, { row: 8, col: 0 }, { row: 8, col: 1 }, // 0-4
+  { row: 8, col: 2 }, { row: 8, col: 3 }, { row: 8, col: 4 }, { row: 8, col: 5 }, { row: 9, col: 6 }, // 5-9
+  { row: 10, col: 6 }, { row: 11, col: 6 }, { row: 12, col: 6 }, { row: 13, col: 6 }, { row: 14, col: 6 }, // 10-14
+  { row: 14, col: 7 }, { row: 14, col: 8 }, { row: 13, col: 8 }, { row: 12, col: 8 }, { row: 11, col: 8 }, // 15-19
+  { row: 10, col: 8 }, { row: 9, col: 8 }, { row: 8, col: 9 }, { row: 8, col: 10 }, { row: 8, col: 11 }, // 20-24
+  { row: 8, col: 12 }, { row: 8, col: 13 }, { row: 8, col: 14 }, { row: 7, col: 14 }, { row: 6, col: 14 }, // 25-29
+  { row: 6, col: 13 }, { row: 6, col: 12 }, { row: 6, col: 11 }, { row: 6, col: 10 }, { row: 6, col: 9 }, // 30-34
+  { row: 5, col: 8 }, { row: 4, col: 8 }, { row: 3, col: 8 }, { row: 2, col: 8 }, { row: 1, col: 8 }, // 35-39
+  { row: 0, col: 8 }, { row: 0, col: 7 }, { row: 0, col: 6 }, { row: 1, col: 6 }, { row: 2, col: 6 }, // 40-44
+  { row: 3, col: 6 }, { row: 4, col: 6 }, { row: 5, col: 6 }, { row: 6, col: 5 }, { row: 6, col: 4 }, // 45-49
+  { row: 6, col: 3 }, { row: 6, col: 2 },                                                               // 50-51
 ];
 
 // Home lanes: local positions 52–57 (6 cells) per colour, leading to centre.

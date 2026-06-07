@@ -21,8 +21,8 @@ describe("Board constants", () => {
     expect(HOME_POSITION).toBe(58);
   });
 
-  it("start offsets are one quarter-loop apart (red 0, blue 13, green 26, yellow 39)", () => {
-    expect(START_OFFSETS).toEqual({ red: 0, blue: 13, green: 26, yellow: 39 });
+  it("start offsets are one quarter-loop apart (red 0, yellow 13, green 26, blue 39)", () => {
+    expect(START_OFFSETS).toEqual({ red: 0, yellow: 13, green: 26, blue: 39 });
   });
 });
 
@@ -54,11 +54,11 @@ describe("localStepToAbsolute", () => {
   });
 
   it("wraps around the 52-cell loop", () => {
-    // Red (offset 0) at step 51 → abs 51; blue (offset 13) at step 51 → abs 12.
+    // Red (offset 0) at step 51 → abs 51; yellow (offset 13) at step 51 → abs 12.
     expect(localStepToAbsolute("red", 51)).toBe(51);
-    expect(localStepToAbsolute("blue", 51)).toBe(12);
+    expect(localStepToAbsolute("blue", 51)).toBe(38);   // (39+51)%52=38
     expect(localStepToAbsolute("green", 51)).toBe(25);
-    expect(localStepToAbsolute("yellow", 51)).toBe(38);
+    expect(localStepToAbsolute("yellow", 51)).toBe(12); // (13+51)%52=12
   });
 
   it("returns -1 for the home column (steps 52..58) for every colour", () => {
@@ -85,16 +85,16 @@ describe("Capture respects safe cells and home lanes", () => {
 
   it("captures an opponent on a shared, non-safe cell", () => {
     const state = twoPlayers();
-    // Red lands on local 3 → abs 3 (not safe). Blue sits there: (13 + step) % 52 = 3 → step 42.
-    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 42 };
+    // Red lands on local 3 → abs 3 (not safe). Blue sits there: (39 + step) % 52 = 3 → step 16.
+    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 16 };
     const cap = checkCapture(state, "red", 3);
     expect(cap).toEqual({ color: "blue", tokenId: 0 });
   });
 
   it("does NOT capture on a safe cell", () => {
     const state = twoPlayers();
-    // Red lands on local 8 → abs 8 (a star/safe cell). Blue on abs 8: (13+step)%52=8 → step 47.
-    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 47 };
+    // Red lands on local 8 → abs 8 (a star/safe cell). Blue on abs 8: (39+step)%52=8 → step 21.
+    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 21 };
     expect(checkCapture(state, "red", 8)).toBeUndefined();
   });
 

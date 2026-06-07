@@ -96,9 +96,9 @@ describe("Start cells", () => {
   });
 
   it("starts are spaced one quarter-loop (13 cells) apart", () => {
-    expect(START_OFFSETS.blue - START_OFFSETS.red).toBe(13);
-    expect(START_OFFSETS.green - START_OFFSETS.blue).toBe(13);
-    expect(START_OFFSETS.yellow - START_OFFSETS.green).toBe(13);
+    expect(START_OFFSETS.yellow - START_OFFSETS.red).toBe(13);
+    expect(START_OFFSETS.green - START_OFFSETS.yellow).toBe(13);
+    expect(START_OFFSETS.blue - START_OFFSETS.green).toBe(13);
   });
 });
 

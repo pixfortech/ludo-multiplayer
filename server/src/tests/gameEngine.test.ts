@@ -161,8 +161,8 @@ describe("Capture rules", () => {
     const state = cloneWithTokens(freshState());
     // Red at local step 1; moving +2 lands on absolute 3 (not safe).
     state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 1 };
-    // Blue positioned so its absolute cell is 3: (13 + step) % 52 = 3 → step 42.
-    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 42 };
+    // Blue positioned so its absolute cell is 3: (39 + step) % 52 = 3 → step 16.
+    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 16 };
     const setup: GameState = { ...state, diceValue: 2, diceRolled: true };
     const after = moveToken(setup, P1, 0);
     expect(after.players[1].tokens[0].state).toBe("base");
@@ -173,8 +173,8 @@ describe("Capture rules", () => {
     const state = cloneWithTokens(freshState());
     // Red at local 6; moving +2 lands on absolute 8 (a safe star cell).
     state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 6 };
-    // Blue at absolute 8: (13 + step) % 52 = 8 → step 47.
-    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 47 };
+    // Blue at absolute 8: (39 + step) % 52 = 8 → step 21.
+    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 21 };
     const setup: GameState = { ...state, diceValue: 2, diceRolled: true };
     const after = moveToken(setup, P1, 0);
     expect(after.players[1].tokens[0].state).toBe("active");
@@ -373,10 +373,10 @@ describe("Typed error behaviour", () => {
 describe("Capture — extra turn", () => {
   it("capture on a non-6 roll keeps the current player's turn", () => {
     // Red at local 1, dice 3 → lands on local 4, abs (0+4)%52=4 (not safe).
-    // Blue at local 43: abs (13+43)%52=56%52=4 → same cell → capture.
+    // Blue at local 17: abs (39+17)%52=56%52=4 → same cell → capture.
     const state = cloneWithTokens(freshState());
     state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 1 };
-    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 43 };
+    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 17 };
     const setup: GameState = { ...state, diceValue: 3, diceRolled: true };
     const after = moveToken(setup, P1, 0);
 
@@ -391,10 +391,10 @@ describe("Capture — extra turn", () => {
 
   it("capture on a 6 also keeps the turn (both conditions true)", () => {
     // Red at local 0, dice 6 → local 6, abs 6 (not safe).
-    // Blue at local 45: abs (13+45)%52=58%52=6 → capture.
+    // Blue at local 19: abs (39+19)%52=58%52=6 → capture.
     const state = cloneWithTokens(freshState());
     state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 0 };
-    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 45 };
+    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 19 };
     const setup: GameState = { ...state, diceValue: 6, diceRolled: true, consecutiveSixes: 1 };
     const after = moveToken(setup, P1, 0);
 
@@ -690,13 +690,13 @@ describe("Auto-move: single legal token", () => {
 
   it("auto-move capture on a non-6 keeps the turn", () => {
     // Red token 0 at pos 1, token 1..3 at home. Dice 3 → token 0 moves to pos 4 (abs 4).
-    // Blue at local 43: abs (13+43)%52=4 → capture.
+    // Blue at local 17: abs (39+17)%52=4 → capture.
     const state = cloneWithTokens(freshState());
     state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 1 };
     state.players[0].tokens[1] = { id: 1, color: "red", state: "home", position: 58 };
     state.players[0].tokens[2] = { id: 2, color: "red", state: "home", position: 58 };
     state.players[0].tokens[3] = { id: 3, color: "red", state: "home", position: 58 };
-    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 43 };
+    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 17 };
     const after = rollDice(state, P1, 3);
     expect(after.players[1].tokens[0].state).toBe("base"); // Blue captured
     expect(after.currentPlayerIndex).toBe(0);              // Red keeps turn

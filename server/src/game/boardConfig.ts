@@ -10,9 +10,9 @@ import type { PlayerColor } from "./gameTypes.js";
  *
  * Track offsets — the main-track index where each color enters the board:
  *   red    → 0
- *   blue   → 13
+ *   yellow → 13
  *   green  → 26
- *   yellow → 39
+ *   blue   → 39
  *
  * A token's absolute position is calculated as:
  *   absolutePos = (startOffset + stepsFromStart) % 52   (while on main track)
@@ -33,9 +33,9 @@ export const STEPS_TO_HOME = HOME_POSITION; // total steps from start offset to 
 
 export const START_OFFSETS: Record<PlayerColor, number> = {
   red: 0,
-  blue: 13,
+  yellow: 13,
   green: 26,
-  yellow: 39,
+  blue: 39,
 };
 
 // Absolute main-track indices that are safe from capture
