@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   createInitialState,
   rollDice,
@@ -6,6 +6,7 @@ import {
   startGame,
   removePlayer,
 } from "../game/gameEngine.js";
+import { rollD6, type RngFn } from "../game/dice.js";
 import { getMovableTokens, canTokenMove } from "../game/moveValidator.js";
 import type { GameState, Token } from "../game/gameTypes.js";
 
@@ -55,12 +56,10 @@ describe("Turn enforcement", () => {
   });
 
   it("current player can roll", () => {
-    vi.spyOn(Math, "random").mockReturnValue((6 - 1) / 6); // force 6 so tokens are movable
     const state = freshState();
-    const after = rollDice(state, P1);
+    const after = rollDice(state, P1, () => 6);
     expect(after.diceRolled).toBe(true);
     expect(after.diceValue).toBe(6);
-    vi.restoreAllMocks();
   });
 });
 
@@ -93,24 +92,20 @@ describe("Six rules", () => {
   });
 
   it("three consecutive sixes forfeits the turn", () => {
-    vi.spyOn(Math, "random").mockReturnValue((6 - 1) / 6); // force roll = 6
     const state: GameState = { ...freshState(), consecutiveSixes: 2, diceRolled: false };
-    const after = rollDice(state, P1);
+    const after = rollDice(state, P1, () => 6);
     expect(after.currentPlayerIndex).toBe(1); // turn advances to P2
-    vi.restoreAllMocks();
   });
 });
 
 describe("Post-six turn flow (regression: turn must pass after a non-six move)", () => {
-  const roll = (v: number) => vi.spyOn(Math, "random").mockReturnValue((v - 1) / 6);
+  const roll = (v: number): RngFn => () => v;
 
   it("six → move → same player rolls again → one → move → turn passes to Blue", () => {
     let s = freshState();
 
     // 1. Red rolls a 6.
-    roll(6);
-    s = rollDice(s, P1);
-    vi.restoreAllMocks();
+    s = rollDice(s, P1, roll(6));
     expect(s.currentPlayerIndex).toBe(0);
     expect(s.diceValue).toBe(6);
     expect(s.consecutiveSixes).toBe(1);
@@ -123,9 +118,7 @@ describe("Post-six turn flow (regression: turn must pass after a non-six move)",
     expect(s.diceValue).toBeNull();
 
     // 4. Red rolls a 1.
-    roll(1);
-    s = rollDice(s, P1);
-    vi.restoreAllMocks();
+    s = rollDice(s, P1, roll(1));
     expect(s.currentPlayerIndex).toBe(0);
     expect(s.diceValue).toBe(1);
     expect(s.consecutiveSixes).toBe(0); // non-six resets the streak
@@ -142,11 +135,11 @@ describe("Post-six turn flow (regression: turn must pass after a non-six move)",
   it("six → move → six again → move keeps the turn with Red (under the three-six cap)", () => {
     let s = freshState();
 
-    roll(6); s = rollDice(s, P1); vi.restoreAllMocks();
+    s = rollDice(s, P1, roll(6));
     s = moveToken(s, P1, 0); // token 0 out of base
     expect(s.currentPlayerIndex).toBe(0);
 
-    roll(6); s = rollDice(s, P1); vi.restoreAllMocks();
+    s = rollDice(s, P1, roll(6));
     expect(s.consecutiveSixes).toBe(2);
     s = moveToken(s, P1, 1); // bring a second token out on the second six
     expect(s.currentPlayerIndex).toBe(0); // Red still holds the turn
@@ -157,13 +150,13 @@ describe("Post-six turn flow (regression: turn must pass after a non-six move)",
   it("three consecutive sixes still forfeits even mid-sequence", () => {
     let s = freshState();
 
-    roll(6); s = rollDice(s, P1); vi.restoreAllMocks();
+    s = rollDice(s, P1, roll(6));
     s = moveToken(s, P1, 0);
-    roll(6); s = rollDice(s, P1); vi.restoreAllMocks();
+    s = rollDice(s, P1, roll(6));
     s = moveToken(s, P1, 1);
     expect(s.consecutiveSixes).toBe(2);
 
-    roll(6); s = rollDice(s, P1); vi.restoreAllMocks(); // third six
+    s = rollDice(s, P1, roll(6)); // third six
     expect(s.currentPlayerIndex).toBe(1); // forfeited to Blue
     expect(s.consecutiveSixes).toBe(0);
     expect(s.lastAction).toMatch(/forfeit/i);
@@ -345,12 +338,10 @@ describe("Legal token list", () => {
   });
 
   it("turn passes automatically when no legal moves exist after roll", () => {
-    vi.spyOn(Math, "random").mockReturnValue(0); // force roll = 1
     const state = cloneWithTokens(freshState()); // all tokens in base, dice=1 → no moves
-    const after = rollDice(state, P1);
+    const after = rollDice(state, P1, () => 1);
     expect(after.currentPlayerIndex).toBe(1); // auto-advanced to P2
     expect(after.diceRolled).toBe(false);
-    vi.restoreAllMocks();
   });
 });
 
@@ -383,5 +374,30 @@ describe("Typed error behaviour", () => {
   it("moveToken returns unchanged state when wrong player acts", () => {
     const state = withDice(freshState(), 6);
     expect(moveToken(state, P2, 0)).toStrictEqual(state);
+  });
+});
+
+describe("dice module", () => {
+  it("rollD6 always returns a value in [1, 6]", () => {
+    for (let i = 0; i < 200; i++) {
+      const v = rollD6();
+      expect(v).toBeGreaterThanOrEqual(1);
+      expect(v).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it("injected rng returning 1 → rollD6 returns 1", () => {
+    expect(rollD6(() => 1)).toBe(1);
+  });
+
+  it("injected rng returning 6 → rollD6 returns 6", () => {
+    expect(rollD6(() => 6)).toBe(6);
+  });
+
+  it("test-only fixed rng does not pollute subsequent default runtime calls", () => {
+    rollD6(() => 3);
+    const v = rollD6();
+    expect(v).toBeGreaterThanOrEqual(1);
+    expect(v).toBeLessThanOrEqual(6);
   });
 });
