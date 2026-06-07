@@ -62,7 +62,7 @@ export default function Dice({
 }: Props) {
   // Same tile in every state; only animation/glow classes are layered on.
   const tileBase =
-    "relative flex h-20 w-20 items-center justify-center rounded-2xl shadow-xl transition-all select-none";
+    "relative flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl shadow-xl transition-all select-none sm:h-20 sm:w-20";
   const tileClass = rolling
     ? `${tileBase} bg-white animate-shake scale-105`
     : isSix
@@ -87,33 +87,37 @@ export default function Dice({
   const showBadge = !rolling && diceValue !== null;
 
   return (
-    <Card className="flex flex-col items-center gap-3 p-5">
+    <Card className="flex flex-col gap-2.5 p-3 sm:gap-3 sm:p-4 lg:items-center lg:p-5">
       <span className="text-center text-xs font-semibold uppercase tracking-widest text-slate-400">
         {headerText}
       </span>
 
-      <div className={tileClass} aria-label={diceValue ? `Dice showing ${diceValue}` : "Dice"}>
-        <DiceFace value={diceValue} rolling={rolling} />
+      {/* Row on mobile (tile beside the action so the button is always visible);
+          stacked in the desktop sidebar where vertical room is plentiful. */}
+      <div className="flex items-center gap-4 lg:w-full lg:flex-col lg:gap-3">
+        <div className={tileClass} aria-label={diceValue ? `Dice showing ${diceValue}` : "Dice"}>
+          <DiceFace value={diceValue} rolling={rolling} />
 
-        {/* Result number badge — same tile stays fixed underneath. */}
-        {showBadge && (
-          <span
-            className={`absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full text-xs font-extrabold text-white shadow-md ${
-              isSix ? "bg-amber-500 ring-2 ring-amber-300" : "bg-indigo-500"
-            }`}
-          >
-            {diceValue}
-          </span>
-        )}
+          {/* Result number badge — same tile stays fixed underneath. */}
+          {showBadge && (
+            <span
+              className={`absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full text-xs font-extrabold text-white shadow-md ${
+                isSix ? "bg-amber-500 ring-2 ring-amber-300" : "bg-indigo-500"
+              }`}
+            >
+              {diceValue}
+            </span>
+          )}
+        </div>
+
+        <button
+          className="flex-1 rounded-2xl bg-indigo-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 transition-all hover:bg-indigo-400 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 lg:w-full lg:flex-none"
+          disabled={!canRoll || rolling}
+          onClick={onRoll}
+        >
+          {rolling ? "Rolling…" : canRoll ? "Roll dice" : isMyTurn ? "Move a token" : "Waiting…"}
+        </button>
       </div>
-
-      <button
-        className="w-full rounded-2xl bg-indigo-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/30 transition-all hover:bg-indigo-400 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100"
-        disabled={!canRoll || rolling}
-        onClick={onRoll}
-      >
-        {rolling ? "Rolling…" : canRoll ? "Roll dice" : isMyTurn ? "Move a token" : "Waiting…"}
-      </button>
 
       {lastAction && (
         <p className={`min-h-[1rem] text-center text-xs leading-snug ${actionColour}`}>

@@ -29,7 +29,7 @@ export default function PlayerPanel({
 
   return (
     <div
-      className={`rounded-2xl border px-3.5 py-3 transition-all ${c.soft} ${
+      className={`rounded-2xl border px-3 py-2.5 transition-all ${c.soft} ${
         isNewTurn
           ? `${c.border} ring-2 ${c.ring} shadow-lg ${c.glow} animate-turn-in`
           : isActive
@@ -66,7 +66,7 @@ export default function PlayerPanel({
       </div>
 
       {/* Token progress bar */}
-      <div className="mt-2.5 flex gap-1.5 text-[10px] font-semibold">
+      <div className="mt-2 flex gap-1.5 text-[10px] font-semibold">
         <span className="flex-1 rounded-lg bg-black/20 px-2 py-1 text-center text-slate-300">🏠 {homeCount}</span>
         <span className="flex-1 rounded-lg bg-black/20 px-2 py-1 text-center text-slate-300">▶ {activeCount}</span>
         <span className="flex-1 rounded-lg bg-black/20 px-2 py-1 text-center text-slate-300">◌ {baseCount}</span>

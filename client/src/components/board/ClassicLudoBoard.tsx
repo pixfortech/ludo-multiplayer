@@ -80,9 +80,8 @@ export default function ClassicLudoBoard({ gameState, myColor, onMoveToken }: Pr
   }
 
   return (
-    <div className="mx-auto w-full max-w-[34rem]">
-      <div className="relative aspect-square w-full rounded-2xl bg-slate-300 p-2 shadow-2xl shadow-black/50 ring-1 ring-white/10">
-        {/* Cell grid */}
+    <div className="relative aspect-square h-full w-full rounded-2xl bg-slate-300 p-2 shadow-2xl shadow-black/50 ring-1 ring-white/10">
+      {/* Cell grid */}
         <div
           className="grid h-full w-full gap-[1.5px]"
           style={{
@@ -204,6 +203,5 @@ export default function ClassicLudoBoard({ gameState, myColor, onMoveToken }: Pr
           </div>
         </div>
       </div>
-    </div>
   );
 }

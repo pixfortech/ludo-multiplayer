@@ -184,11 +184,18 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
   const joined = gameState?.players.length ?? 0;
   const maxP = gameState?.maxPlayers ?? 0;
   const isWaiting = gameState?.phase === "waiting";
+  const playing = gameState !== null && !isWaiting;
+
+  // Playing view is pinned to the viewport on desktop (board fits with no page
+  // scroll); the lobby keeps natural flow and a narrower column.
+  const shell = playing
+    ? "max-w-[88rem] min-h-[100dvh] lg:h-[100dvh] lg:overflow-hidden"
+    : "max-w-3xl min-h-[100dvh]";
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-5">
+    <div className={`mx-auto flex w-full flex-col gap-3 px-3 py-2 sm:gap-4 sm:px-4 sm:py-3 ${shell}`}>
       {/* Header */}
-      <Card className="flex items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
+      <Card className="flex shrink-0 items-center justify-between gap-2 px-3 py-2.5 sm:px-4 sm:py-3">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           <span className="font-display text-lg font-extrabold tracking-tight sm:text-xl">Ludo</span>
           <div className="flex items-center gap-1.5 rounded-full bg-white/5 px-2.5 py-1 sm:px-3">
@@ -244,18 +251,27 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
         />
       )}
 
-      {/* Active / finished game */}
-      {gameState && !isWaiting && (
-        <div className="grid animate-fade-in-up gap-3 sm:gap-4 lg:grid-cols-[minmax(0,1fr)_clamp(300px,26vw,360px)]">
-          <Card className="flex items-center justify-center p-2.5 sm:p-4 lg:p-5">
-            <ClassicLudoBoard
-              gameState={gameState}
-              myColor={myColor}
-              onMoveToken={handleMoveToken}
-            />
-          </Card>
+      {/* Active / finished game.
+          Mobile: single column (board → dice → players), page scrolls if needed.
+          Desktop (lg+): board column + sidebar fill the remaining viewport height,
+          with the square board capped by available height so it never overflows. */}
+      {playing && gameState && (
+        <div className="flex min-h-0 flex-1 animate-fade-in-up flex-col gap-3 sm:gap-4 lg:grid lg:h-full lg:grid-rows-1 lg:grid-cols-[minmax(0,1fr)_clamp(280px,24vw,340px)]">
+          {/* Board area — square, bounded by viewport height (not just width). */}
+          <div className="flex min-h-0 min-w-0 justify-center lg:items-center">
+            <div className="aspect-square w-full max-w-[68dvh] lg:max-w-[calc(100dvh-7rem)]">
+              <Card className="flex h-full w-full items-center justify-center p-2 sm:p-3">
+                <ClassicLudoBoard
+                  gameState={gameState}
+                  myColor={myColor}
+                  onMoveToken={handleMoveToken}
+                />
+              </Card>
+            </div>
+          </div>
 
-          <div className="flex flex-col gap-3">
+          {/* Controls — dice + player panels. Scrolls internally only if it can't fit. */}
+          <div className="flex min-h-0 flex-col gap-3 lg:overflow-y-auto lg:pr-0.5">
             <Dice
               diceValue={gameState.diceValue}
               canRoll={isMyTurn && !gameState.diceRolled}
