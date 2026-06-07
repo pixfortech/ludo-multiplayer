@@ -100,29 +100,37 @@ export function rollDice(state: GameState, requestingPlayerId: string, forcedVal
     });
   }
 
+  // Exactly one legal token → auto-move it (server-authoritative, no client prompt).
+  if (movable.length === 1) {
+    const preMove: GameState = { ...state, ...roll, diceValue: value, diceRolled: true, consecutiveSixes };
+    return applyMove(preMove, state.currentPlayerIndex, movable[0].id, value, true);
+  }
+
   const lastAction =
     value === 6 ? `${who} rolled a 6 — bonus turn` : `${who} rolled ${value}`;
 
   return { ...state, ...roll, diceValue: value, diceRolled: true, consecutiveSixes, lastAction };
 }
 
-export function moveToken(state: GameState, requestingPlayerId: string, tokenId: number): GameState {
-  if (state.phase !== "playing") return state;
-
-  const currentPlayer = state.players[state.currentPlayerIndex];
-  if (!currentPlayer || currentPlayer.id !== requestingPlayerId) return state;
-
-  const result = validateMove(state, tokenId);
-  if (!result.valid) return state;
-
-  const dice = state.diceValue!;
+/**
+ * Internal: applies a single token move, enforcing all post-move rules (capture,
+ * extra-turn, home, win). Called by both moveToken (public API) and the auto-move
+ * path in rollDice. Does NOT re-check diceRolled/phase/player-turn — callers must
+ * ensure preconditions. `auto` controls the lastAction wording prefix.
+ */
+function applyMove(
+  state: GameState,
+  playerIdx: number,
+  tokenId: number,
+  dice: number,
+  auto: boolean
+): GameState {
   const players = state.players.map((p) => ({ ...p, tokens: p.tokens.map((t) => ({ ...t })) }));
-  const player = players[state.currentPlayerIndex];
+  const player = players[playerIdx];
   const token = player.tokens.find((t) => t.id === tokenId)!;
   const who = cap(player.color);
 
   let leftBase = false;
-  // Leave base
   if (token.state === "base") {
     token.state = "active";
     token.position = 0;
@@ -131,7 +139,6 @@ export function moveToken(state: GameState, requestingPlayerId: string, tokenId:
     token.position += dice;
   }
 
-  // Reached home (exact entry is enforced by validateMove/canTokenMove)
   let reachedHome = false;
   if (token.position >= HOME_POSITION) {
     token.position = HOME_POSITION;
@@ -139,7 +146,6 @@ export function moveToken(state: GameState, requestingPlayerId: string, tokenId:
     reachedHome = true;
   }
 
-  // Capture only applies to tokens still on the shared track.
   let capturedColor: PlayerColor | null = null;
   if (token.state === "active") {
     const captured = checkCapture({ ...state, players }, player.color, token.position);
@@ -152,31 +158,46 @@ export function moveToken(state: GameState, requestingPlayerId: string, tokenId:
     }
   }
 
-  // Extra turn is granted for rolling a 6 OR capturing an opponent token.
   const keepTurn = dice === 6 || capturedColor !== null;
 
   let lastAction: string;
-  if (capturedColor) lastAction = `${who} captured ${cap(capturedColor)}! Roll again`;
-  else if (reachedHome) lastAction = `${who} sent a token home`;
-  else if (leftBase) lastAction = `${who} brought a token out of base`;
-  else lastAction = `${who} moved a token ${dice}`;
+  if (auto) {
+    if (capturedColor) lastAction = `${who} rolled ${dice} and auto-captured ${cap(capturedColor)}'s token — Roll again`;
+    else if (reachedHome) lastAction = `${who} rolled ${dice} and auto-moved a token home`;
+    else if (leftBase) lastAction = `${who} rolled 6 and auto-opened token ${tokenId} — Roll again`;
+    else lastAction = `${who} rolled ${dice} and auto-moved token ${tokenId}`;
+  } else {
+    if (capturedColor) lastAction = `${who} captured ${cap(capturedColor)}! Roll again`;
+    else if (reachedHome) lastAction = `${who} sent a token home`;
+    else if (leftBase) lastAction = `${who} brought a token out of base`;
+    else lastAction = `${who} moved a token ${dice}`;
+  }
 
   const nextState: GameState = { ...state, players, diceRolled: true, lastAction };
 
-  // Win: all four tokens home.
   if (player.tokens.every((t) => t.state === "home")) {
     return { ...nextState, phase: "finished", winner: player.color, lastAction: `${who} wins the game!` };
   }
 
-  // Extra turn (6 rolled or capture made) — same player rolls again.
   if (keepTurn) {
     return { ...nextState, diceRolled: false, diceValue: null };
   }
 
-  // No bonus — advance turn and announce the next player clearly.
   const advanced = advanceTurn(nextState);
   const next = advanced.players[advanced.currentPlayerIndex];
   return { ...advanced, lastAction: next ? `${lastAction} · ${cap(next.color)}'s turn` : lastAction };
+}
+
+export function moveToken(state: GameState, requestingPlayerId: string, tokenId: number): GameState {
+  if (state.phase !== "playing") return state;
+
+  const currentPlayer = state.players[state.currentPlayerIndex];
+  if (!currentPlayer || currentPlayer.id !== requestingPlayerId) return state;
+
+  const result = validateMove(state, tokenId);
+  if (!result.valid) return state;
+
+  return applyMove(state, state.currentPlayerIndex, tokenId, state.diceValue!, false);
 }
 
 /**

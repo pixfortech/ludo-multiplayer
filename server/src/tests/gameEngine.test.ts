@@ -99,10 +99,10 @@ describe("Six rules", () => {
 });
 
 describe("Post-six turn flow (regression: turn must pass after a non-six move)", () => {
-  it("six → move → same player rolls again → one → move → turn passes to Blue", () => {
+  it("six → move → same player rolls again → one → auto-moved → turn passes to Blue", () => {
     let s = freshState();
 
-    // 1. Red rolls a 6.
+    // 1. Red rolls a 6 — all 4 base tokens movable, player picks token 0.
     s = rollDice(s, P1, 6);
     expect(s.currentPlayerIndex).toBe(0);
     expect(s.diceValue).toBe(6);
@@ -112,22 +112,17 @@ describe("Post-six turn flow (regression: turn must pass after a non-six move)",
     s = moveToken(s, P1, 0);
     expect(s.players[0].tokens[0].state).toBe("active");
     expect(s.currentPlayerIndex).toBe(0); // still Red
-    expect(s.diceRolled).toBe(false);     // ready to roll again
+    expect(s.diceRolled).toBe(false);
     expect(s.diceValue).toBeNull();
 
-    // 4. Red rolls a 1.
+    // 4. Red rolls a 1 — only token 0 is active (tokens 1–3 still in base → need 6).
+    //    Exactly ONE legal token → auto-move fires immediately, turn passes.
     s = rollDice(s, P1, 1);
-    expect(s.currentPlayerIndex).toBe(0);
-    expect(s.diceValue).toBe(1);
-    expect(s.consecutiveSixes).toBe(0); // non-six resets the streak
-
-    // 5. Red moves the same token; 6. the turn now passes to Blue.
-    s = moveToken(s, P1, 0);
     expect(s.currentPlayerIndex).toBe(1);  // Blue
     expect(s.diceRolled).toBe(false);
     expect(s.diceValue).toBeNull();
     expect(s.consecutiveSixes).toBe(0);
-    expect(s.lastAction).toMatch(/Blue.*turn/i); // clearly names the next player
+    expect(s.lastAction).toMatch(/Blue.*turn/i); // auto-move message names next player
   });
 
   it("six → move → six again → move keeps the turn with Red (under the three-six cap)", () => {
@@ -544,8 +539,10 @@ describe("Last roll display state (lastRollValue / lastRollBy)", () => {
   });
 
   it("sets lastRollValue and lastRollBy after a normal roll", () => {
+    // Two active tokens → multiple legal moves → no auto-move → diceValue is retained.
     const s = cloneWithTokens(freshState());
     s.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    s.players[0].tokens[1] = { id: 1, color: "red", state: "active", position: 10 };
     const after = rollDice(s, P1, 3);
     expect(after.diceValue).toBe(3);
     expect(after.lastRollValue).toBe(3);
@@ -610,6 +607,115 @@ describe("Last roll display state (lastRollValue / lastRollBy)", () => {
   });
 });
 
+describe("Auto-move: single legal token", () => {
+  it("auto-opens a base token when a 6 is rolled and only base tokens exist", () => {
+    // All tokens in base; rolling 6 → exactly one legal move per token (any of 4 base tokens).
+    // With 4 base tokens movable on a 6, this is NOT a single-legal-move case.
+    // Instead set up 3 tokens at home, 1 in base → only 1 token is movable.
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "base", position: -1 };
+    state.players[0].tokens[1] = { id: 1, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[2] = { id: 2, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[3] = { id: 3, color: "red", state: "home", position: 58 };
+    const after = rollDice(state, P1, 6);
+    // Token 0 should have been auto-moved out of base.
+    expect(after.players[0].tokens[0].state).toBe("active");
+    expect(after.players[0].tokens[0].position).toBe(0);
+    // Rolling a 6 → extra turn (diceRolled reset, same player).
+    expect(after.currentPlayerIndex).toBe(0);
+    expect(after.diceRolled).toBe(false);
+    expect(after.diceValue).toBeNull();
+    expect(after.lastAction).toMatch(/auto-opened/i);
+  });
+
+  it("auto-moves a track token when only one can move (non-6)", () => {
+    // One active token at pos 5, others in base (need 6) or home. Dice=3 → only token 0 moves.
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    state.players[0].tokens[1] = { id: 1, color: "red", state: "base", position: -1 };
+    state.players[0].tokens[2] = { id: 2, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[3] = { id: 3, color: "red", state: "home", position: 58 };
+    const after = rollDice(state, P1, 3);
+    expect(after.players[0].tokens[0].position).toBe(8); // 5 + 3
+    expect(after.currentPlayerIndex).toBe(1); // non-6, no capture → turn passes
+    expect(after.diceRolled).toBe(false);
+    expect(after.lastAction).toMatch(/auto-moved/i);
+    expect(after.lastAction).toMatch(/3/);
+  });
+
+  it("auto-move capture on a non-6 keeps the turn", () => {
+    // Red token 0 at pos 1, token 1..3 at home. Dice 3 → token 0 moves to pos 4 (abs 4).
+    // Blue at local 43: abs (13+43)%52=4 → capture.
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 1 };
+    state.players[0].tokens[1] = { id: 1, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[2] = { id: 2, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[3] = { id: 3, color: "red", state: "home", position: 58 };
+    state.players[1].tokens[0] = { id: 0, color: "blue", state: "active", position: 43 };
+    const after = rollDice(state, P1, 3);
+    expect(after.players[1].tokens[0].state).toBe("base"); // Blue captured
+    expect(after.currentPlayerIndex).toBe(0);              // Red keeps turn
+    expect(after.diceRolled).toBe(false);
+    expect(after.lastAction).toMatch(/auto-captured/i);
+    expect(after.lastAction).toMatch(/roll again/i);
+  });
+
+  it("auto-move into home grants no extra turn (non-6 home entry passes turn)", () => {
+    // Token 3 stays in base so NOT all 4 tokens reach home → no win, just turn passes.
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 57 };
+    state.players[0].tokens[1] = { id: 1, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[2] = { id: 2, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[3] = { id: 3, color: "red", state: "base", position: -1 };
+    const after = rollDice(state, P1, 1);
+    expect(after.players[0].tokens[0].state).toBe("home");
+    expect(after.players[0].tokens[0].position).toBe(58);
+    expect(after.currentPlayerIndex).toBe(1); // turn passes after non-6 home entry
+    expect(after.lastAction).toMatch(/auto-moved.*home/i);
+  });
+
+  it("does NOT auto-move when multiple tokens are legal (player must choose)", () => {
+    // Two active tokens both movable with dice 3.
+    const state = cloneWithTokens(freshState());
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    state.players[0].tokens[1] = { id: 1, color: "red", state: "active", position: 10 };
+    state.players[0].tokens[2] = { id: 2, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[3] = { id: 3, color: "red", state: "home", position: 58 };
+    const after = rollDice(state, P1, 3);
+    // diceValue stays set (player must pick), tokens unchanged.
+    expect(after.diceValue).toBe(3);
+    expect(after.diceRolled).toBe(true);
+    expect(after.currentPlayerIndex).toBe(0);
+    expect(after.players[0].tokens[0].position).toBe(5); // unchanged
+    expect(after.players[0].tokens[1].position).toBe(10); // unchanged
+  });
+
+  it("no legal moves (auto-pass) is unchanged by the auto-move feature", () => {
+    // All tokens in base, dice 1 → no moves → auto-pass as before.
+    const after = rollDice(freshState(), P1, 1);
+    expect(after.currentPlayerIndex).toBe(1);
+    expect(after.diceValue).toBeNull();
+    expect(after.diceRolled).toBe(false);
+    expect(after.lastAction).toMatch(/no legal moves/i);
+  });
+
+  it("three-six forfeit overrides auto-move even if one token is legal", () => {
+    const state = cloneWithTokens(freshState());
+    // One active token movable on a 6.
+    state.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    state.players[0].tokens[1] = { id: 1, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[2] = { id: 2, color: "red", state: "home", position: 58 };
+    state.players[0].tokens[3] = { id: 3, color: "red", state: "home", position: 58 };
+    const s: GameState = { ...state, consecutiveSixes: 2, diceRolled: false };
+    const after = rollDice(s, P1, 6);
+    expect(after.currentPlayerIndex).toBe(1); // forfeited to Blue
+    expect(after.consecutiveSixes).toBe(0);
+    expect(after.lastAction).toMatch(/forfeit/i);
+    // Token must NOT have moved.
+    expect(after.players[0].tokens[0].position).toBe(5);
+  });
+});
+
 describe("dice module", () => {
   it("rollD6 always returns an integer in [1, 6]", () => {
     for (let i = 0; i < 200; i++) {
@@ -641,16 +747,20 @@ describe("rollDice forced value (test-only override)", () => {
   });
 
   it("forced value 1 is used exactly", () => {
-    // A token on the track makes a 1 a legal move, so diceValue is retained.
+    // Two tokens on the track → multiple legal moves, no auto-move → diceValue is retained.
     const s = cloneWithTokens(freshState());
     s.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    s.players[0].tokens[1] = { id: 1, color: "red", state: "active", position: 10 };
     const after = rollDice(s, P1, 1);
     expect(after.diceValue).toBe(1);
+    expect(after.lastRollValue).toBe(1);
   });
 
   it("invalid forced values are ignored and fall back to a real 1–6 roll", () => {
+    // Two active tokens → multiple legal moves → diceValue stays set (no auto-move).
     const base = cloneWithTokens(freshState());
     base.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    base.players[0].tokens[1] = { id: 1, color: "red", state: "active", position: 10 };
     for (const bad of [0, 7, -3, 2.5, NaN]) {
       const after = rollDice(base, P1, bad as number);
       expect(after.diceValue).not.toBeNull();
@@ -660,16 +770,18 @@ describe("rollDice forced value (test-only override)", () => {
   });
 
   it("default runtime path (no forced value) yields mixed 1–6, never stuck on one", () => {
+    // Two active tokens → multiple legal moves → diceValue always set (no auto-move consumed).
     const seen = new Set<number>();
     for (let i = 0; i < 300; i++) {
       const s = cloneWithTokens(freshState());
       s.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+      s.players[0].tokens[1] = { id: 1, color: "red", state: "active", position: 10 };
       const after = rollDice(s, P1); // no forced value → crypto die
-      if (after.diceValue !== null) {
-        expect(after.diceValue).toBeGreaterThanOrEqual(1);
-        expect(after.diceValue).toBeLessThanOrEqual(6);
-        seen.add(after.diceValue);
-      }
+      // lastRollValue is always set regardless of auto-move or not.
+      expect(after.lastRollValue).not.toBeNull();
+      expect(after.lastRollValue!).toBeGreaterThanOrEqual(1);
+      expect(after.lastRollValue!).toBeLessThanOrEqual(6);
+      seen.add(after.lastRollValue!);
     }
     expect(seen.size).toBeGreaterThan(1);
   });
