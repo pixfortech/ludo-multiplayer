@@ -26,8 +26,11 @@ const PIP_MAP: Record<number, number[]> = {
  * `muted` shows a faint resting dot while idle.
  */
 function DiceFace({ value, rolling }: { value: number | null; rolling: boolean }) {
+  // Only ever light real pips. When there is no rolled value yet (idle) the face
+  // stays blank — previously it lit a single faint centre dot, which is visually
+  // identical to a real roll of 1 and made every un-rolled/auto-passed turn look
+  // like "you rolled a 1".
   const lit = !rolling && value !== null ? PIP_MAP[value] ?? [] : [];
-  const idle = !rolling && value === null;
 
   return (
     <div className="grid h-full w-full grid-cols-3 grid-rows-3 gap-0.5 p-2.5">
@@ -37,11 +40,7 @@ function DiceFace({ value, rolling }: { value: number | null; rolling: boolean }
           <span key={i} className="flex items-center justify-center">
             <span
               className={`h-2.5 w-2.5 rounded-full transition-opacity ${
-                on
-                  ? "bg-slate-900"
-                  : idle && i === 4
-                    ? "bg-slate-900/20" // faint centre dot = die at rest
-                    : "bg-transparent"
+                on ? "bg-slate-900" : "bg-transparent"
               }`}
             />
           </span>

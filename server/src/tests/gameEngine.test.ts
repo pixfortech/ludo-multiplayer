@@ -6,7 +6,7 @@ import {
   startGame,
   removePlayer,
 } from "../game/gameEngine.js";
-import { rollD6, type RngFn } from "../game/dice.js";
+import { rollD6, isValidDie } from "../game/dice.js";
 import { getMovableTokens, canTokenMove } from "../game/moveValidator.js";
 import type { GameState, Token } from "../game/gameTypes.js";
 
@@ -57,7 +57,7 @@ describe("Turn enforcement", () => {
 
   it("current player can roll", () => {
     const state = freshState();
-    const after = rollDice(state, P1, () => 6);
+    const after = rollDice(state, P1, 6);
     expect(after.diceRolled).toBe(true);
     expect(after.diceValue).toBe(6);
   });
@@ -93,19 +93,17 @@ describe("Six rules", () => {
 
   it("three consecutive sixes forfeits the turn", () => {
     const state: GameState = { ...freshState(), consecutiveSixes: 2, diceRolled: false };
-    const after = rollDice(state, P1, () => 6);
+    const after = rollDice(state, P1, 6);
     expect(after.currentPlayerIndex).toBe(1); // turn advances to P2
   });
 });
 
 describe("Post-six turn flow (regression: turn must pass after a non-six move)", () => {
-  const roll = (v: number): RngFn => () => v;
-
   it("six → move → same player rolls again → one → move → turn passes to Blue", () => {
     let s = freshState();
 
     // 1. Red rolls a 6.
-    s = rollDice(s, P1, roll(6));
+    s = rollDice(s, P1, 6);
     expect(s.currentPlayerIndex).toBe(0);
     expect(s.diceValue).toBe(6);
     expect(s.consecutiveSixes).toBe(1);
@@ -118,7 +116,7 @@ describe("Post-six turn flow (regression: turn must pass after a non-six move)",
     expect(s.diceValue).toBeNull();
 
     // 4. Red rolls a 1.
-    s = rollDice(s, P1, roll(1));
+    s = rollDice(s, P1, 1);
     expect(s.currentPlayerIndex).toBe(0);
     expect(s.diceValue).toBe(1);
     expect(s.consecutiveSixes).toBe(0); // non-six resets the streak
@@ -135,11 +133,11 @@ describe("Post-six turn flow (regression: turn must pass after a non-six move)",
   it("six → move → six again → move keeps the turn with Red (under the three-six cap)", () => {
     let s = freshState();
 
-    s = rollDice(s, P1, roll(6));
+    s = rollDice(s, P1, 6);
     s = moveToken(s, P1, 0); // token 0 out of base
     expect(s.currentPlayerIndex).toBe(0);
 
-    s = rollDice(s, P1, roll(6));
+    s = rollDice(s, P1, 6);
     expect(s.consecutiveSixes).toBe(2);
     s = moveToken(s, P1, 1); // bring a second token out on the second six
     expect(s.currentPlayerIndex).toBe(0); // Red still holds the turn
@@ -150,13 +148,13 @@ describe("Post-six turn flow (regression: turn must pass after a non-six move)",
   it("three consecutive sixes still forfeits even mid-sequence", () => {
     let s = freshState();
 
-    s = rollDice(s, P1, roll(6));
+    s = rollDice(s, P1, 6);
     s = moveToken(s, P1, 0);
-    s = rollDice(s, P1, roll(6));
+    s = rollDice(s, P1, 6);
     s = moveToken(s, P1, 1);
     expect(s.consecutiveSixes).toBe(2);
 
-    s = rollDice(s, P1, roll(6)); // third six
+    s = rollDice(s, P1, 6); // third six
     expect(s.currentPlayerIndex).toBe(1); // forfeited to Blue
     expect(s.consecutiveSixes).toBe(0);
     expect(s.lastAction).toMatch(/forfeit/i);
@@ -339,7 +337,7 @@ describe("Legal token list", () => {
 
   it("turn passes automatically when no legal moves exist after roll", () => {
     const state = cloneWithTokens(freshState()); // all tokens in base, dice=1 → no moves
-    const after = rollDice(state, P1, () => 1);
+    const after = rollDice(state, P1, 1);
     expect(after.currentPlayerIndex).toBe(1); // auto-advanced to P2
     expect(after.diceRolled).toBe(false);
   });
@@ -539,26 +537,66 @@ describe("Home lane traversal and home counter", () => {
 });
 
 describe("dice module", () => {
-  it("rollD6 always returns a value in [1, 6]", () => {
+  it("rollD6 always returns an integer in [1, 6]", () => {
     for (let i = 0; i < 200; i++) {
       const v = rollD6();
+      expect(Number.isInteger(v)).toBe(true);
       expect(v).toBeGreaterThanOrEqual(1);
       expect(v).toBeLessThanOrEqual(6);
     }
   });
 
-  it("injected rng returning 1 → rollD6 returns 1", () => {
-    expect(rollD6(() => 1)).toBe(1);
+  it("rollD6 is not stuck on a single value (regression: 'always 1')", () => {
+    const seen = new Set<number>();
+    for (let i = 0; i < 300; i++) seen.add(rollD6());
+    // 300 fair rolls hitting only one face is astronomically unlikely; this
+    // specifically guards against the RNG collapsing to a constant.
+    expect(seen.size).toBeGreaterThan(1);
   });
 
-  it("injected rng returning 6 → rollD6 returns 6", () => {
-    expect(rollD6(() => 6)).toBe(6);
+  it("isValidDie accepts integers 1–6 and rejects everything else", () => {
+    for (const v of [1, 2, 3, 4, 5, 6]) expect(isValidDie(v)).toBe(true);
+    for (const v of [0, 7, -1, 1.5, NaN, Infinity]) expect(isValidDie(v)).toBe(false);
+  });
+});
+
+describe("rollDice forced value (test-only override)", () => {
+  it("forced value 6 is used exactly", () => {
+    const after = rollDice(freshState(), P1, 6);
+    expect(after.diceValue).toBe(6);
   });
 
-  it("test-only fixed rng does not pollute subsequent default runtime calls", () => {
-    rollD6(() => 3);
-    const v = rollD6();
-    expect(v).toBeGreaterThanOrEqual(1);
-    expect(v).toBeLessThanOrEqual(6);
+  it("forced value 1 is used exactly", () => {
+    // A token on the track makes a 1 a legal move, so diceValue is retained.
+    const s = cloneWithTokens(freshState());
+    s.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    const after = rollDice(s, P1, 1);
+    expect(after.diceValue).toBe(1);
+  });
+
+  it("invalid forced values are ignored and fall back to a real 1–6 roll", () => {
+    const base = cloneWithTokens(freshState());
+    base.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    for (const bad of [0, 7, -3, 2.5, NaN]) {
+      const after = rollDice(base, P1, bad as number);
+      expect(after.diceValue).not.toBeNull();
+      expect(after.diceValue!).toBeGreaterThanOrEqual(1);
+      expect(after.diceValue!).toBeLessThanOrEqual(6);
+    }
+  });
+
+  it("default runtime path (no forced value) yields mixed 1–6, never stuck on one", () => {
+    const seen = new Set<number>();
+    for (let i = 0; i < 300; i++) {
+      const s = cloneWithTokens(freshState());
+      s.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+      const after = rollDice(s, P1); // no forced value → crypto die
+      if (after.diceValue !== null) {
+        expect(after.diceValue).toBeGreaterThanOrEqual(1);
+        expect(after.diceValue).toBeLessThanOrEqual(6);
+        seen.add(after.diceValue);
+      }
+    }
+    expect(seen.size).toBeGreaterThan(1);
   });
 });

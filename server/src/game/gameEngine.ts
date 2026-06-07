@@ -1,7 +1,7 @@
 import type { GameState, PlayerColor, Token } from "./gameTypes.js";
 import { HOME_POSITION } from "./boardConfig.js";
 import { validateMove, checkCapture, getMovableTokens } from "./moveValidator.js";
-import { rollD6, type RngFn } from "./dice.js";
+import { rollD6, isValidDie } from "./dice.js";
 
 const COLORS: PlayerColor[] = ["red", "blue", "green", "yellow"];
 
@@ -52,14 +52,18 @@ export function startGame(state: GameState): GameState {
   };
 }
 
-export function rollDice(state: GameState, requestingPlayerId: string, rng?: RngFn): GameState {
+export function rollDice(state: GameState, requestingPlayerId: string, forcedValue?: number): GameState {
   if (state.phase !== "playing") return state;
 
   const currentPlayer = state.players[state.currentPlayerIndex];
   if (!currentPlayer || currentPlayer.id !== requestingPlayerId) return state;
   if (state.diceRolled) return state;
 
-  const value = rollD6(rng);
+  // `forcedValue` is a TEST-ONLY override and must be an integer 1–6. The socket
+  // layer never passes it, so the runtime always uses the crypto die. An invalid
+  // override is ignored and safely falls back to a real roll.
+  const value =
+    forcedValue !== undefined && isValidDie(forcedValue) ? forcedValue : rollD6();
   const consecutiveSixes = value === 6 ? state.consecutiveSixes + 1 : 0;
   const who = cap(currentPlayer.color);
 
