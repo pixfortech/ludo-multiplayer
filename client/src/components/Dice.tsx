@@ -1,11 +1,16 @@
 import { Card } from "./ui";
 
 interface Props {
-  diceValue: number | null;
+  // Face value to show: the actionable diceValue, or the last rolled value when
+  // no move is pending. Null only before any roll has happened in the game.
+  displayValue: number | null;
+  // True when there is an actionable dice for the current turn (a move is awaited).
+  pending: boolean;
   canRoll: boolean;
   isMyTurn: boolean;
   rolling: boolean; // local animation while awaiting the server result
   isSix: boolean;   // server result was a 6 (bonus turn pending a move)
+  currentName: string; // current player's display label (for "Waiting for …")
   lastAction: string | null;
   onRoll: () => void;
 }
@@ -21,15 +26,11 @@ const PIP_MAP: Record<number, number[]> = {
 };
 
 /**
- * One consistent dice face. The tile, dot style, and grid never change between
- * states — only which pips are lit. `rolling` hides the pips (no fake values);
- * `muted` shows a faint resting dot while idle.
+ * One consistent dice face. Only real pips are ever lit; while `rolling` the face
+ * is blanked (no fake values). A blank face means "no value to show" — never a
+ * stand-in for 1.
  */
 function DiceFace({ value, rolling }: { value: number | null; rolling: boolean }) {
-  // Only ever light real pips. When there is no rolled value yet (idle) the face
-  // stays blank — previously it lit a single faint centre dot, which is visually
-  // identical to a real roll of 1 and made every un-rolled/auto-passed turn look
-  // like "you rolled a 1".
   const lit = !rolling && value !== null ? PIP_MAP[value] ?? [] : [];
 
   return (
@@ -51,11 +52,13 @@ function DiceFace({ value, rolling }: { value: number | null; rolling: boolean }
 }
 
 export default function Dice({
-  diceValue,
+  displayValue,
+  pending,
   canRoll,
   isMyTurn,
   rolling,
   isSix,
+  currentName,
   lastAction,
   onRoll,
 }: Props) {
@@ -68,11 +71,18 @@ export default function Dice({
       ? `${tileBase} bg-white ring-4 ring-amber-400 animate-six-throb scale-105`
       : `${tileBase} bg-white`;
 
-  const headerText = isSix
-    ? "Six! Move a token and roll again."
-    : isMyTurn
-      ? "Your move"
-      : "Dice";
+  // Primary status line — always tells the player what state we're in.
+  const headerText = rolling
+    ? "Rolling…"
+    : isSix
+      ? "Six! Move a token, then roll again."
+      : pending
+        ? isMyTurn
+          ? "Your move"
+          : `${currentName} is moving`
+        : isMyTurn
+          ? "Your roll"
+          : `Waiting for ${currentName}`;
 
   const isTurnPass =
     !!lastAction &&
@@ -83,7 +93,14 @@ export default function Dice({
       ? "text-sky-300 font-semibold"
       : "text-slate-400";
 
-  const showBadge = !rolling && diceValue !== null;
+  const showBadge = !rolling && displayValue !== null;
+  // The shown number is purely historical (a completed roll, no pending move).
+  const showLastRollTag = showBadge && !pending;
+  const badgeClass = isSix
+    ? "bg-amber-500 ring-2 ring-amber-300"
+    : pending
+      ? "bg-indigo-500"
+      : "bg-slate-500"; // muted = last roll / history, not actionable
 
   return (
     <Card className="flex flex-col gap-2.5 p-3 sm:gap-3 sm:p-4 lg:items-center lg:p-5">
@@ -94,17 +111,22 @@ export default function Dice({
       {/* Row on mobile (tile beside the action so the button is always visible);
           stacked in the desktop sidebar where vertical room is plentiful. */}
       <div className="flex items-center gap-4 lg:w-full lg:flex-col lg:gap-3">
-        <div className={tileClass} aria-label={diceValue ? `Dice showing ${diceValue}` : "Dice"}>
-          <DiceFace value={diceValue} rolling={rolling} />
+        <div className="flex flex-col items-center gap-1">
+          <div className={tileClass} aria-label={displayValue ? `Dice showing ${displayValue}` : "Dice"}>
+            <DiceFace value={displayValue} rolling={rolling} />
 
-          {/* Result number badge — same tile stays fixed underneath. */}
-          {showBadge && (
-            <span
-              className={`absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full text-xs font-extrabold text-white shadow-md ${
-                isSix ? "bg-amber-500 ring-2 ring-amber-300" : "bg-indigo-500"
-              }`}
-            >
-              {diceValue}
+            {/* Result number badge — same tile stays fixed underneath. */}
+            {showBadge && (
+              <span
+                className={`absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full text-xs font-extrabold text-white shadow-md ${badgeClass}`}
+              >
+                {displayValue}
+              </span>
+            )}
+          </div>
+          {showLastRollTag && (
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Last roll
             </span>
           )}
         </div>

@@ -38,6 +38,12 @@ export interface GameState {
   winner: PlayerColor | null;
   turnCount: number;
   lastAction: string | null; // human-readable description of the most recent action
+  // Display/history fields. `diceValue` is the *actionable* dice for the current
+  // pending move and is reset to null when the turn advances. `lastRollValue` is
+  // the most recently rolled number and is NOT erased on advance, so the client
+  // can keep showing what was rolled (instead of a blank die) after an auto-pass.
+  lastRollValue: number | null;
+  lastRollBy: PlayerColor | null;
 }
 
 // Optional personalisation sent when creating or joining a room. All fields are

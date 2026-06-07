@@ -536,6 +536,80 @@ describe("Home lane traversal and home counter", () => {
   });
 });
 
+describe("Last roll display state (lastRollValue / lastRollBy)", () => {
+  it("a fresh game has no roll recorded (blank die)", () => {
+    const s = freshState();
+    expect(s.lastRollValue).toBeNull();
+    expect(s.lastRollBy).toBeNull();
+  });
+
+  it("sets lastRollValue and lastRollBy after a normal roll", () => {
+    const s = cloneWithTokens(freshState());
+    s.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    const after = rollDice(s, P1, 3);
+    expect(after.diceValue).toBe(3);
+    expect(after.lastRollValue).toBe(3);
+    expect(after.lastRollBy).toBe("red");
+  });
+
+  it("keeps lastRollValue but clears diceValue after a no-legal-move auto-pass", () => {
+    // All tokens in base + roll 1 → no legal move → auto-pass.
+    const after = rollDice(freshState(), P1, 1);
+    expect(after.diceValue).toBeNull();       // actionable dice cleared
+    expect(after.lastRollValue).toBe(1);      // rolled number preserved for display
+    expect(after.lastRollBy).toBe("red");
+    expect(after.currentPlayerIndex).toBe(1); // turn advanced to Blue
+    expect(after.diceRolled).toBe(false);     // next player can roll
+  });
+
+  it("lets the next player roll after an auto-pass, overwriting lastRollValue", () => {
+    const passed = rollDice(freshState(), P1, 2); // Red auto-passes
+    expect(passed.currentPlayerIndex).toBe(1);
+    expect(passed.lastRollValue).toBe(2);
+    const blueRolls = rollDice(passed, P2, 6);    // Blue can roll
+    expect(blueRolls.diceValue).toBe(6);
+    expect(blueRolls.lastRollValue).toBe(6);
+    expect(blueRolls.lastRollBy).toBe("blue");
+  });
+
+  it("rolling a 6 sets both diceValue and lastRollValue to 6", () => {
+    const after = rollDice(freshState(), P1, 6); // base tokens movable with a 6
+    expect(after.diceValue).toBe(6);
+    expect(after.lastRollValue).toBe(6);
+    expect(after.lastRollBy).toBe("red");
+  });
+
+  it("after moving on a 6, diceValue resets but lastRollValue stays 6 and the turn is kept", () => {
+    const rolled = rollDice(freshState(), P1, 6);
+    const moved = moveToken(rolled, P1, 0); // bring a token out of base
+    expect(moved.currentPlayerIndex).toBe(0); // Red keeps the turn
+    expect(moved.diceRolled).toBe(false);     // can roll again
+    expect(moved.diceValue).toBeNull();       // no actionable dice until re-roll
+    expect(moved.lastRollValue).toBe(6);      // last roll still visible
+    expect(moved.lastRollBy).toBe("red");
+  });
+
+  it("lastRollValue persists into the next player's turn after a non-6 move", () => {
+    const s = cloneWithTokens(freshState());
+    s.players[0].tokens[0] = { id: 0, color: "red", state: "active", position: 5 };
+    const rolled = rollDice(s, P1, 3);
+    const moved = moveToken(rolled, P1, 0); // non-6, no capture → turn passes
+    expect(moved.currentPlayerIndex).toBe(1);
+    expect(moved.diceValue).toBeNull();
+    expect(moved.lastRollValue).toBe(3); // Blue sees Red's last roll until Blue rolls
+    expect(moved.lastRollBy).toBe("red");
+  });
+
+  it("a three-six forfeit still records the rolled value for display", () => {
+    const s: GameState = { ...freshState(), consecutiveSixes: 2, diceRolled: false };
+    const after = rollDice(s, P1, 6); // third 6 → forfeit
+    expect(after.currentPlayerIndex).toBe(1);
+    expect(after.diceValue).toBeNull();
+    expect(after.lastRollValue).toBe(6);
+    expect(after.lastRollBy).toBe("red");
+  });
+});
+
 describe("dice module", () => {
   it("rollD6 always returns an integer in [1, 6]", () => {
     for (let i = 0; i < 200; i++) {

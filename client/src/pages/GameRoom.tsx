@@ -151,6 +151,14 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
     gameState.diceRolled === true &&
     gameState.phase === "playing";
 
+  // Dice display: show the actionable dice when a move is pending, otherwise the
+  // last rolled number (kept by the server across turn-advance) so the die never
+  // goes blank right after a roll. Blank only before the first roll of the game.
+  const currentColor = gameState?.players[gameState.currentPlayerIndex]?.color ?? null;
+  const currentName = currentColor ? COLOR_LABEL[currentColor] : "";
+  const displayValue = gameState ? gameState.diceValue ?? gameState.lastRollValue : null;
+  const movePending = gameState !== null && gameState.diceRolled && gameState.diceValue !== null;
+
   function handleRollDice() {
     if (!isMyTurn || gameState?.diceRolled || rolling) return;
     pendingRollRef.current = true;
@@ -273,11 +281,13 @@ export default function GameRoom({ roomId, myColor, notice = "", onLeave }: Prop
           {/* Controls — dice + player panels. Scrolls internally only if it can't fit. */}
           <div className="flex min-h-0 flex-col gap-3 lg:overflow-y-auto lg:pr-0.5">
             <Dice
-              diceValue={gameState.diceValue}
+              displayValue={displayValue}
+              pending={movePending}
               canRoll={isMyTurn && !gameState.diceRolled}
               isMyTurn={isMyTurn}
               rolling={rolling}
               isSix={isSix}
+              currentName={currentName}
               lastAction={gameState.lastAction}
               onRoll={handleRollDice}
             />

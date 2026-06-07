@@ -40,6 +40,8 @@ export function createInitialState(
     winner: null,
     turnCount: 0,
     lastAction: null,
+    lastRollValue: null,
+    lastRollBy: null,
   };
 }
 
@@ -67,10 +69,16 @@ export function rollDice(state: GameState, requestingPlayerId: string, forcedVal
   const consecutiveSixes = value === 6 ? state.consecutiveSixes + 1 : 0;
   const who = cap(currentPlayer.color);
 
+  // Record the roll for display/history. advanceTurn keeps these (it only clears
+  // the actionable diceValue), so the client can still show what was rolled even
+  // after an auto-pass instead of going blank.
+  const roll = { lastRollValue: value, lastRollBy: currentPlayer.color };
+
   // Three consecutive sixes: forfeit the third roll and end the turn.
   if (consecutiveSixes === 3) {
     return advanceTurn({
       ...state,
+      ...roll,
       diceValue: value,
       diceRolled: true,
       consecutiveSixes: 0,
@@ -84,6 +92,7 @@ export function rollDice(state: GameState, requestingPlayerId: string, forcedVal
   if (movable.length === 0) {
     return advanceTurn({
       ...state,
+      ...roll,
       diceValue: value,
       diceRolled: true,
       consecutiveSixes,
@@ -94,7 +103,7 @@ export function rollDice(state: GameState, requestingPlayerId: string, forcedVal
   const lastAction =
     value === 6 ? `${who} rolled a 6 — bonus turn` : `${who} rolled ${value}`;
 
-  return { ...state, diceValue: value, diceRolled: true, consecutiveSixes, lastAction };
+  return { ...state, ...roll, diceValue: value, diceRolled: true, consecutiveSixes, lastAction };
 }
 
 export function moveToken(state: GameState, requestingPlayerId: string, tokenId: number): GameState {
@@ -232,6 +241,10 @@ export function removePlayer(state: GameState, playerId: string): GameState {
 
 function advanceTurn(state: GameState): GameState {
   const nextIndex = (state.currentPlayerIndex + 1) % state.players.length;
+  // Note: lastRollValue / lastRollBy are intentionally NOT reset here — they are
+  // display/history only, so the just-rolled number stays visible after the turn
+  // advances (e.g. an auto-pass on no legal moves). Only the actionable diceValue
+  // is cleared.
   return {
     ...state,
     currentPlayerIndex: nextIndex,
