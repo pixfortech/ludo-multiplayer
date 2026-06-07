@@ -3,6 +3,8 @@ import { socket, connect } from "../socket";
 import { Button, Card, Toast } from "../components/ui";
 import { PLAYER_PALETTE, PLAYABLE_COUNTS, MAX_VISUAL_PLAYERS } from "../theme";
 import type { PlayerColor } from "../types";
+import PolygonBoardPreview from "../components/board/PolygonBoardPreview";
+import { POLYGON_NAMES } from "../components/board/polygonLayout";
 
 interface Props {
   onRoomJoined: (roomId: string, color: PlayerColor) => void;
@@ -14,6 +16,7 @@ export default function Home({ onRoomJoined }: Props) {
   const [joinCode, setJoinCode] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(2);
   const [error, setError] = useState("");
+  const [previewCount, setPreviewCount] = useState(4);
 
   useEffect(() => {
     connect();
@@ -43,7 +46,7 @@ export default function Home({ onRoomJoined }: Props) {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-7 px-5 py-10 sm:max-w-lg">
+    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col justify-center gap-7 px-5 py-10 sm:max-w-xl">
       {/* Title */}
       <header className="animate-fade-in-up text-center">
         <div className="mb-3 flex justify-center gap-1.5">
@@ -137,6 +140,63 @@ export default function Home({ onRoomJoined }: Props) {
         <Button variant="secondary" fullWidth onClick={handleJoin}>
           Join room
         </Button>
+      </Card>
+
+      {/* Board Preview */}
+      <Card className="animate-fade-in-up p-6 [animation-delay:180ms]">
+        <div className="mb-4 flex items-start justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold">Board Preview</h2>
+            <p className="mt-0.5 text-xs text-slate-400">
+              Visual preview only — gameplay rules will be added later.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-indigo-500/20 px-2.5 py-1 text-[11px] font-semibold text-indigo-300">
+            {POLYGON_NAMES[previewCount] ?? `${previewCount}-gon`}
+          </span>
+        </div>
+
+        {/* Player count pills */}
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+          Players
+        </label>
+        <div className="mb-5 flex flex-wrap gap-2">
+          {Array.from({ length: MAX_VISUAL_PLAYERS - 1 }, (_, i) => i + 2).map((n) => {
+            const playable = PLAYABLE.has(n);
+            const selected = n === previewCount;
+            return (
+              <button
+                key={n}
+                type="button"
+                onClick={() => setPreviewCount(n)}
+                title={playable ? `${n} players` : "Coming soon"}
+                className={`relative flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold transition-all ${
+                  selected
+                    ? "scale-105 bg-indigo-500 text-white shadow-lg shadow-indigo-500/40"
+                    : "bg-white/10 text-white hover:bg-white/20"
+                }`}
+              >
+                {n}
+                {!playable && (
+                  <span className="absolute -bottom-1.5 text-[7px] font-semibold uppercase tracking-wide text-slate-500">
+                    soon
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* SVG board preview */}
+        <div className="mx-auto aspect-square w-full max-w-[17rem] sm:max-w-xs">
+          <PolygonBoardPreview playerCount={previewCount} />
+        </div>
+
+        <p className="mt-3 text-center text-[11px] text-slate-500">
+          {previewCount <= 4
+            ? `${previewCount}-player games are available to play now.`
+            : `${previewCount}-player support coming soon.`}
+        </p>
       </Card>
 
       <p className="pb-2 text-center text-[11px] text-slate-600">
