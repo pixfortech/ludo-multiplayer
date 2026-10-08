@@ -24,13 +24,14 @@ apps/
   server/            Express + Socket.IO authoritative server
 packages/
   shared-types/      Types and constants shared by every layer
+  design-tokens/     Palette, symbols, colour science, UI and motion tokens
   assets/            Asset manifest schema, validation, resolver with fallbacks
   game-engine/       Pure rules engine (server-authoritative)
   board-layouts/     Board geometry for 2–15 players
 assets/              Source tree for generated and hand-made art/audio (+ manifest.json)
 docs/
   architecture/      System design
-  design/            Visual pipeline (Higgsfield integration, approval log)
+  design/            Design system, board specs, visual pipeline (index: docs/design/README.md)
   rules/             Rule specifications (classic and expanded)
   qa/                Test plan
 ```
@@ -53,6 +54,7 @@ npm run dev        # server on :3001, client on :5173 (proxied)
 | `npm run typecheck` | Runs strict `tsc` in every workspace              |
 | `npm run build`     | Builds packages, server and client in dependency order |
 | `npm run lint`      | Runs ESLint across the repo                       |
+| `npm run design:generate` | Regenerates the palette report and board diagrams in `docs/design/generated/` |
 
 Every phase must pass `test`, `typecheck` and `build` before it is committed.
 
@@ -60,7 +62,8 @@ Every phase must pass `test`, `typecheck` and `build` before it is committed.
 
 | Phase | Scope | Status |
 | ----- | ----- | ------ |
-| 0 | Reset and scaffold the monorepo | ✅ |
+| 0 | Reset and scaffold the monorepo; Higgsfield pipeline preparation | ✅ |
+| 0.5 | Visual design system, 15-player palette, classic geometry draft, Higgsfield production plan ([docs/design](docs/design/README.md)) | ✅ awaiting approval |
 | 1 | Classic 2–4 player game engine with full rules and tests | Next |
 | 2 | Rooms and sessions backend: create, join, resume, identity, persistence foundation | |
 | 3 | Basic 2D client: lobby, room, classic board, dice, movement, reconnect | |

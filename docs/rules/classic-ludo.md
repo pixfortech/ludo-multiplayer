@@ -4,7 +4,7 @@ This is the specification Phase 1 implements and tests. Rule numbers are referen
 
 ## Board and positions
 
-- Shared loop of **52 track cells**. Each colour owns one arm with a **start cell** and a **home lane**.
+- Shared loop of **52 track cells**, travelled **clockwise**. Each colour owns one arm with a **start cell** and a **home lane**. Exact cells: [board-classic.md](../design/board-classic.md).
 - Each player has **4 tokens**. A token's position is relative to its owner:
 
 | Position | Meaning |
@@ -50,6 +50,6 @@ This is the specification Phase 1 implements and tests. Rule numbers are referen
 
 | # | Question | Proposed default |
 | --- | --- | --- |
-| D1 | **Direction of travel** on the 4-player square. The previous build was changed to *counter-clockwise* from your marked-arrow screenshot; the visual-production brief says *clockwise*. | One layout constant; whichever you confirm. Rules are unaffected. |
+| D1 | **Direction of travel** on the 4-player square | **Resolved: traditional clockwise** (approved). Cell-by-cell geometry and diagrams in [docs/design/board-classic.md](../design/board-classic.md), awaiting final geometry sign-off before Phase 1. |
 | D2 | Two opponent tokens of the same colour on one non-safe cell: capture both, or treat as a protected block? | Capture all opponent tokens on the cell (no blocks in v1) |
 | D3 | Blocks or barriers (two own tokens stopping passage) | Off in v1; optional house rule later |
