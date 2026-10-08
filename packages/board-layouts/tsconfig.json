@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "customConditions": ["source"],
-    "types": [],
+    "types": ["node"],
     "noEmit": true
   },
   "include": ["src"]
