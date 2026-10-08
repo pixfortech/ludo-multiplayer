@@ -1,9 +1,14 @@
 node_modules/
 dist/
-build/
-.env
-.env.local
-.DS_Store
-*.log
 coverage/
-.vite/
+*.tsbuildinfo
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Local persistence (SQLite during development)
+*.db
+*.db-journal
+apps/server/data/

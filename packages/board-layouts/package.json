@@ -1,0 +1,23 @@
+{
+  "name": "@ludo/board-layouts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Board geometry for 2–15 player boards, shared by the 2D and 3D renderers.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ludo/shared-types": "0.0.0"
+  }
+}

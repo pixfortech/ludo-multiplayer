@@ -1,33 +1,69 @@
-# Ludo Multiplayer
+# Ludo Platform
 
-Server-authoritative online multiplayer Ludo game built with React + Vite + TypeScript (client) and Node.js + Express + Socket.IO + TypeScript (server).
+A professional, server-authoritative multiplayer Ludo game.
 
-## Quick Start
+- **Classic Ludo** for 2–4 players, with every traditional rule implemented and tested.
+- **Expanded Ludo** for 5–15 players on polygon boards (pentagon → pentadecagon).
+- **Board shape follows player count:** rectangle (2), triangle (3), square (4), pentagon (5) … pentadecagon (15).
+- **Play anywhere:** everyone on one screen, or each player on their own device via cloud rooms.
+- **Rooms that last:** create or join by code or link, reconnect after a refresh, and resume saved games later.
+- **Two renderers:** a fast premium 2D board (SVG) and an optional 3D board (React Three Fiber), both drawing the same layout data.
 
-```bash
-npm run install:all
-npm run dev        # starts both client (5173) and server (3001)
-npm run test       # runs server-side game engine unit tests
+## Principles
+
+1. **The server is the only authority.** Dice, legal moves, captures, turns, powers and wins are decided by the game engine running on the server. Clients render state and request actions.
+2. **Rules are pure and tested.** `@ludo/game-engine` is deterministic TypeScript with no I/O. Randomness is injected, so every rule can be tested with forced dice.
+3. **Geometry is separate from rules.** `@ludo/board-layouts` turns a board shape into coordinates. Both renderers consume it, and neither renderer contains game logic.
+4. **Visual assets decorate, never define.** Generated artwork and models are skins over programmatic geometry (see [docs/architecture/overview.md](docs/architecture/overview.md)).
+
+## Repository layout
+
+```
+apps/
+  client/            React + Vite + Tailwind web client
+  server/            Express + Socket.IO authoritative server
+packages/
+  shared-types/      Types and constants shared by every layer
+  game-engine/       Pure rules engine (server-authoritative)
+  board-layouts/     Board geometry for 2–15 players
+docs/
+  architecture/      System design
+  rules/             Rule specifications (classic and expanded)
+  qa/                Test plan
 ```
 
-## Stack
+## Getting started
 
-- **Frontend:** React + Vite + TypeScript + Tailwind CSS + Socket.IO client
-- **Backend:** Node.js + Express + Socket.IO + TypeScript (authoritative game engine)
-- **Tests:** Vitest
+Requires Node.js 22 or newer (`.nvmrc` pins 22).
 
-## Architecture
+```bash
+npm install
+npm run dev        # server on :3001, client on :5173 (proxied)
+```
 
-The backend is the single source of truth. The frontend only sends action requests (roll dice, move token, join room). The server validates every action and broadcasts authoritative state.
+| Script              | What it does                                      |
+| ------------------- | ------------------------------------------------- |
+| `npm run dev`       | Builds the packages, then runs server and client with live reload |
+| `npm run test`      | Runs Vitest in every workspace                    |
+| `npm run typecheck` | Runs strict `tsc` in every workspace              |
+| `npm run build`     | Builds packages, server and client in dependency order |
+| `npm run lint`      | Runs ESLint across the repo                       |
 
-## Phase 1 Status
+Every phase must pass `test`, `typecheck` and `build` before it is committed.
 
-- [x] Project structure
-- [x] TypeScript configs
-- [x] Game types
-- [x] Board configuration
-- [x] Game engine core
-- [x] Move validator
-- [x] Socket.IO handlers
-- [x] Unit tests (11 core rules)
-- [x] React client shell with Socket.IO integration
+## Roadmap
+
+| Phase | Scope | Status |
+| ----- | ----- | ------ |
+| 0 | Reset and scaffold the monorepo | ✅ |
+| 1 | Classic 2–4 player game engine with full rules and tests | Next |
+| 2 | Rooms and sessions backend: create, join, resume, identity, persistence foundation | |
+| 3 | Basic 2D client: lobby, room, classic board, dice, movement, reconnect | |
+| 4 | Premium 2D UI: animation, responsive layouts, fullscreen, accessibility | |
+| 5 | Polygon board geometry for 2–15 players, with previews and tests | |
+| 6 | Expanded 5–15 player gameplay: fair paths, fast mode, power system foundation | |
+| 7 | 3D renderer: lazy-loaded, same state, quality settings | |
+| 8 | Persistence and resume polish: durable rooms, move history | |
+| 9 | Audit and deployment preparation | |
+
+The previous implementation is preserved on the `backup/old-ludo-at-reset` branch.
