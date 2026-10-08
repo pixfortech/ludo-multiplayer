@@ -4,14 +4,19 @@ One silhouette, one material family, 15 colour and symbol variants derived from 
 
 ## Silhouette
 
-A **classic Ludo pawn**, refined: a wide stable base, a soft waist and a domed head with a flat top facet that carries the symbol.
+A **classic Ludo pawn**, refined: a wide stable base, a soft waist and a domed head with a flat top facet that carries the symbol. **No horse/knight or other figurative shapes.** The reference board's frosted resin material is adopted, not its knight silhouette.
 
 - **Top-down (2D and 3D top view):** reads as a circle with a dark rim, light halo and centred symbol. That's what the 2D renderer draws.
 - **Perspective (3D):** reads as a pawn, unmistakably "Ludo", with the symbol visible on the head.
 
 ## 2D token
 
-Reference implementation: `token2dSvg()` in `packages/design-tokens/src/token2d.ts`, rendered for all identities and states in [generated/palette-sheet.svg](generated/palette-sheet.svg).
+Reference implementation: `token2dSvg()` in `packages/design-tokens/src/token2d.ts`. It is rendered for all identities and states in [generated/palette-sheet.svg](generated/palette-sheet.svg), and **at real gameplay pixel sizes** (18 / 24 / 32 / 44 px, on cells of matching size and on each token's own lane) in [generated/token-sizes.svg](generated/token-sizes.svg).
+
+**Finish:** two finishes share identical geometry and accessibility layers:
+
+- **flat:** a solid body with a faint top-light band. **Proposed default for 2D**, matching the flat, printed board look.
+- **resin:** a radial gradient with gloss, kept for the 2D "tactile" theme option and as the colour reference for 3D.
 
 ### Geometry (100-unit box)
 
@@ -22,13 +27,14 @@ Reference implementation: `token2dSvg()` in `packages/design-tokens/src/token2d.
 | Rim | 41 | identity `rim` |
 | Body | 36 | radial gradient: `highlight` (0) → `body` (0.55) → `rim` (1), centre at 38% / 32% |
 | Gloss | ellipse 17 × 9 at (41, 33) | white, 28% opacity |
-| Symbol | 40-unit box, centred | identity `ink` |
+| Symbol | 46-unit box, centred (enlarged from 40 after the gameplay-size review) | identity `ink` |
 | Contact shadow | ellipse 30 × 5.5 at y 91 | `#D8D0C2` |
 
 ### Size
 
 - Rendered at **0.82 × cell size** on track cells; 0.72 × when stacked or finished.
-- Minimum rendered diameter **18 px**, with the symbol at least 8 px. Below this (crowded 15-player boards on phones), the focus/zoom tools take over rather than shrinking further (see [responsive-layouts.md](responsive-layouts.md)).
+- **Minimum legible size: 24 px** (measured in the gameplay-size sheet). At 18 px colour still reads, but symbols collapse: hexagon, circle and square become dots, and graphite's gold bars disappear. Below 24 px (classic on phones ≈ 20 px; rings on phones ≈ 11–12 px), symbols are not relied on for identification; the move tray and focus view take over ([interaction-crowded-boards.md](interaction-crowded-boards.md)).
+- Absolute floor at overview zoom: 10 px (presence and colour only).
 - **Hit target:** at least 44 × 44 px regardless of the drawn size. Overlapping targets resolve to the token nearest the pointer, and stacked tokens open a picker.
 
 ### States
@@ -74,14 +80,14 @@ A lathe (surface-of-revolution) mesh, built **procedurally** in Three.js or expo
 
 | Quality | Material | Parameters |
 | --- | --- | --- |
-| High | `MeshPhysicalMaterial` | color = body (linear), roughness 0.22, clearcoat 1.0, clearcoatRoughness 0.08, IOR 1.5, sheen 0 |
-| Medium | `MeshPhysicalMaterial` | as High, clearcoat 0.6 |
+| High | `MeshPhysicalMaterial` — **frosted resin** | color = body (linear), roughness 0.42 (satin-frosted), clearcoat 0.5, clearcoatRoughness 0.25, IOR 1.5, `thickness`-free fake translucency via a lighter `sheenColor` (= highlight) at sheen 0.35 |
+| Medium | `MeshPhysicalMaterial` | as High, without sheen |
 | Low | `MeshStandardMaterial` | roughness 0.3, metalness 0 |
 
 - Base ring: a second material slot in the identity `rim` colour, matte (roughness 0.5). It gives the same outline cue as 2D.
 - Symbol: an inlaid decal on the top facet in identity `ink` (alpha texture from `SYMBOL_PATHS`, 256 px atlas of 15 symbols).
 - **One geometry, 15 material instances**, drawn with `InstancedMesh` per identity.
-- No transmission or refraction. It's too costly on phones, and opaque resin reads better.
+- No true transmission or refraction (too costly on phones). The frosted look of the reference pieces comes from satin roughness and a light sheen, so pieces stay opaque enough for colour identity at a distance.
 
 ### 3D states
 

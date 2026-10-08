@@ -18,6 +18,9 @@ import {
   classicSeatPath,
 } from "../classicSquareLayout.js";
 import { cellKey, type Cell } from "../layoutTypes.js";
+import { buildClassicConceptSvg } from "./classicConcept.js";
+import { buildGeometryReport } from "../report/geometryReport.js";
+import { buildClassicReference } from "../report/classicReference.js";
 
 const S = 48; // px per cell
 const PAD = 16;
@@ -117,6 +120,20 @@ export function buildClassicDiagramSvg(view: ClassicDiagramView): string {
       parts.push(text(x(cell.col) + S / 2, y(cell.row) + S / 2, index, ink, 14, 700));
     });
     CLASSIC_TRACK.forEach((cell, index) => parts.push(arrow(cell, CLASSIC_TRACK[(index + 1) % 52]!)));
+    // Each seat: dashed turn-in cell, lane steps 51–55 with arrows, finish 56.
+    for (let seat = 0; seat < CLASSIC_SEATS; seat++) {
+      const p = PLAYER_IDENTITIES[seat]!;
+      const { track, lane, finish } = classicSeatPath(seat);
+      const entry = track[track.length - 1]!;
+      parts.push(`<rect x="${x(entry.col) + 2}" y="${y(entry.row) + 2}" width="${S - 4}" height="${S - 4}" rx="6" fill="none" stroke="${p.rim}" stroke-width="3" stroke-dasharray="5 3"/>`);
+      parts.push(arrow(entry, lane[0]!));
+      lane.forEach((c, i) => {
+        parts.push(text(x(c.col) + S / 2, y(c.row) + S / 2, 51 + i, INK.dark, 13, 700));
+        parts.push(arrow(c, i + 1 < lane.length ? lane[i + 1]! : finish));
+      });
+      parts.push(`<circle cx="${x(finish.col) + S / 2}" cy="${y(finish.row) + S / 2}" r="${S * 0.36}" fill="#FFFFFF" stroke="${p.rim}" stroke-width="2.5"/>`);
+      parts.push(text(x(finish.col) + S / 2, y(finish.row) + S / 2, 56, INK.dark, 13, 800));
+    }
   } else {
     const p = PLAYER_IDENTITIES[focus]!;
     // Highlight start and home entry.
@@ -140,11 +157,11 @@ export function buildClassicDiagramSvg(view: ClassicDiagramView): string {
 
   const title =
     focus < 0
-      ? "Classic board — absolute track positions 0–51, clockwise"
+      ? "Classic board reference — clockwise"
       : `Seat ${focus + 1} · ${PLAYER_IDENTITIES[focus]!.name} — numbered path, steps 0–56`;
   const legend =
     focus < 0
-      ? "Coloured cells = starts (safe) · ★ = star cells (safe) · ▶ = direction of travel · lanes = private home lanes"
+      ? "Track: absolute index 0–51 · lanes 51–55 and finish 56: seat steps · dashed: turn-in (step 50) · ★ / coloured: safe"
       : "0 = start (solid outline) · 1–50 shared track · 50 = turn-in cell (dashed) · 51–55 home lane · 56 = finish (exact roll)";
   const width = SIZE + PAD * 2;
   const height = HEAD + SIZE + FOOT;
@@ -160,6 +177,9 @@ export function buildClassicDiagramSvg(view: ClassicDiagramView): string {
 }
 
 export const CLASSIC_DIAGRAMS: readonly { path: string; build: () => string }[] = [
+  { path: "docs/design/generated/classic-board-concept.svg", build: buildClassicConceptSvg },
+  { path: "docs/design/generated/geometry-report.md", build: buildGeometryReport },
+  { path: "docs/design/generated/classic-reference.md", build: buildClassicReference },
   { path: "docs/design/generated/classic-board-overview.svg", build: () => buildClassicDiagramSvg({ kind: "overview" }) },
   ...Array.from({ length: CLASSIC_SEATS }, (_, seat) => ({
     path: `docs/design/generated/classic-path-seat${seat + 1}-${PLAYER_IDENTITIES[seat]!.id}.svg`,

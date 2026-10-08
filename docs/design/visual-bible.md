@@ -1,6 +1,8 @@
 # Visual bible
 
-**Direction: Contemporary Playful × Luxury Tabletop.** A crisp, modern board you would want on a real table: clean geometry and confident colour from the playful direction, with tactile resin pieces, an ivory-resin die and soft, controlled light from the luxury direction.
+**Direction (approved): Contemporary Playful × Modern Luxury Tabletop.** A crisp, minimal, colourful board you would want on a real table. The board is flat and printed-looking, with stepped tonal colour fields; the pieces are tactile frosted-resin pawns and an ivory die, under soft, believable light.
+
+**Reference adopted (from your example):** stepped tonal squares in the bases, home lanes that deepen toward the centre, a clean white track with rounded inner corners, flat centre triangles, and frosted translucent resin pieces. **Not adopted:** the knight/horse silhouette, which is replaced by our pawn. The procedural concept built from the real geometry is [generated/classic-board-concept.svg](generated/classic-board-concept.svg).
 
 ## Principles
 
@@ -26,9 +28,9 @@
 | --- | --- | --- |
 | Board surface (cells) | Flat `#F7F4EE` porcelain, 1 px `#D8D0C2` separators, 5 px corner radius | Matte lacquered ceramic. Roughness 0.55, metalness 0, very faint micro-normal. |
 | Board body and frame | Flat `#ECE6DC`, 18 px outer radius | Satin lacquer, roughness 0.45; bevelled 0.15-cell edge |
-| Bases | Seat body colour with an ivory inner panel; 4 slot rings | Inset tray, seat colour satin (roughness 0.4), ivory well |
-| Home lanes and start cells | Lane tint / body colour (from palette) | Same colours, satin; never glossy (keeps tokens dominant) |
-| Tokens | Radial resin gradient, dark rim, light halo, gloss ellipse, symbol | Polished resin: clearcoat 1.0, roughness 0.22, IOR 1.5 |
+| Bases | Five stepped tonal squares (seat colour 8% → 80% toward white); 4 soft slot discs | Terraced inset tray in the same tonal steps, satin |
+| Home lanes and start cells | Lanes: 5-step tint ramp, pastel at the tip → saturated at the centre. Starts: body colour with a white clockwise chevron | Same colours, satin; never glossy (keeps tokens dominant) |
+| Tokens | **Flat finish** (default): solid body, dark rim, light halo, symbol. Resin finish optional | **Frosted resin pawn**: satin roughness 0.42, soft sheen, light clearcoat |
 | Dice | Ivory rounded square, ink pips | Ivory resin, roughness 0.3, clearcoat 0.6, pips recessed |
 | Centre finish | Four flat triangles in seat colours | Shallow pyramid, satin |
 

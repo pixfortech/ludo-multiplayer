@@ -23,8 +23,9 @@ Higgsfield is the project's **visual asset pipeline**. It is not part of the gam
 | Workspace selection | Verified as the account's only workspace (private, owner role, Max plan) and **selected** on 2026-10-08, as approved |
 | **CLI** (`@higgsfield/cli` 1.1.26 on npm) | Not installed in the cloud container (see below) |
 | **Skills** (`higgsfield-ai/skills`) | Not installed in the cloud container |
-| Credit cost per model | **Not exposed** by model metadata. Account history shows `gpt_image_2_5` (Flare) at **0.5** and **2.75** credits per image; the settings behind each price are not recorded. No observed price for any 3D or audio model. |
+| Credit cost per job | **Verifiable before submitting** via the image tool's `get_cost` preflight (no job, no charge). `gpt_image_2_5` flare: low/1k 0.25 · medium/1k 0.5 · medium/2k 1.0 · high/1k 1.5 · high/2k 2.75. 3D and audio prices are not checked yet and will be preflighted before any such batch. |
 | Jobs submitted | **None.** No generation has been run. |
+| Terms of use | Primary text not reachable from the cloud container (DNS blocked for `higgsfield.ai`); see the status in [higgsfield-production-plan.md](higgsfield-production-plan.md#proof-of-concept-batch-request-awaiting-final-authorisation-not-executed) |
 
 The cloud container is ephemeral and `higgsfield auth login` is an interactive, user-authorised step, so the CLI is not installed there. The MCP connection provides the same generation access for cloud sessions.
 

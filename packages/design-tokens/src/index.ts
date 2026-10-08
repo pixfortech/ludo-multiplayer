@@ -1,4 +1,5 @@
 export * from "./color.js";
+export * from "./die2d.js";
 export * from "./palette.js";
 export * from "./report.js";
 export * from "./symbols.js";

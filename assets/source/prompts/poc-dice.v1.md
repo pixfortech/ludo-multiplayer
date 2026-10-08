@@ -2,7 +2,7 @@
 
 - **Purpose:** premium die concept (material, edge rounding, pip treatment, six detail)
 - **Model:** `gpt_image_2_5` · variant `flare` · quality `high` · resolution `2k` · aspect `3:2` · outputs 4
-- **Status:** draft, not submitted
+- **Status:** draft, deferred to a later batch (not part of the 15-credit proof of concept)
 
 ## Prompt
 

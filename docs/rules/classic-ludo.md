@@ -1,6 +1,6 @@
 # Classic Ludo rules (2–4 players)
 
-This is the specification Phase 1 implements and tests. Rule numbers are referenced from tests.
+This is the platform's **traditional** ruleset for the 4-player square (and its 2-player square option), which Phase 1 implements and tests. Rule numbers are referenced from tests. Ludo conventions vary between regions and families, so custom boards have their own document: [custom-modes.md](custom-modes.md).
 
 ## Board and positions
 
@@ -46,10 +46,25 @@ This is the specification Phase 1 implements and tests. Rule numbers are referen
 - **Opening captures:** a token entering its start cell cannot capture there, because start cells are safe.
 - **Turn order** follows seat order, which matches the direction of travel around the board.
 
+## Turn order
+
+Clockwise by seat (crimson → royal blue → emerald → golden), matching the direction of travel. The first player is drawn server-side with a secure RNG and recorded, so a restored game replays exactly. In the 2-player square option, seats 1 and 3 alternate.
+
+## Conventions that vary (not in v1; possible future settings)
+
+| Convention | v1 |
+| --- | --- |
+| Open on 1 or 6 | 6 only |
+| Bonus roll for reaching home | yes (rule 13) |
+| Capturing on an opponent's start cell | no; starts are safe |
+| Blocks and barriers | off |
+| Must capture when possible | no |
+| A capture needed before entering the home lane | no |
+
 ## Open decisions (need sign-off before Phase 1 closes)
 
 | # | Question | Proposed default |
 | --- | --- | --- |
 | D1 | **Direction of travel** on the 4-player square | **Resolved: traditional clockwise** (approved). Cell-by-cell geometry and diagrams in [docs/design/board-classic.md](../design/board-classic.md), awaiting final geometry sign-off before Phase 1. |
-| D2 | Two opponent tokens of the same colour on one non-safe cell: capture both, or treat as a protected block? | Capture all opponent tokens on the cell (no blocks in v1) |
-| D3 | Blocks or barriers (two own tokens stopping passage) | Off in v1; optional house rule later |
+| D2 | Two opponent tokens on one non-safe cell: capture both, or treat as a protected block? | Capture all of them, with one bonus roll. This matches the approved custom-mode rule C7; confirm for classic too. |
+| D3 | Blocks or barriers (two own tokens stopping passage) | Off in v1, matching custom-mode rule C5; confirm for classic too |

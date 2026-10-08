@@ -4,7 +4,7 @@
 
 import { contrastRatio, deltaE, simulateVision, type VisionType } from "./color.js";
 import { BOARD_SURFACES, PLAYER_IDENTITIES, TOKEN_HALO, type PlayerIdentity } from "./palette.js";
-import { TOKEN_STATES, token2dSvg } from "./token2d.js";
+import { TOKEN_STATES, token2dSvg, type TokenFinish } from "./token2d.js";
 
 export const VISION_TYPES: readonly VisionType[] = ["normal", "protanopia", "deuteranopia", "tritanopia"];
 
@@ -133,6 +133,53 @@ export function buildPaletteSheetSvg(): string {
     parts.push(`<rect x="${x + 4}" y="${stateTop + 4}" width="${CELL - 8}" height="${CELL - 8}" rx="8" fill="${BOARD_SURFACES.cell}" stroke="${BOARD_SURFACES.line}"/>`);
     parts.push(`<svg x="${x + 12}" y="${stateTop + 8}" width="${CELL - 24}" height="${CELL - 24}" viewBox="-6 -6 112 112">${token2dSvg(demo, { state, idPrefix: "st" })}</svg>`);
     parts.push(`<text x="${x + CELL / 2}" y="${stateTop + CELL + 8}" font-size="11" text-anchor="middle" fill="#5C6370">${state}</text>`);
+  });
+  parts.push("</svg>");
+  return parts.join("\n");
+}
+
+/** Token diameters (px, outer halo) sampled in the gameplay-size sheet. */
+export const TOKEN_REVIEW_SIZES = [18, 24, 32, 44] as const;
+/** The halo is 88 of the token's 100-unit box; tokens are 0.82 of a cell. */
+const HALO_FRACTION = 0.88;
+const TOKEN_TO_CELL = 0.82;
+
+/**
+ * Every identity at real gameplay pixel sizes, in both finishes, each sitting
+ * on a board cell of the matching size (plus one on its own lane). Render at
+ * device pixel ratio 1 and 2 to judge legibility.
+ */
+export function buildTokenSizeSheetSvg(): string {
+  const finishes: TokenFinish[] = ["resin", "flat"];
+  const colW = 64;
+  const rowH = 62;
+  const labelW = 150;
+  const blockW = labelW + (TOKEN_REVIEW_SIZES.length + 1) * colW + 24;
+  const top = 64;
+  const width = blockW * finishes.length;
+  const height = top + PLAYER_IDENTITIES.length * rowH + 24;
+  const parts: string[] = [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="Inter, system-ui, sans-serif">`,
+    `<rect width="100%" height="100%" fill="${BOARD_SURFACES.base}"/>`,
+  ];
+  finishes.forEach((finish, f) => {
+    const x0 = f * blockW;
+    parts.push(`<text x="${x0 + 16}" y="24" font-size="15" font-weight="700" fill="#141821">${finish === "resin" ? "Resin finish" : "Flat finish"}</text>`);
+    [...TOKEN_REVIEW_SIZES.map((s) => `${s} px`), "on lane 24"].forEach((label, c) => {
+      parts.push(`<text x="${x0 + labelW + c * colW + colW / 2}" y="${top - 14}" font-size="11" text-anchor="middle" fill="#5C6370">${label}</text>`);
+    });
+    PLAYER_IDENTITIES.forEach((p, r) => {
+      const cy = top + r * rowH + rowH / 2;
+      parts.push(`<text x="${x0 + 16}" y="${cy + 4}" font-size="12" fill="#141821">${p.seat}. ${escapeXml(p.name)}</text>`);
+      [...TOKEN_REVIEW_SIZES, 24].forEach((size, c) => {
+        const onLane = c === TOKEN_REVIEW_SIZES.length;
+        const cell = Math.round(size / TOKEN_TO_CELL);
+        const box = size / HALO_FRACTION;
+        const cx = x0 + labelW + c * colW + colW / 2;
+        parts.push(`<rect x="${cx - cell / 2}" y="${cy - cell / 2}" width="${cell}" height="${cell}" rx="${Math.max(2, cell * 0.1)}" fill="${onLane ? p.lane : BOARD_SURFACES.cell}" stroke="${BOARD_SURFACES.line}"/>`);
+        parts.push(`<svg x="${cx - box / 2}" y="${cy - box / 2}" width="${box}" height="${box}" viewBox="0 0 100 100">${token2dSvg(p, { finish, idPrefix: `z${f}${c}` })}</svg>`);
+      });
+    });
   });
   parts.push("</svg>");
   return parts.join("\n");

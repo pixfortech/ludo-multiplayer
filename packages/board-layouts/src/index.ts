@@ -13,4 +13,5 @@ export function boardShapeFor(count: PlayerCount): BoardShape {
 
 export * from "./classicSquareLayout.js";
 export * from "./layoutTypes.js";
+export * from "./topology.js";
 export { buildClassicDiagramSvg, CLASSIC_DIAGRAMS } from "./diagram/classicDiagram.js";

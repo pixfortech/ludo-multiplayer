@@ -40,7 +40,7 @@ Visual assets are produced through Higgsfield under an explicit approval and cos
 
 ## Getting started
 
-Requires Node.js 22 or newer (`.nvmrc` pins 22).
+Requires Node.js 22 or newer (`.nvmrc` pins 22). Install [Git LFS](https://git-lfs.com) (`git lfs install`) before committing binary assets; see [docs/design/asset-pipeline.md](docs/design/asset-pipeline.md).
 
 ```bash
 npm install
@@ -63,7 +63,7 @@ Every phase must pass `test`, `typecheck` and `build` before it is committed.
 | Phase | Scope | Status |
 | ----- | ----- | ------ |
 | 0 | Reset and scaffold the monorepo; Higgsfield pipeline preparation | ✅ |
-| 0.5 | Visual design system, 15-player palette, classic geometry draft, Higgsfield production plan ([docs/design](docs/design/README.md)) | ✅ awaiting approval |
+| 0.5 | Visual design system, 15-player palette, classic reference geometry, 2–15 topology, Higgsfield plan ([docs/design](docs/design/README.md)) | ✅ awaiting approval |
 | 1 | Classic 2–4 player game engine with full rules and tests | Next |
 | 2 | Rooms and sessions backend: create, join, resume, identity, persistence foundation | |
 | 3 | Basic 2D client: lobby, room, classic board, dice, movement, reconnect | |

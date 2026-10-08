@@ -2,7 +2,7 @@
 
 - **Purpose:** "luxury tabletop" environment backdrop reference (the board itself is rendered by the game)
 - **Model:** `gpt_image_2_5` · variant `flare` · quality `high` · resolution `2k` · aspect `16:9` · outputs 4
-- **Status:** draft, not submitted
+- **Status:** draft, deferred to a later batch (not part of the 15-credit proof of concept)
 
 ## Prompt
 

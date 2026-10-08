@@ -21,6 +21,17 @@ The rules live in `/.gitattributes` and are scoped to `assets/**`.
 - `git-lfs` is **not installed** in the Claude Code cloud container. Attributes still resolve, because they are native git, so tracking is configured. LFS objects cannot be pushed from that environment until `git-lfs` is installed there (for example via a session setup script).
 - The GitHub LFS storage and bandwidth quota for this account cannot be read through the API available to this session. Check it under GitHub **Settings → Billing and plans → Git LFS** before the first large upload.
 
+### Local setup for Git LFS (required before committing binary assets)
+
+```bash
+# macOS: brew install git-lfs · Windows: included with Git for Windows · Debian/Ubuntu: sudo apt install git-lfs
+git lfs install          # once per machine; installs the LFS git hooks
+git lfs env              # verify
+git lfs pull             # after cloning, fetch binary assets
+```
+
+Without `git-lfs`, a clone contains small pointer files instead of images and models (the game still builds and runs, because every asset has a procedural fallback), and committing a binary fails the test suite. For Claude Code cloud sessions, add `apt-get install -y git-lfs && git lfs install` to the environment's setup script before any session commits binaries.
+
 ### Guards (enforced by `npm run test`)
 
 - Every file under `assets/` must be registered in the manifest. Draft prompts in `assets/source/prompts/` are exempt.

@@ -6,18 +6,18 @@
 // of its own arm to the 3×3 centre. Diagrams: docs/design/generated/classic-*.svg.
 
 import type { Cell, SeatPath } from "./layoutTypes.js";
+import { CLASSIC_TOPOLOGY } from "./topology.js";
 
+// Logical structure comes from the shared topology; this file adds geometry only.
 export const CLASSIC_GRID = 15;
-export const CLASSIC_SEATS = 4;
-export const CLASSIC_TRACK_LENGTH = 52;
+export const CLASSIC_SEATS = CLASSIC_TOPOLOGY.boardSeats;
+export const CLASSIC_TRACK_LENGTH = CLASSIC_TOPOLOGY.trackLength;
 /** Seat-relative steps: 0–50 shared track, 51–55 home lane, 56 finish. */
-export const CLASSIC_LAST_TRACK_STEP = 50;
-export const CLASSIC_LANE_LENGTH = 5;
-export const CLASSIC_FINISH_STEP = 56;
+export const CLASSIC_LAST_TRACK_STEP = CLASSIC_TOPOLOGY.lastTrackStep;
+export const CLASSIC_LANE_LENGTH = CLASSIC_TOPOLOGY.laneLength;
+export const CLASSIC_FINISH_STEP = CLASSIC_TOPOLOGY.finishStep;
 /** Each start is one quarter-loop after the previous seat's. */
-export const CLASSIC_SEAT_SPACING = 13;
-/** Star (safe) cell offset from each start. */
-export const CLASSIC_STAR_OFFSET = 8;
+export const CLASSIC_SEAT_SPACING = CLASSIC_TOPOLOGY.segmentLength;
 
 const c = (row: number, col: number): Cell => ({ row, col });
 
@@ -42,7 +42,7 @@ export const CLASSIC_TRACK: readonly Cell[] = [
 ];
 
 /** Absolute track index of each seat's start cell (seat index 0–3). */
-export const CLASSIC_START_INDEX: readonly number[] = [0, 13, 26, 39];
+export const CLASSIC_START_INDEX: readonly number[] = CLASSIC_TOPOLOGY.startIndex;
 
 /** Home lanes (steps 51–55), outer cell first, each along its arm's middle line. */
 export const CLASSIC_HOME_LANES: readonly (readonly Cell[])[] = [
@@ -64,10 +64,7 @@ export function classicAbsoluteIndex(seat: number, step: number): number {
 }
 
 /** Absolute indices of the 8 safe cells: 4 starts + 4 stars. */
-export const CLASSIC_SAFE_INDICES: readonly number[] = CLASSIC_START_INDEX.flatMap((start) => [
-  start,
-  (start + CLASSIC_STAR_OFFSET) % CLASSIC_TRACK_LENGTH,
-]).sort((a, b) => a - b);
+export const CLASSIC_SAFE_INDICES: readonly number[] = CLASSIC_TOPOLOGY.safeIndices;
 
 /** Absolute index of the last shared cell before a seat turns into its lane. */
 export function classicHomeEntryIndex(seat: number): number {

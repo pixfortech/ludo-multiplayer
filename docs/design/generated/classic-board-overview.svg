@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 752 828" width="752" height="828" font-family="Inter, system-ui, sans-serif">
 <rect width="100%" height="100%" fill="#FFFFFF"/>
-<text x="376" y="27.6" font-size="16" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">Classic board — absolute track positions 0–51, clockwise</text>
+<text x="376" y="27.6" font-size="16" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">Classic board reference — clockwise</text>
 <rect x="10" y="38" width="732" height="732" rx="18" fill="#ECE6DC"/>
 <rect x="18" y="46" width="284" height="284" rx="18" fill="#C8102E"/>
 <rect x="54.400000000000006" y="82.4" width="211.20000000000002" height="211.20000000000002" rx="14" fill="#F7F4EE"/>
@@ -218,6 +218,62 @@
 <path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(40 428) rotate(-90)"/>
 <path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(40 380) rotate(-90)"/>
 <path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(64 356) rotate(0)"/>
-<text x="376" y="796.2" font-size="12" font-weight="500" text-anchor="middle" fill="#5C6370" opacity="1">Coloured cells = starts (safe) · ★ = star cells (safe) · ▶ = direction of travel · lanes = private home lanes</text>
+<rect x="18" y="382" width="44" height="44" rx="6" fill="none" stroke="#790005" stroke-width="3" stroke-dasharray="5 3"/>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(64 404) rotate(0)"/>
+<text x="88" y="408.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">51</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(112 404) rotate(0)"/>
+<text x="136" y="408.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">52</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(160 404) rotate(0)"/>
+<text x="184" y="408.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">53</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(208 404) rotate(0)"/>
+<text x="232" y="408.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">54</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(256 404) rotate(0)"/>
+<text x="280" y="408.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">55</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(304 404) rotate(0)"/>
+<circle cx="328" cy="404" r="17.28" fill="#FFFFFF" stroke="#790005" stroke-width="2.5"/>
+<text x="328" y="408.55" font-size="13" font-weight="800" text-anchor="middle" fill="#141821" opacity="1">56</text>
+<rect x="354" y="46" width="44" height="44" rx="6" fill="none" stroke="#002E89" stroke-width="3" stroke-dasharray="5 3"/>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(376 92) rotate(90)"/>
+<text x="376" y="120.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">51</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(376 140) rotate(90)"/>
+<text x="376" y="168.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">52</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(376 188) rotate(90)"/>
+<text x="376" y="216.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">53</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(376 236) rotate(90)"/>
+<text x="376" y="264.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">54</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(376 284) rotate(90)"/>
+<text x="376" y="312.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">55</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(376 332) rotate(90)"/>
+<circle cx="376" cy="356" r="17.28" fill="#FFFFFF" stroke="#002E89" stroke-width="2.5"/>
+<text x="376" y="360.55" font-size="13" font-weight="800" text-anchor="middle" fill="#141821" opacity="1">56</text>
+<rect x="690" y="382" width="44" height="44" rx="6" fill="none" stroke="#005116" stroke-width="3" stroke-dasharray="5 3"/>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(688 404) rotate(180)"/>
+<text x="664" y="408.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">51</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(640 404) rotate(180)"/>
+<text x="616" y="408.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">52</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(592 404) rotate(180)"/>
+<text x="568" y="408.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">53</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(544 404) rotate(180)"/>
+<text x="520" y="408.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">54</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(496 404) rotate(180)"/>
+<text x="472" y="408.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">55</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(448 404) rotate(180)"/>
+<circle cx="424" cy="404" r="17.28" fill="#FFFFFF" stroke="#005116" stroke-width="2.5"/>
+<text x="424" y="408.55" font-size="13" font-weight="800" text-anchor="middle" fill="#141821" opacity="1">56</text>
+<rect x="354" y="718" width="44" height="44" rx="6" fill="none" stroke="#5C3D00" stroke-width="3" stroke-dasharray="5 3"/>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(376 716) rotate(-90)"/>
+<text x="376" y="696.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">51</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(376 668) rotate(-90)"/>
+<text x="376" y="648.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">52</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(376 620) rotate(-90)"/>
+<text x="376" y="600.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">53</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(376 572) rotate(-90)"/>
+<text x="376" y="552.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">54</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(376 524) rotate(-90)"/>
+<text x="376" y="504.55" font-size="13" font-weight="700" text-anchor="middle" fill="#141821" opacity="1">55</text>
+<path d="M-5 -5L5 0L-5 5z" fill="#141821" opacity="0.7" transform="translate(376 476) rotate(-90)"/>
+<circle cx="376" cy="452" r="17.28" fill="#FFFFFF" stroke="#5C3D00" stroke-width="2.5"/>
+<text x="376" y="456.55" font-size="13" font-weight="800" text-anchor="middle" fill="#141821" opacity="1">56</text>
+<text x="376" y="796.2" font-size="12" font-weight="500" text-anchor="middle" fill="#5C6370" opacity="1">Track: absolute index 0–51 · lanes 51–55 and finish 56: seat steps · dashed: turn-in (step 50) · ★ / coloured: safe</text>
 <text x="376" y="816.2" font-size="12" font-weight="700" text-anchor="middle" fill="#C8102E" opacity="1">DRAFT — pending approval before the rules engine is built</text>
 </svg>

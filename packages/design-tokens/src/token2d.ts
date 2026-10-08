@@ -33,12 +33,20 @@ export const TOKEN_2D = {
   rim: 41,
   body: 36,
   stateRing: 48,
-  symbolSize: 40,
+  symbolSize: 46,
   finishedScale: 0.72,
 } as const;
 
+/**
+ * "resin": radial gradient + gloss (tactile, Luxury Tabletop).
+ * "flat": solid body with a faint top-light band (Contemporary Playful, flat print look).
+ * Both keep the halo, rim and symbol that the accessibility contract depends on.
+ */
+export type TokenFinish = "resin" | "flat";
+
 export interface Token2dOptions {
   state?: TokenState;
+  finish?: TokenFinish;
   /** Unique prefix for gradient ids when several tokens share one SVG document. */
   idPrefix?: string;
   /** Colour transform applied to every colour (used for colour-blindness previews). */
@@ -48,7 +56,8 @@ export interface Token2dOptions {
 export function token2dSvg(identity: PlayerIdentity, options: Token2dOptions = {}): string {
   const state = options.state ?? "idle";
   const t = options.transform ?? ((hex: string) => hex);
-  const id = `${options.idPrefix ?? "tk"}-${identity.id}-${state}`;
+  const finish = options.finish ?? "resin";
+  const id = `${options.idPrefix ?? "tk"}-${identity.id}-${state}-${finish}`;
   const s = TOKEN_2D;
   const scale = state === "finished" ? s.finishedScale : 1;
   const opacity = state === "unmovable" ? 0.6 : state === "captured" ? 0.35 : 1;
@@ -73,18 +82,22 @@ export function token2dSvg(identity: PlayerIdentity, options: Token2dOptions = {
       ? `<g transform="translate(66 14)"><circle r="13" fill="${t(INK.dark)}"/><path d="M-6 0l4 4 8-8" fill="none" stroke="${t("#E3B341")}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></g>`
       : "";
 
+  const bodyLayers =
+    finish === "resin"
+      ? `<circle cx="50" cy="50" r="${s.body}" fill="url(#${id}-g)"/><ellipse cx="41" cy="33" rx="17" ry="9" fill="#FFFFFF" opacity="0.28"/>`
+      : `<circle cx="50" cy="50" r="${s.body}" fill="${t(identity.body)}"/><path d="M${50 - s.body} 50a${s.body} ${s.body} 0 0 1 ${2 * s.body} 0a${s.body} ${s.body * 0.62} 0 0 0 ${-2 * s.body} 0z" fill="#FFFFFF" opacity="0.14"/>`;
+
   return [
-    `<defs><radialGradient id="${id}-g" cx="38%" cy="32%" r="75%">`,
-    `<stop offset="0" stop-color="${t(identity.highlight)}"/><stop offset="0.55" stop-color="${t(identity.body)}"/><stop offset="1" stop-color="${t(identity.rim)}"/>`,
-    `</radialGradient></defs>`,
+    finish === "resin"
+      ? `<defs><radialGradient id="${id}-g" cx="38%" cy="32%" r="75%"><stop offset="0" stop-color="${t(identity.highlight)}"/><stop offset="0.55" stop-color="${t(identity.body)}"/><stop offset="1" stop-color="${t(identity.rim)}"/></radialGradient></defs>`
+      : "",
     `<g opacity="${opacity}">`,
     ring,
     `<g transform="translate(50 50) scale(${scale}) translate(-50 -50)">`,
     `<ellipse cx="50" cy="91" rx="30" ry="5.5" fill="${t(BOARD_SURFACES.line)}" opacity="0.9"/>`,
     `<circle cx="50" cy="50" r="${s.halo}" fill="${t(TOKEN_HALO)}"/>`,
     `<circle cx="50" cy="50" r="${s.rim}" fill="${t(identity.rim)}"/>`,
-    `<circle cx="50" cy="50" r="${s.body}" fill="url(#${id}-g)"/>`,
-    `<ellipse cx="41" cy="33" rx="17" ry="9" fill="#FFFFFF" opacity="0.28"/>`,
+    bodyLayers,
     `<path d="${SYMBOL_PATHS[identity.symbol]}" fill="${t(identity.ink)}" transform="translate(${symbolOffset} ${symbolOffset}) scale(${symbolScale})"/>`,
     `</g>`,
     badge,

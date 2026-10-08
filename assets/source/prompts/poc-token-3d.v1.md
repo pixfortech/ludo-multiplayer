@@ -2,9 +2,9 @@
 
 - **Purpose:** candidate 3D pawn mesh, compared with the procedural lathe token (token-design.md § 3D)
 - **Model:** `meshy_v7_image_to_3d` · model_type `standard` · target_polycount `2000` · topology `triangle` · symmetry_mode `on` · should_remesh `true` · should_texture `false` · outputs 1
-- **Input:** the approved `poc-token-family` concept, cropped to one pawn on a plain background (background removed)
+- **Input:** the approved token concept (`poc-token-frosted` or `poc-token-pebble`), cropped to one pawn on a plain background (background removed)
 - **Follow-up (if needed):** `meshy_v5_remesh` with `origin_at: bottom`, `resize_height`, `target_polycount 2000`
-- **Status:** draft, not submitted; runs only after `poc-token-family` is approved
+- **Status:** draft, not submitted; runs only after a token concept is approved, as a separate batch with its own verified cost
 
 ## Acceptance (from token-design.md)
 

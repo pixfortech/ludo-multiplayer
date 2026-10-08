@@ -19,34 +19,48 @@ What gets generated, with which model, in what order, and why. Spending rules: [
 
 | Stage | Assets | When |
 | --- | --- | --- |
-| **PoC (this proposal)** | board reference, token family, dice concept, tabletop environment, one 3D token candidate | after your spending approval |
+| **PoC (this proposal)** | 2 board concepts, 2 token/material concepts (11 credits) | after your final authorisation |
+| PoC follow-up | dice, environment, one 3D token candidate (costs verified before asking) | after concepts are approved |
 | 2D polish | 1–2 board surface micro-textures, 2D background, UI illustration spots (empty states) | Phase 4 |
 | Polygon boards | per-shape surface/frame texture variants only if procedural looks flat (likely not needed) | Phase 5 |
 | 3D | final token and die materials, environment lighting reference, 4 environment backdrops | Phase 7 |
 | Audio | dice roll, token hop, capture, home, six, victory, UI ticks (≈ 10 SFX) + 1 ambience loop | Phase 4 |
 | Marketing | key art, store screenshots frames, short promo video | Phase 9 |
 
-## Proposed proof-of-concept batch (NOT executed)
+## Proof-of-concept batch request (awaiting final authorisation; NOT executed)
 
-All prompts are in `assets/source/prompts/` (v1). Every output is a **concept** until you approve it.
+| # | Asset id | Purpose | Model and settings | Outputs | Verified cost |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `poc-board-flat` | Board concept A: flat printed, stepped tonal bases | `gpt_image_2_5`, flare, high, 2k, 1:1 | 1 | 2.75 |
+| 2 | `poc-board-tabletop` | Board concept B: physical tabletop with frosted resin pawns | `gpt_image_2_5`, flare, high, 2k, 3:2 | 1 | 2.75 |
+| 3 | `poc-token-frosted` | Token/material A: classic pawn, frosted resin, 4 colourways | `gpt_image_2_5`, flare, high, 2k, 3:2 | 1 | 2.75 |
+| 4 | `poc-token-pebble` | Token/material B: low pebble token, matte pastel with gloss inlay | `gpt_image_2_5`, flare, high, 2k, 3:2 | 1 | 2.75 |
+| | | | | **4** | **11.00 of the 15-credit cap** |
 
-| # | Asset id | Purpose | Model | Outputs | Format | Credits (estimate and basis) |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | `poc-board-classic` | Art-direction reference for the 4-player board: materials, lighting, palette harmony | `gpt_image_2_5` (variant flare, quality high, 2k) | 4 | 1:1, 2048² | 4 × 0.5–2.75 observed = **2–11**; high/2k may cost more → price probe |
-| 2 | `poc-token-family` | One pawn silhouette in 4 colourways (crimson, royal blue, emerald, golden) on a neutral sweep, with symbols | `gpt_image_2_5` (flare, high, 2k) | 4 | 3:2 | **2–11** |
-| 3 | `poc-dice` | Ivory resin die, pip detail, six with gold inlay; 3 views | `gpt_image_2_5` (flare, high, 2k) | 4 | 3:2 | **2–11** |
-| 4 | `poc-environment-tabletop` | "Luxury tabletop" backdrop: board-sized empty felt and walnut surface, soft light | `gpt_image_2_5` (flare, high, 2k) | 4 | 16:9 | **2–11** |
-| 5 | `poc-token-3d` | Candidate GLB from the **approved** token concept, compared with our procedural lathe token | `meshy_v7_image_to_3d` (standard, target_polycount 2000, triangle, symmetry on, should_texture false) | 1 | GLB | **unknown**: no observed price for any 3D model; cap applies |
+**Pre-run verification (2026-10-08)**
 
-- **Images:** 16 outputs, 8–44 credits on the observed price range. Price probe first: 1 image at the chosen settings, check the real cost, then continue only within the cap.
-- **3D:** 1 job, run only after item 2 is approved; untextured because materials are applied in-engine from the palette.
-- **Proposed cap for the whole PoC: 75 credits.** I stop and report if the projected total would exceed it.
-- **Deliverables:**
-  - the best 1–2 images per item committed as `concept` with full provenance;
-  - the GLB committed as `concept` after inspection (dimensions, pivot, triangles, normals);
-  - a review sheet in `assets/previews/` comparing it with the procedural token;
-  - a written defect review per item.
-- **Why generate:** items 1–4 explore material and lighting language faster than hand-modelling; item 5 tests whether AI meshes beat a procedural lathe for the pawn. My expectation is that procedural wins on precision and size, but the comparison is cheap and informative.
+| Check | Result |
+| --- | --- |
+| Workspace | `0154ad81…3c32`: the only workspace on the account; private, owner role, Max plan; **selected** |
+| Balance | 861.75 credits, unchanged by this phase (preflights cost nothing) |
+| Cost per job | **Verified** with the tool's `get_cost` preflight: low/1k 0.25 · medium/1k 0.5 · medium/2k 1.0 · high/1k 1.5 · high/2k 2.75. Aspect ratio does not change the price. A `count: 2` preflight also returned 2.75, so whether it multiplies by count is unclear. Every asset is therefore submitted as its own single-image job, priced individually. |
+| Output format | **Not stated** by the model metadata (the model accepts a `background: transparent` option, which implies PNG/WebP). The actual file type is recorded in the manifest on download. The repo stores optimised WebP/AVIF via LFS. |
+| Commercial use | **Not verified from the primary terms**: `higgsfield.ai` is unreachable from this cloud container (DNS blocked). Search results show Higgsfield's help center stating users own outputs and may use them commercially (Terms §4.4), with watermark-free downloads on paid plans. A third-party newsletter reads Higgsfield's retained licence (service operation and model training) more broadly. **You need to confirm** the current Terms of Use §4 before outputs are committed. |
+| Public visibility | Per the help center, generations stay private unless you post them (community, contests). Whether result URLs are unauthenticated links is unverified. **Committing an output to this repository makes it public**, because the repo is public. |
+
+**Execution rules once authorised**
+
+1. Run item 1 first, then read the actual charge from `transactions`.
+2. Continue only if each charge is ≤ 2.75 and the running total stays ≤ 15.
+3. No retries without a new approval.
+4. Afterwards, report job ids, actual credits, and a defect review per image.
+5. Nothing is committed until you approve the images and the terms.
+
+**Deferred to later batches (separate approval and verified cost):**
+
+- dice concept (`poc-dice`) and tabletop environment (`poc-environment-tabletop`);
+- 3D token comparison (`poc-token-3d`), only after a token concept is approved;
+- no complete 3D board will be generated.
 
 ## Prompt conventions
 
