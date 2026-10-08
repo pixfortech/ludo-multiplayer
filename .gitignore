@@ -12,3 +12,7 @@ coverage/
 *.db
 *.db-journal
 apps/server/data/
+
+# Asset tooling credentials (never commit)
+.higgsfield/
+*.credentials.json

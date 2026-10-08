@@ -9,6 +9,7 @@
   },
   "workspaces": [
     "packages/shared-types",
+    "packages/assets",
     "packages/game-engine",
     "packages/board-layouts",
     "apps/server",
@@ -16,7 +17,7 @@
   ],
   "scripts": {
     "dev": "npm run build:packages && concurrently -k -n server,client -c cyan,magenta \"npm run dev -w @ludo/server\" \"npm run dev -w @ludo/client\"",
-    "build:packages": "npm run build -w @ludo/shared-types -w @ludo/game-engine -w @ludo/board-layouts",
+    "build:packages": "npm run build -w @ludo/shared-types -w @ludo/assets -w @ludo/game-engine -w @ludo/board-layouts",
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces",
     "test": "npm run test --workspaces",

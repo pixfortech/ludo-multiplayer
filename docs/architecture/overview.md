@@ -21,6 +21,7 @@
 | `@ludo/shared-types` | Vocabulary: player counts, board shapes, settings, socket protocol | Contain behaviour beyond trivial helpers |
 | `@ludo/game-engine` | Every rule: dice handling, legal moves, capture, safe cells, home entry, bonus turns, forfeits, wins, powers, serialization | Do I/O, read clocks, or call `Math.random` (dice come from an injected source) |
 | `@ludo/board-layouts` | Logical track topology to visual coordinates for every shape; base slots, home lanes, safe-cell markers | Decide whether a move is legal |
+| `@ludo/assets` | Asset manifest schema and validation; resolves approved assets by slot, `null` otherwise, so the renderer falls back to procedural drawing | Supply geometry or coordinates; serve unapproved assets |
 | `apps/server` | Room lifecycle, player identity, reconnect, persistence, running the engine, broadcasting state | Trust any client-supplied outcome |
 | `apps/client` | Lobby, room UI, 2D and 3D renderers, animation, socket client | Compute dice, legality, captures or turns |
 
@@ -41,7 +42,7 @@ Clients discard any state older than the latest `stateVersion` they have applied
 Every package exports a `source` condition pointing at `src/index.ts`, ahead of `types` and `default` (compiled `dist/`).
 
 - **Typecheck, tests, client dev and build** use `source`: no build step, live reload across packages. This is configured via `customConditions` in tsconfig and `vitest.shared.ts` for Vite.
-- **Server production build and runtime** use `dist/`. `npm run build` builds workspaces in dependency order: shared-types → game-engine → board-layouts → server → client.
+- **Server production build and runtime** use `dist/`. `npm run build` builds workspaces in dependency order: shared-types → assets → game-engine → board-layouts → server → client.
 
 ## Board model (shared by both renderers)
 

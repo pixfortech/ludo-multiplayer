@@ -24,13 +24,18 @@ apps/
   server/            Express + Socket.IO authoritative server
 packages/
   shared-types/      Types and constants shared by every layer
+  assets/            Asset manifest schema, validation, resolver with fallbacks
   game-engine/       Pure rules engine (server-authoritative)
   board-layouts/     Board geometry for 2–15 players
+assets/              Source tree for generated and hand-made art/audio (+ manifest.json)
 docs/
   architecture/      System design
+  design/            Visual pipeline (Higgsfield integration, approval log)
   rules/             Rule specifications (classic and expanded)
   qa/                Test plan
 ```
+
+Visual assets are produced through Higgsfield under an explicit approval and cost-control workflow ([docs/design/higgsfield-integration.md](docs/design/higgsfield-integration.md)). The game never depends on them: every visual has a procedural fallback, and nothing in build, test or runtime contacts Higgsfield.
 
 ## Getting started
 

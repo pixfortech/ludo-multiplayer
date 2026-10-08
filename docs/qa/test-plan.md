@@ -24,6 +24,7 @@ Every phase must pass `npm run test`, `npm run typecheck` and `npm run build` be
 | 18 | Reconnect and resume | server | 2 / 8 |
 | 19 | Session persistence | server | 2 / 8 |
 | 20 | Board geometry for 2–15 players | board-layouts | 3 / 5 |
+| 21 | Asset manifest: schema, missing files, unregistered files, recorded sizes, fallback resolution | assets | 0 ✅ |
 
 Later: Playwright multi-browser room tests, plus visual checks at 1920×1080, 1366×768, 1024×768, 390×844 and 360×800. A viewport is reported as verified only when a screenshot was actually taken.
 
@@ -32,6 +33,7 @@ Later: Playwright multi-browser room tests, plus visual checks at 1920×1080, 13
 | Workspace | Tests |
 | --- | --- |
 | shared-types | 4 |
+| assets | 22 (schema, resolver, repo manifest) |
 | game-engine | 1 (wiring) |
 | board-layouts | 1 (wiring) |
 | server | 5 (health, socket hello, config) |
