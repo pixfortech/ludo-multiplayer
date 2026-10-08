@@ -1,0 +1,37 @@
+# Normalise text line endings.
+* text=auto eol=lf
+
+# Large binary assets live in Git LFS (see docs/design/asset-pipeline.md).
+# Scoped to assets/ so small app files stay in regular Git.
+# SVG, JSON, Markdown and code-generated geometry are text and stay in Git.
+
+# 3D
+assets/**/*.glb   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.gltf  filter=lfs diff=lfs merge=lfs -text
+assets/**/*.bin   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.fbx   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.obj   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.usdz  filter=lfs diff=lfs merge=lfs -text
+assets/**/*.blend filter=lfs diff=lfs merge=lfs -text
+
+# Raster images and textures
+assets/**/*.png   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.jpg   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.jpeg  filter=lfs diff=lfs merge=lfs -text
+assets/**/*.webp  filter=lfs diff=lfs merge=lfs -text
+assets/**/*.avif  filter=lfs diff=lfs merge=lfs -text
+assets/**/*.ktx2  filter=lfs diff=lfs merge=lfs -text
+assets/**/*.exr   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.hdr   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.tif   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.tiff  filter=lfs diff=lfs merge=lfs -text
+assets/**/*.psd   filter=lfs diff=lfs merge=lfs -text
+
+# Audio and video
+assets/**/*.wav   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.ogg   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.mp3   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.flac  filter=lfs diff=lfs merge=lfs -text
+assets/**/*.mp4   filter=lfs diff=lfs merge=lfs -text
+assets/**/*.webm  filter=lfs diff=lfs merge=lfs -text
+assets/**/*.mov   filter=lfs diff=lfs merge=lfs -text

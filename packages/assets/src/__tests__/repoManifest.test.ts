@@ -1,5 +1,7 @@
 // Validates the real repository asset tree: schema, missing files, orphan
-// files and recorded sizes. Runs offline as part of `npm run test`.
+// files, recorded sizes, size cap and Git LFS storage. Runs offline as part
+// of `npm run test`.
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +12,15 @@ import type { AssetManifest } from "../manifest.js";
 const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const ASSETS_DIR = join(REPO_ROOT, "assets");
 const IGNORED = new Set(["manifest.json", "README.md", ".gitkeep"]);
+/** Draft prompts are documents, not assets; they need no manifest entry until used. */
+const PROMPTS_DIR = "assets/source/prompts/";
+/** Hard cap for any single file in the asset tree. Category budgets are tighter. */
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec/v1";
+
+function git(...args: string[]): string {
+  return execFileSync("git", args, { cwd: REPO_ROOT, encoding: "utf8" });
+}
 
 function listFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((dirent) => {
@@ -41,8 +52,31 @@ describe("assets/manifest.json", () => {
   });
 
   it("has no unregistered files under assets/", () => {
-    const orphans = listFiles(ASSETS_DIR).filter((path) => !referenced.has(path));
+    const orphans = listFiles(ASSETS_DIR).filter((path) => !referenced.has(path) && !path.startsWith(PROMPTS_DIR));
     expect(orphans).toEqual([]);
+  });
+
+  it(`keeps every file under the ${MAX_FILE_BYTES / 1024 / 1024} MB hard cap`, () => {
+    const oversized = listFiles(ASSETS_DIR).filter((path) => statSync(join(REPO_ROOT, path)).size > MAX_FILE_BYTES);
+    expect(oversized).toEqual([]);
+  });
+
+  it("stores LFS-tracked binaries as LFS pointers, never as raw blobs", () => {
+    // A machine without git-lfs silently commits the full binary; catch that.
+    const staged = git("ls-files", "-z", "--", "assets").split("\0").filter(Boolean);
+    const notPointers = staged.filter((path) => {
+      if (!git("check-attr", "filter", "--", path).trim().endsWith("filter: lfs")) return false;
+      return !git("cat-file", "-p", `:${path}`).startsWith(LFS_POINTER_PREFIX);
+    });
+    expect(notPointers).toEqual([]);
+  });
+
+  it("routes binary formats to LFS and keeps SVG in regular Git", () => {
+    const filterOf = (path: string) => git("check-attr", "filter", "--", path).trim().split(": ").pop();
+    expect(filterOf("assets/3d/tokens/x.v1.glb")).toBe("lfs");
+    expect(filterOf("assets/2d/textures/x.v1.ktx2")).toBe("lfs");
+    expect(filterOf("assets/audio/x.v1.ogg")).toBe("lfs");
+    expect(filterOf("assets/2d/tokens/x.v1.svg")).toBe("unspecified");
   });
 
   it("records the real size of every approved optimised file", () => {

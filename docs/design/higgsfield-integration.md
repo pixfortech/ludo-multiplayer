@@ -20,10 +20,10 @@ Higgsfield is the project's **visual asset pipeline**. It is not part of the gam
 | --- | --- |
 | Official Higgsfield **MCP server** | Connected and authenticated in the Claude Code cloud session |
 | Account | Paid plan with credits available; one private workspace (exact balance not recorded in the repo) |
-| Workspace selection | The only workspace reports `is_selected: false`. Confirm the target workspace before the first job. |
+| Workspace selection | Verified as the account's only workspace (private, owner role, Max plan) and **selected** on 2026-10-08, as approved |
 | **CLI** (`@higgsfield/cli` 1.1.26 on npm) | Not installed in the cloud container (see below) |
 | **Skills** (`higgsfield-ai/skills`) | Not installed in the cloud container |
-| Credit cost per model | **Not exposed** by model metadata; cannot be estimated from it |
+| Credit cost per model | **Not exposed** by model metadata. Account history shows `gpt_image_2_5` (Flare) at **0.5** and **2.75** credits per image; the settings behind each price are not recorded. No observed price for any 3D or audio model. |
 | Jobs submitted | **None.** No generation has been run. |
 
 The cloud container is ephemeral and `higgsfield auth login` is an interactive, user-authorised step, so the CLI is not installed there. The MCP connection provides the same generation access for cloud sessions.
@@ -101,6 +101,6 @@ Where Blender or procedural geometry gives a cleaner result (for example lathe-t
 
 | # | Decision | Proposal |
 | --- | --- | --- |
-| H1 | Storage for binary assets (concepts, GLBs, textures) | Enable **Git LFS** for `assets/**/*.{png,jpg,webp,glb,ktx2,wav,ogg,mp4}` before the first binary is committed |
-| H2 | Target Higgsfield workspace | Confirm the private workspace (currently not marked selected) |
-| H3 | Commercial-use terms per model | You confirm per batch. Recorded in the approval log. |
+| H1 | Storage for binary assets | **Resolved:** Git LFS configured for `assets/**` binaries (see [asset-pipeline.md](asset-pipeline.md)) |
+| H2 | Target Higgsfield workspace | **Resolved:** private workspace verified and selected |
+| H3 | Commercial-use terms per model | Open. You confirm per batch; recorded in the approval log. The repo is public, so this also covers public distribution. |
