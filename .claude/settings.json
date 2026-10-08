@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Read",
+      "Edit",
+      "Write",
+      "NotebookEdit",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Agent",
+      "Skill",
+      "Artifact",
+      "mcp__github",
+      "mcp__Higgsfield",
+      "mcp__Claude_Code_Remote",
+      "mcp__Claude_Docs"
+    ]
+  }
+}
