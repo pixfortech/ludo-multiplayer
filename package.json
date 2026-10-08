@@ -9,6 +9,7 @@
   },
   "workspaces": [
     "packages/shared-types",
+    "packages/design-tokens",
     "packages/assets",
     "packages/game-engine",
     "packages/board-layouts",
@@ -17,12 +18,13 @@
   ],
   "scripts": {
     "dev": "npm run build:packages && concurrently -k -n server,client -c cyan,magenta \"npm run dev -w @ludo/server\" \"npm run dev -w @ludo/client\"",
-    "build:packages": "npm run build -w @ludo/shared-types -w @ludo/assets -w @ludo/game-engine -w @ludo/board-layouts",
+    "build:packages": "npm run build -w @ludo/shared-types -w @ludo/design-tokens -w @ludo/assets -w @ludo/game-engine -w @ludo/board-layouts",
     "build": "npm run build --workspaces",
-    "typecheck": "npm run typecheck --workspaces",
+    "typecheck": "npm run typecheck --workspaces && tsc -p scripts/tsconfig.json",
     "test": "npm run test --workspaces",
     "lint": "eslint .",
-    "clean": "rm -rf packages/*/dist apps/*/dist"
+    "clean": "rm -rf packages/*/dist apps/*/dist",
+    "design:generate": "tsx --conditions=source scripts/design-artifacts.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
@@ -31,6 +33,7 @@
     "eslint": "^9.39.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^16.5.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.0",
     "vitest": "^5.0.3"
