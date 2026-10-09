@@ -25,6 +25,19 @@ import type { ConnectionRegistry } from "./presence.js";
 import { toProtocolError, type Logger } from "./socketErrors.js";
 import { roomChannel, type LudoServer, type LudoSocket } from "./socketEvents.js";
 
+/** Schedules the reconnect-grace callback. Injectable so tests can control time instead of waiting for it. */
+export interface GraceScheduler {
+  schedule(callback: () => void, delayMs: number): { cancel(): void };
+}
+
+export const realTimeScheduler: GraceScheduler = {
+  schedule(callback, delayMs) {
+    const timer = setTimeout(callback, delayMs);
+    timer.unref?.(); // never keeps a stopping process alive
+    return { cancel: () => clearTimeout(timer) };
+  },
+};
+
 export interface SessionManagerOptions {
   io: LudoServer;
   rooms: RoomService;
@@ -33,12 +46,13 @@ export interface SessionManagerOptions {
   publisher: SocketPublisher;
   /** How long the current player may be away before the game pauses. */
   graceMs: number;
+  scheduler?: GraceScheduler;
   log: Logger;
 }
 
 export class SessionManager {
   private readonly claims = new ActionCoordinator();
-  private readonly timers = new Map<string, { playerId: string; timer: NodeJS.Timeout }>();
+  private readonly timers = new Map<string, { playerId: string; timer: { cancel(): void } }>();
   private disposed = false;
 
   constructor(private readonly o: SessionManagerOptions) {
@@ -153,19 +167,18 @@ export class SessionManager {
     }
     if (existing?.playerId === currentPlayerId) return;
     this.clearTimer(roomId);
-    const timer = setTimeout(() => {
+    const timer = (this.o.scheduler ?? realTimeScheduler).schedule(() => {
+      if (this.timers.get(roomId)?.timer !== timer) return; // cancelled or superseded
       this.timers.delete(roomId);
       this.o.gameplay
         .pauseIfAway(roomId, currentPlayerId, () => !this.o.registry.isControlled(currentPlayerId))
         .catch((error: unknown) => toProtocolError(error, "auto-pause", this.o.log));
     }, this.o.graceMs);
-    timer.unref?.();
     this.timers.set(roomId, { playerId: currentPlayerId, timer });
   }
 
   private clearTimer(roomId: string): void {
-    const existing = this.timers.get(roomId);
-    if (existing) clearTimeout(existing.timer);
+    this.timers.get(roomId)?.timer.cancel();
     this.timers.delete(roomId);
   }
 }

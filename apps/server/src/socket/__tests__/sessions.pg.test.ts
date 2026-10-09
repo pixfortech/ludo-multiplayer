@@ -1,22 +1,39 @@
 // Phase 2D: resume, single-seat control, credential rotation, automatic
 // pause/resume and retention — with real Socket.IO clients against a real
-// server and PostgreSQL. The reconnect grace period is shortened to 400 ms.
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+// server and PostgreSQL. The reconnect grace period runs on a manual clock:
+// tests check that the timer is armed or cancelled and fire it explicitly,
+// so nothing depends on real-time waits or timer resolution. (The real
+// timer is exercised by the multi-process restart test.)
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import pg from "pg";
 import type { GameActionView, GameStateView, PauseInfo, PlayerSessionCredential, RoomView } from "@ludo/shared-types";
 import { projectGameState } from "../../gameplay/stateProjection.js";
 import { migrate } from "../../persistence/migrate.js";
 import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, unavailableReason, type TestDatabase } from "../../persistence/__tests__/pgHarness.js";
 import { RetentionSweeper } from "../../rooms/retention.js";
-import { ask, askRaw, expectError, expectOk, open, rid, seatTwo, sleep, startTestServer, type Client, type Connected, type TestServer } from "./realtimeHarness.js";
+import {
+  ManualScheduler,
+  ask,
+  askRaw,
+  closeAllClients,
+  expectError,
+  expectOk,
+  open,
+  rid,
+  seatTwo,
+  startTestServer,
+  waitUntil,
+  type Client,
+  type Connected,
+  type TestServer,
+} from "./realtimeHarness.js";
 
-const GRACE_MS = 400;
 const skip = !postgresAvailable && !POSTGRES_REQUIRED;
 if (skip) console.warn(`⚠ session PostgreSQL tests SKIPPED: ${unavailableReason()}`);
 
 let db: TestDatabase;
 let t: TestServer;
-const clients: Client[] = [];
+const clock = new ManualScheduler();
 
 beforeAll(async () => {
   if (skip) return;
@@ -24,16 +41,19 @@ beforeAll(async () => {
   const pool = new pg.Pool({ connectionString: db.url });
   await migrate(pool);
   await pool.end();
-  t = await startTestServer(db.url, { reconnectGraceMs: GRACE_MS });
+  t = await startTestServer(db.url, { graceScheduler: clock });
 }, 120_000);
 
+beforeEach(() => clock.clear()); // timers armed for other tests' rooms never fire into this one
+
 afterAll(async () => {
-  for (const c of clients) c.close();
+  closeAllClients();
   await t?.close();
   await db?.dispose();
 }, 60_000);
 
-const track = <T extends { client: Client }>(x: T): T => (clients.push(x.client), x);
+/** Kept for readability at call sites; every client is closed in afterAll whether or not it is tracked. */
+const track = <T extends { client: Client }>(x: T): T => x;
 const roll = (client: Client, expectedStateVersion: number, requestId = rid("roll")) => ask(client, "game:roll", { requestId, expectedStateVersion });
 const move = (client: Client, expectedStateVersion: number, tokenId: number, requestId = rid("move")) =>
   ask(client, "game:move", { requestId, expectedStateVersion, tokenId });
@@ -47,12 +67,21 @@ async function reopen(credential: PlayerSessionCredential, extra: { takeover?: b
   return c;
 }
 
-/** Closes a client and waits until the server has processed the disconnect. */
-async function drop(conn: Connected, observer: Connected, playerId: string): Promise<void> {
-  const seen = observer.rec.of<{ playerId: string }>("player:disconnected").filter((p) => p.playerId === playerId).length;
+/**
+ * Closes a client and waits until the server has fully processed the
+ * disconnect: the seat is released and "disconnected" is committed.
+ */
+async function drop(conn: Connected, playerId: string): Promise<void> {
   conn.client.close();
-  for (let i = 0; i < 300 && observer.rec.of<{ playerId: string }>("player:disconnected").filter((p) => p.playerId === playerId).length <= seen; i++) await sleep(10);
+  await waitUntil(
+    async () => !t.server.realtime!.registry.isControlled(playerId) && (await t.store.getPlayer(playerId))!.connectionStatus === "disconnected",
+    `the server has released ${playerId}'s seat`,
+  );
 }
+
+/** Waits until the reconnect monitor has armed the grace timer for `playerId`. */
+const graceArmedFor = (roomId: string, playerId: string) =>
+  waitUntil(() => t.server.realtime!.sessions.waitingFor(roomId) === playerId, `the grace timer is armed for ${playerId}`);
 
 const dbRoom = async (roomId: string) => (await t.store.getRoom(roomId))!;
 const dbGame = async (roomId: string) => projectGameState((await t.store.getGameSession(roomId))!.state);
@@ -73,7 +102,7 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
       await passTurnToGuest(table.host.client);
       const knownBefore = 1;
       // The guest's page reloads: the old connection is gone, a new one resumes from storage.
-      await drop(table.guest, table.host, table.guest.id);
+      await drop(table.guest, table.guest.id);
       const stored = JSON.parse(JSON.stringify(table.guest.credential)) as PlayerSessionCredential; // as kept in localStorage
       const fresh = track(await open(t.url));
       const ack = await resume(fresh.client, stored, { knownStateVersion: knownBefore });
@@ -91,9 +120,11 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
       const table = await seatTwo(t);
       await passTurnToGuest(table.host.client);
       const saved = JSON.stringify({ host: table.host.credential, guest: table.guest.credential }); // e.g. localStorage
-      table.host.client.close();
-      table.guest.client.close();
-      for (let i = 0; i < 200 && (await dbRoom(table.roomId)).status !== "paused"; i++) await sleep(10);
+      await drop(table.host, table.host.id);
+      await drop(table.guest, table.guest.id);
+      await graceArmedFor(table.roomId, table.guest.id); // it is the guest's turn
+      expect(clock.fireAll()).toBe(1); // the grace period elapses
+      await waitUntil(async () => (await dbRoom(table.roomId)).status === "paused", "the game is paused");
       expect(await dbRoom(table.roomId)).toMatchObject({ status: "paused", pauseReason: "connection-lost", pausedPlayerId: table.guest.id });
       const before = await dbGame(table.roomId);
       const kept = JSON.parse(saved) as { host: PlayerSessionCredential; guest: PlayerSessionCredential };
@@ -126,7 +157,7 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
     it("treats a repeated resume on the same connection as one", async () => {
       const table = await seatTwo(t);
       track(table.host);
-      await drop(table.guest, table.host, table.guest.id);
+      await drop(table.guest, table.guest.id);
       const c = track(await open(t.url));
       const first = expectOk(await resume(c.client, table.guest.credential));
       const epoch = (await t.store.getPlayer(table.guest.id))!.sessionEpoch;
@@ -156,7 +187,7 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
     it("lets exactly one of two simultaneous resumes win", async () => {
       const table = await seatTwo(t);
       track(table.host);
-      await drop(table.guest, table.host, table.guest.id);
+      await drop(table.guest, table.guest.id);
       const [a, b] = [track(await open(t.url)), track(await open(t.url))];
       const results = await Promise.all([resume(a.client, table.guest.credential), resume(b.client, table.guest.credential)]);
       expect(results.map((r) => (r.ok ? "ok" : r.error.code)).sort()).toEqual(["ok", "session-in-use"]);
@@ -164,8 +195,8 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
 
     it("keeps different players in separate tabs of the same browser apart", async () => {
       const table = await seatTwo(t);
-      await drop(table.host, table.guest, table.host.id);
-      await drop(table.guest, table.guest, table.guest.id).catch(() => undefined);
+      await drop(table.host, table.host.id);
+      await drop(table.guest, table.guest.id);
       const tabA = await reopen(table.host.credential);
       const tabB = await reopen(table.guest.credential);
       t.dice.push(6);
@@ -197,7 +228,7 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
       expectError(await ask(table.guest.client, "session:confirmCredential", { requestId: rid(), secret: table.guest.credential.secret }), "credential-conflict");
       const confirmed = expectOk(await ask(table.guest.client, "session:confirmCredential", { requestId: rid(), secret: rotated.secret }));
       expect(confirmed.credentialVersion).toBe(2);
-      await drop(table.guest, table.host, table.guest.id);
+      await drop(table.guest, table.guest.id);
       const c = track(await open(t.url));
       expectError(await resume(c.client, table.guest.credential), "unauthenticated");
       expect(expectOk(await resume(c.client, rotated)).player.playerId).toBe(table.guest.id);
@@ -207,11 +238,11 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
       const table = await seatTwo(t, { start: false });
       track(table.host);
       const rotated = expectOk(await ask(table.guest.client, "session:rotate", { requestId: rid() })).credential;
-      await drop(table.guest, table.host, table.guest.id); // gone before confirming
+      await drop(table.guest, table.guest.id); // gone before confirming
       const c = track(await open(t.url));
       expectOk(await resume(c.client, rotated));
       expect((await t.store.getCredential(table.guest.id))!.version).toBe(2);
-      await drop(c, table.host, table.guest.id);
+      await drop(c, table.guest.id);
       expectError(await resume(track(await open(t.url)).client, table.guest.credential), "unauthenticated");
     });
 
@@ -219,7 +250,7 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
       const table = await seatTwo(t, { start: false });
       track(table.host);
       expectOk(await ask(table.guest.client, "session:rotate", { requestId: rid() })); // the ack never reached storage
-      await drop(table.guest, table.host, table.guest.id);
+      await drop(table.guest, table.guest.id);
       expectOk(await resume(track(await open(t.url)).client, table.guest.credential)); // not locked out
     });
   });
@@ -229,9 +260,11 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
       const table = await seatTwo(t);
       track(table.host);
       await passTurnToGuest(table.host.client);
-      await drop(table.guest, table.host, table.guest.id);
-      const back = await reopen(table.guest.credential);
-      await sleep(GRACE_MS + 300);
+      await drop(table.guest, table.guest.id);
+      await graceArmedFor(table.roomId, table.guest.id);
+      const back = await reopen(table.guest.credential); // back before the grace period ends
+      expect(t.server.realtime!.sessions.waitingFor(table.roomId)).toBeNull(); // the timer was cancelled…
+      expect(clock.fireAll()).toBe(0); // …so even if the period now elapses, nothing fires
       expect((await dbRoom(table.roomId)).status).toBe("playing");
       expect(table.host.rec.of("game:paused")).toHaveLength(0);
       t.dice.push(5);
@@ -242,7 +275,10 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
       const table = await seatTwo(t);
       track(table.host);
       await passTurnToGuest(table.host.client);
-      await drop(table.guest, table.host, table.guest.id);
+      await drop(table.guest, table.guest.id);
+      await graceArmedFor(table.roomId, table.guest.id);
+      expect((await dbRoom(table.roomId)).status).toBe("playing"); // still within the grace period
+      expect(clock.fireAll()).toBe(1);
       const paused = await table.host.rec.waitFor<{ roomId: string; roomVersion: number; pause: PauseInfo }>("game:paused");
       expect(paused.pause).toMatchObject({ reason: "connection-lost", playerId: table.guest.id });
       const room = (await table.host.rec.waitFor<{ room: RoomView }>("room:updated", (p) => p.room.status === "paused")).room;
@@ -280,7 +316,7 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
     it("keeps the host role through a host disconnect, and the returning host can still manage the room", async () => {
       const table = await seatTwo(t, { start: false, maxPlayers: 4 });
       track(table.guest);
-      await drop(table.host, table.guest, table.host.id);
+      await drop(table.host, table.host.id);
       const view = expectOk(await ask(table.guest.client, "room:getState", { requestId: rid() })).room;
       expect(view.hostPlayerId).toBe(table.host.id);
       expect(view.players.find((p) => p.isHost)?.connectionStatus).toBe("disconnected");
@@ -298,10 +334,14 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
     it("pauses for a disconnected player when the turn reaches them, not before", async () => {
       const table = await seatTwo(t);
       track(table.host);
-      await drop(table.guest, table.host, table.guest.id); // not their turn: nothing happens
-      await sleep(GRACE_MS + 200);
+      await drop(table.guest, table.guest.id); // not their turn: nothing happens
+      await t.server.realtime!.sessions.evaluate(table.roomId); // let the monitor finish deciding
+      expect(t.server.realtime!.sessions.waitingFor(table.roomId)).toBeNull();
+      expect(clock.fireAll()).toBe(0);
       expect((await dbRoom(table.roomId)).status).toBe("playing");
       await passTurnToGuest(table.host.client); // now it is
+      await graceArmedFor(table.roomId, table.guest.id);
+      expect(clock.fireAll()).toBe(1);
       expect((await table.host.rec.waitFor<{ pause: PauseInfo }>("game:paused")).pause.playerId).toBe(table.guest.id);
     });
 
@@ -309,7 +349,9 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
       const table = await seatTwo(t);
       track(table.host);
       await passTurnToGuest(table.host.client);
-      await drop(table.guest, table.host, table.guest.id);
+      await drop(table.guest, table.guest.id);
+      await graceArmedFor(table.roomId, table.guest.id);
+      clock.fireAll();
       await table.host.rec.waitFor("game:paused");
       const guest = await reopen(table.guest.credential, { knownStateVersion: 0 });
       await table.host.rec.waitFor("game:resumed");
@@ -328,8 +370,8 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
   describe("retention", () => {
     it("expires and archives inactive rooms; their credentials then report an expired session", async () => {
       const table = await seatTwo(t, { start: false });
-      await drop(table.host, table.guest, table.host.id);
-      await drop(table.guest, table.guest, table.guest.id).catch(() => undefined);
+      await drop(table.host, table.host.id);
+      await drop(table.guest, table.guest.id);
       const later = new Date(Date.now() + 31 * 86_400_000);
       const sweeper = new RetentionSweeper(t.store, { lobbyDays: 30, activeDays: 90, endedDays: 30 }, { intervalMs: 0, now: () => later });
       expect((await sweeper.sweepOnce()).expired).toContain(table.roomId);

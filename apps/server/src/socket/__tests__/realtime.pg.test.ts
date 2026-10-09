@@ -6,11 +6,11 @@ import pg from "pg";
 import type { GameActionView, GameStateView, RoomPreview, RoomView } from "@ludo/shared-types";
 import { projectGameState } from "../../gameplay/stateProjection.js";
 import { migrate } from "../../persistence/migrate.js";
-import type { PostgresGameStore } from "../../persistence/postgresStore.js";
 import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, unavailableReason, type TestDatabase } from "../../persistence/__tests__/pgHarness.js";
 import {
   ask,
   askRaw,
+  closeAllClients,
   expectError,
   expectOk,
   forceState,
@@ -41,7 +41,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  for (const c of clients) c.close();
+  closeAllClients();
   await t?.close();
   await db?.dispose();
 }, 60_000);
@@ -379,38 +379,25 @@ describe.skipIf(skip)("real-time multiplayer over Socket.IO + PostgreSQL", () =>
     });
 
     it("never reports or broadcasts success when the database commit fails", async () => {
-      let failCommits = false;
-      const failing = await startTestServer(db.url, {
-        wrapStore: (store: PostgresGameStore) =>
-          new Proxy(store, {
-            get(target, prop, receiver) {
-              if (prop === "commitGameAction" && failCommits) {
-                return () => Promise.reject(Object.assign(new Error("terminating connection due to administrator command"), { code: "57P01" }));
-              }
-              const value = Reflect.get(target, prop, receiver) as unknown;
-              return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
-            },
-          }),
-      });
+      const table = await seatTwo(t);
+      track(table.host);
+      track(table.guest);
+      t.faults.failCommits = true; // PostgreSQL drops the connection at commit time
       try {
-        const table = await seatTwo(failing);
-        track(table.host);
-        track(table.guest);
-        failCommits = true;
-        failing.dice.push(6);
+        t.dice.push(6);
         const failed = await roll(table.host.client, 0);
         expectError(failed, "storage-unavailable");
         expect(JSON.stringify(failed)).not.toMatch(/57P01|administrator|postgres:\/\//);
-        await sleep(200);
-        expect(table.guest.rec.of<{ game: GameStateView }>("game:state").map((s) => s.game.stateVersion)).toEqual([0]);
-        expect(table.guest.rec.of("game:event")).toHaveLength(1); // only the start
-        expect((await failing.store.getGameSession(table.roomId))!.stateVersion).toBe(0);
-        failCommits = false;
-        failing.dice.push(4);
-        expect(expectOk(await roll(table.host.client, 0)).action.dice).toBe(4); // recovers once the database does
       } finally {
-        await failing.close();
+        t.faults.failCommits = false; // restored even if an assertion fails, so later tests are unaffected
       }
+      // Nothing was broadcast: an event that had been sent would arrive before this round trip completes.
+      expect(expectOk(await ask(table.guest.client, "room:getState", { requestId: rid() })).game!.stateVersion).toBe(0);
+      expect(table.guest.rec.of<{ game: GameStateView }>("game:state").map((s) => s.game.stateVersion)).toEqual([0]);
+      expect(table.guest.rec.of("game:event")).toHaveLength(1); // only the start
+      expect((await t.store.getGameSession(table.roomId))!.stateVersion).toBe(0);
+      t.dice.push(4);
+      expect(expectOk(await roll(table.host.client, 0)).action.dice).toBe(4); // recovers once the database does
     });
 
     it("converges every client and the database on the same strictly increasing versions", async () => {

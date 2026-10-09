@@ -9,7 +9,7 @@ import { SlidingWindowLimiter, type RateLimitPolicy } from "../rooms/rateLimiter
 import type { RoomService } from "../rooms/roomService.js";
 import { SocketPublisher } from "./broadcaster.js";
 import { ConnectionRegistry } from "./presence.js";
-import { SessionManager } from "./sessions.js";
+import { SessionManager, type GraceScheduler } from "./sessions.js";
 import { handshakeAuth } from "./socketAuth.js";
 import { toProtocolError, type Logger } from "./socketErrors.js";
 import type { LudoServer } from "./socketEvents.js";
@@ -22,6 +22,8 @@ export interface RealtimeOptions {
   trustProxyHops?: number;
   /** How long the current player may be disconnected before the game pauses (default 15 s). */
   reconnectGraceMs?: number;
+  /** Clock for the grace period (tests drive it explicitly). */
+  graceScheduler?: GraceScheduler;
   limits?: {
     perConnection?: RateLimitPolicy;
     perPlayer?: RateLimitPolicy;
@@ -54,6 +56,7 @@ export function attachRealtime(io: LudoServer, options: RealtimeOptions): Realti
     registry,
     publisher,
     graceMs: options.reconnectGraceMs ?? DEFAULT_RECONNECT_GRACE_MS,
+    ...(options.graceScheduler ? { scheduler: options.graceScheduler } : {}),
     log,
   });
 

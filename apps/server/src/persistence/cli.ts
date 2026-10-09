@@ -12,6 +12,7 @@ async function main(command: string | undefined): Promise<void> {
   if (!databaseUrl) throw new Error("DATABASE_URL is not set");
   if (command !== "migrate") throw new Error(`Unknown command "${command ?? ""}". Usage: cli.ts migrate`);
   const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
+  pool.on("error", () => undefined); // a dropped idle connection surfaces on the next query instead of crashing
   try {
     const { applied } = await migrate(pool);
     console.log(applied.length > 0 ? `Applied migrations: ${applied.join(", ")}` : "Database is up to date");

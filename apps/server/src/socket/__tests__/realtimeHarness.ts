@@ -13,6 +13,7 @@ import { PostgresGameStore } from "../../persistence/postgresStore.js";
 import type { GameStore } from "../../persistence/types.js";
 import { CodeLookupGuard, SlidingWindowLimiter, type RateLimitPolicy } from "../../rooms/rateLimiter.js";
 import { RoomService } from "../../rooms/roomService.js";
+import type { GraceScheduler } from "../sessions.js";
 
 export type Client = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -38,6 +39,7 @@ const GENEROUS: RateLimitPolicy = { limit: 1_000_000, windowMs: 1000 };
 
 export interface TestServer {
   url: string;
+  faults: Faults;
   server: RunningServer;
   store: GameStore;
   rooms: RoomService;
@@ -48,17 +50,64 @@ export interface TestServer {
 }
 
 export interface TestServerOptions {
-  /** Wraps the real store (e.g. to inject a commit failure). */
-  wrapStore?: (store: PostgresGameStore) => GameStore;
   perConnection?: RateLimitPolicy;
   /** Reconnect grace before an automatic pause (default 15 s, as in production). */
   reconnectGraceMs?: number;
+  /** Drive the grace period explicitly instead of waiting for it. */
+  graceScheduler?: GraceScheduler;
+}
+
+/** Faults that can be switched on in a running test server (no second server or cold pool needed). */
+export interface Faults {
+  /** Every game commit fails as if PostgreSQL had dropped the connection. */
+  failCommits: boolean;
+}
+
+/** Wraps a store so tests can make commits fail on demand. */
+function withFaults(store: PostgresGameStore, faults: Faults): GameStore {
+  return new Proxy(store, {
+    get(target, prop, receiver) {
+      if (prop === "commitGameAction" && faults.failCommits) {
+        return () => Promise.reject(Object.assign(new Error("terminating connection due to administrator command"), { code: "57P01" }));
+      }
+      const value = Reflect.get(target, prop, receiver) as unknown;
+      return typeof value === "function" ? (value as (...a: unknown[]) => unknown).bind(target) : value;
+    },
+  });
+}
+
+/**
+ * A grace clock the test advances by hand: timers are recorded instead of
+ * started, and fire only when the test says so.
+ */
+export class ManualScheduler implements GraceScheduler {
+  private readonly pending = new Set<{ callback: () => void; delayMs: number }>();
+  schedule(callback: () => void, delayMs: number) {
+    const entry = { callback, delayMs };
+    this.pending.add(entry);
+    return { cancel: () => void this.pending.delete(entry) };
+  }
+  get size(): number {
+    return this.pending.size;
+  }
+  /** Forgets pending timers without running them (isolates tests sharing one server). */
+  clear(): void {
+    this.pending.clear();
+  }
+  /** Runs every pending timer (as if the grace period elapsed); returns how many fired. */
+  fireAll(): number {
+    const due = [...this.pending];
+    this.pending.clear();
+    for (const entry of due) entry.callback();
+    return due.length;
+  }
 }
 
 export async function startTestServer(databaseUrl: string, options: TestServerOptions = {}): Promise<TestServer> {
-  const pgStore = PostgresGameStore.connect(databaseUrl);
-  const store = options.wrapStore ? options.wrapStore(pgStore) : pgStore;
   const logs: string[] = [];
+  const pgStore = PostgresGameStore.connect(databaseUrl, {}, (error) => logs.push(`[pool] ${error.message}`));
+  const faults: Faults = { failCommits: false };
+  const store = withFaults(pgStore, faults);
   const rooms = new RoomService({
     store,
     drawFirstPlayer: () => 0, // the host (seat 0) always starts, so scripts are deterministic
@@ -76,10 +125,12 @@ export async function startTestServer(databaseUrl: string, options: TestServerOp
       log: (line) => logs.push(line),
       limits: { perConnection: options.perConnection ?? GENEROUS, perPlayer: GENEROUS },
       ...(options.reconnectGraceMs === undefined ? {} : { reconnectGraceMs: options.reconnectGraceMs }),
+      ...(options.graceScheduler ? { graceScheduler: options.graceScheduler } : {}),
     },
   });
   return {
     url: `http://127.0.0.1:${server.port}`,
+    faults,
     server,
     store,
     rooms,
@@ -93,29 +144,68 @@ export async function startTestServer(databaseUrl: string, options: TestServerOp
   };
 }
 
-/** Everything a client receives, in order. */
+/** Everything a client receives, in order; waits are woken by the events themselves (no polling). */
 export class Recorder {
   readonly events: { event: string; payload: unknown }[] = [];
+  private readonly waiters = new Set<() => void>();
   constructor(readonly client: Client) {
-    client.onAny((event: string, payload: unknown) => this.events.push({ event, payload }));
+    client.onAny((event: string, payload: unknown) => {
+      this.events.push({ event, payload });
+      for (const wake of [...this.waiters]) wake();
+    });
   }
   of<T>(event: string): T[] {
     return this.events.filter((e) => e.event === event).map((e) => e.payload as T);
   }
-  /** Resolves with the first matching event already received or arriving within the timeout. */
-  async waitFor<T>(event: string, predicate: (payload: T) => boolean = () => true, timeoutMs = 4000): Promise<T> {
-    const deadline = Date.now() + timeoutMs;
-    for (;;) {
-      const hit = this.of<T>(event).find(predicate);
-      if (hit !== undefined) return hit;
-      if (Date.now() > deadline) throw new Error(`Timed out waiting for ${event}`);
-      await new Promise((r) => setTimeout(r, 10));
-    }
+  /** Resolves with the first matching event already received or arriving within the timeout; fails with what did arrive. */
+  waitFor<T>(event: string, predicate: (payload: T) => boolean = () => true, timeoutMs = 4000): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const check = (): boolean => {
+        const hit = this.of<T>(event).find(predicate);
+        if (hit === undefined) return false;
+        cleanup();
+        resolve(hit);
+        return true;
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        const seen = this.events.map((e) => e.event).join(", ") || "nothing";
+        reject(new Error(`Timed out after ${timeoutMs} ms waiting for ${event} (connected: ${this.client.connected}; received: ${seen})`));
+      }, timeoutMs);
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.waiters.delete(wake);
+      };
+      const wake = () => void check();
+      this.waiters.add(wake);
+      check();
+    });
   }
   latestState(): GameStateView | null {
     const states = this.of<{ game: GameStateView }>("game:state");
     return states.length ? states.reduce((a, b) => (b.game.stateVersion > a.game.stateVersion ? b : a)).game : null;
   }
+}
+
+/**
+ * Waits for a server-side condition, failing with a description instead of
+ * carrying on silently. Polls on the next turn of the event loop (setImmediate),
+ * so it does not depend on timer resolution (about 15.6 ms on Windows).
+ */
+export async function waitUntil(condition: () => boolean | Promise<boolean>, description: string, timeoutMs = 4000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!(await condition())) {
+    if (Date.now() > deadline) throw new Error(`Timed out after ${timeoutMs} ms waiting until ${description}`);
+    await new Promise((r) => setImmediate(r));
+  }
+}
+
+/** Every connection opened by these tests, so teardown can close them all even after a failed assertion. */
+const openClients = new Set<Client>();
+
+export function closeAllClients(): void {
+  for (const client of openClients) client.close();
+  openClients.clear();
 }
 
 export interface Connected {
@@ -131,6 +221,7 @@ export function open(url: string, credential?: unknown, options: { takeover?: bo
     forceNew: true,
     ...(credential === undefined ? {} : { auth: { credential, ...(options.takeover ? { takeover: true } : {}) } }),
   });
+  openClients.add(client);
   const rec = new Recorder(client);
   return new Promise((resolve, reject) => {
     client.once("connect", () => resolve({ client, rec }));

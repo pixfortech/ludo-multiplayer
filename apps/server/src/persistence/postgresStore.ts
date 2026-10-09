@@ -130,8 +130,21 @@ function sessionColumns(state: GameState) {
 export class PostgresGameStore implements GameStore {
   constructor(private readonly pool: Pool) {}
 
-  static connect(connectionString: string, config: Omit<PoolConfig, "connectionString"> = {}): PostgresGameStore {
-    return new PostgresGameStore(new pg.Pool({ connectionString, max: 10, ...config }));
+  /**
+   * Opens a pool. An idle pooled connection that the server terminates (restart,
+   * shutdown, network loss) emits an "error" event on the pool; without a
+   * listener Node treats that as an unhandled error and the process crashes.
+   * The pool discards such clients itself, and the next query reports the
+   * problem, so the default listener only forwards it to `onIdleError`.
+   */
+  static connect(
+    connectionString: string,
+    config: Omit<PoolConfig, "connectionString"> = {},
+    onIdleError: (error: Error) => void = () => undefined,
+  ): PostgresGameStore {
+    const pool = new pg.Pool({ connectionString, max: 10, ...config });
+    pool.on("error", onIdleError);
+    return new PostgresGameStore(pool);
   }
 
   private async tx<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
