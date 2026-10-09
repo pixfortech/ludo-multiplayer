@@ -69,14 +69,22 @@ export class SessionManager {
    * Gives `socket` control of the verified seat. Serialised per player, so two
    * simultaneous claims cannot both win. Claiming a seat this socket already
    * controls returns the current identity (idempotent).
+   *
+   * `reconnectEpoch` is the epoch the claiming page held before its connection
+   * was lost. If the seat's epoch is still that value, nobody has claimed the
+   * seat since: the connection that appears to control it is this page's own
+   * stale one (a lost network is noticed only after the heartbeat times out),
+   * so it is replaced. Any other claim since moved the epoch on, so another
+   * tab or device is never displaced without an explicit takeover.
    */
-  claim(socket: LudoSocket, actor: AuthenticatedPlayer, takeover: boolean): Promise<AuthenticatedPlayer> {
+  claim(socket: LudoSocket, actor: AuthenticatedPlayer, takeover: boolean, reconnectEpoch?: number): Promise<AuthenticatedPlayer> {
     return this.claims.run(`player:${actor.playerId}`, async () => {
       const { io, rooms, registry } = this.o;
       const currentId = registry.controllerOf(actor.playerId);
       if (currentId === socket.id && socket.data.actor?.playerId === actor.playerId) return socket.data.actor;
       const current = currentId ? io.sockets.sockets.get(currentId) : undefined;
-      if (current && !takeover) {
+      const sameSession = reconnectEpoch !== undefined && reconnectEpoch === actor.sessionEpoch;
+      if (current && !takeover && !sameSession) {
         throw new RoomError("session-in-use", "This seat is open in another tab or device; resume with takeover to continue here");
       }
       if (!socket.connected) throw new TransportError("not-in-room", "The connection closed before the seat was claimed");

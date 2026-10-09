@@ -224,4 +224,29 @@ describe("game screen", () => {
     expect(screen.queryByRole("button", { name: "Roll dice" })).toBeNull();
     expect(within(screen.getByTestId("game-board")).queryAllByRole("button")).toHaveLength(0);
   });
+
+  it("sends one roll for a double click, even before the screen re-renders", async () => {
+    const s = inGame(host);
+    s.client.rollResults = [actionData(gameView({ stateVersion: 1, lastRoll: { playerId: host, value: 2 }, recentHistory: [{ seq: 2, type: "roll", playerId: host, value: 2 }], historyLength: 2 }))];
+    await act(async () => {
+      const button = rollButton();
+      button.click();
+      button.click();
+    });
+    expect(s.client.calls.filter((c) => c.method === "rollDice")).toHaveLength(1);
+  });
+
+  it("sends one move for a double click on a move", async () => {
+    vi.useFakeTimers();
+    const s = inGame(host, withTokens(choosing(3, [legal(1, 4, 7), legal(2, 9, 12)]), [null, 4, 9, null]));
+    s.client.moveResults = [actionData(withTokens(gameView({ stateVersion: 1, currentPlayerId: "p-ben", currentPlayerIndex: 1 }), [null, 7, 9, null]), "game:move")];
+    const option = within(screen.getAllByTestId("move-tray")[0]!).getAllByRole("option")[1]!;
+    fireEvent.click(within(option).getByRole("button"));
+    await act(async () => {
+      const button = within(within(screen.getAllByTestId("move-tray")[0]!).getAllByRole("option")[1]!).getByRole("button");
+      button.click();
+      button.click();
+    });
+    expect(s.client.calls.filter((c) => c.method === "moveToken")).toEqual([{ method: "moveToken", args: [1] }]);
+  });
 });

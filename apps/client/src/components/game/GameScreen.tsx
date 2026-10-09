@@ -7,7 +7,7 @@
 // movable tokens are exactly the server's legal moves. Nothing moves on the
 // board until the server has confirmed it.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PLAYER_IDENTITIES, type PlayerIdentity } from "@ludo/design-tokens";
 import type { GameStateView, RoomView } from "@ludo/shared-types";
 import type { ConnectionState, Notice } from "../../lib/connection";
@@ -142,21 +142,28 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   const mySeat = game.players.find((p) => p.id === me)?.seat ?? null;
   const myIdentity = me ? identityOf(me) : null;
 
+  // One gameplay request at a time. Checked synchronously: two clicks in the same
+  // moment (before React re-renders) must not send two requests.
+  const inFlight = useRef(false);
+
   const roll = useCallback(async () => {
-    if (!canRoll) return;
+    if (!canRoll || inFlight.current) return;
+    inFlight.current = true;
     setRollPending(true);
     try {
       await client.rollDice();
     } catch (error) {
       say("error", friendlyError(error));
     } finally {
+      inFlight.current = false;
       setRollPending(false);
     }
   }, [canRoll, client, say]);
 
   const move = useCallback(
     async (tokenId: number) => {
-      if (!choosing || pendingMove !== null || !legal.some((m) => m.tokenId === tokenId)) return;
+      if (!choosing || inFlight.current || !legal.some((m) => m.tokenId === tokenId)) return;
+      inFlight.current = true;
       setSelected(tokenId);
       setPendingMove(tokenId);
       try {
@@ -164,10 +171,11 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       } catch (error) {
         say("error", friendlyError(error));
       } finally {
+        inFlight.current = false;
         setPendingMove(null);
       }
     },
-    [choosing, pendingMove, legal, client, say],
+    [choosing, legal, client, say],
   );
 
   // Keyboard: R rolls; Escape clears a previewed move.

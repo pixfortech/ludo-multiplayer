@@ -69,7 +69,8 @@ export function moveSummary(move: LegalMoveView): string {
   if (move.from === null) return "Base → start";
   if (move.reachesHome) return "Finishes";
   if (move.entersLane) return "Into home lane";
-  return `${move.to - move.from} squares`;
+  const squares = move.to - move.from;
+  return `${squares} ${squares === 1 ? "square" : "squares"}`;
 }
 
 /** Outcome tags for a legal move, from the server's flags. */

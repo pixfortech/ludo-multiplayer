@@ -58,6 +58,8 @@ Exactly one connection controls a seat.
 | The new connection retries a request the old one committed | The committed result is returned (`replayed: true`); nothing moves twice |
 | Two resumes at the same moment | Exactly one wins; claims are serialised per player |
 | Different players in two tabs of one browser | Independent seats, each with its own credential |
+| The same page reconnects after its network dropped, before the server noticed (the heartbeat takes up to about 45 s) | It sends the `controlEpoch` it was given (create, join and resume return one; kept in memory only). If the seat's epoch is unchanged, nobody has claimed it since, so the stale connection is replaced. |
+| …after another tab or device took over meanwhile | The epoch has moved on: `session-in-use`, as for any other connection. A page never displaces another tab without an explicit `takeover`. |
 
 ### Guidance for the browser UI
 

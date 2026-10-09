@@ -94,6 +94,7 @@ export const RULES = {
     credential: { kind: "credential", required: true },
     takeover: { kind: "boolean", required: false },
     knownStateVersion: { ...VERSION, required: false },
+    controlEpoch: { ...VERSION, required: false },
   },
   confirmCredential: { secret: { kind: "string", required: true, max: 128 } },
   transferHost: { playerId: { kind: "string", required: true, max: 64 }, expectedRoomVersion: { ...VERSION, required: false } },

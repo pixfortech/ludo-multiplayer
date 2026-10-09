@@ -445,4 +445,34 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
     table.host.client.close();
     table.guest.client.close();
   });
+
+  it("lets a page reclaim its seat from its own stale connection with its control epoch, never displacing another tab", async () => {
+    const table = await seatTwo(t, { start: false });
+    const credential = table.guest.credential;
+    const epoch = table.guest.membership.controlEpoch;
+    expect(Number.isInteger(epoch)).toBe(true);
+
+    // Ben's network dropped silently: the server still sees his old connection as live.
+    // The same page reconnects on a new transport and presents the epoch it was given.
+    const back = track(await open(t.url));
+    const resumed = expectOk(await ask(back.client, "room:resume", { requestId: rid(), credential, controlEpoch: epoch }));
+    expect(resumed.player.playerId).toBe(table.guest.id);
+    expect(resumed.controlEpoch).toBeGreaterThan(epoch);
+    await table.guest.rec.waitFor<{ reason: string }>("session:ended", (p) => p.reason === "replaced");
+    expect(t.server.realtime!.sessions.isControlled(table.guest.id)).toBe(true);
+
+    // Another tab with the credential but without the epoch: refused, as before (no silent hijack).
+    const other = track(await open(t.url));
+    expectError(await ask(other.client, "room:resume", { requestId: rid(), credential }), "session-in-use");
+    // A guessed epoch does not help either.
+    expectError(await ask(other.client, "room:resume", { requestId: rid(), credential, controlEpoch: resumed.controlEpoch + 1 }), "session-in-use");
+    // An explicit takeover moves the epoch on...
+    const taken = expectOk(await ask(other.client, "room:resume", { requestId: rid(), credential, takeover: true }));
+    expect(taken.controlEpoch).toBeGreaterThan(resumed.controlEpoch);
+    // ...so the page that lost the seat cannot take it back silently with its old epoch.
+    const late = track(await open(t.url));
+    expectError(await ask(late.client, "room:resume", { requestId: rid(), credential, controlEpoch: resumed.controlEpoch }), "session-in-use");
+    for (const c of [back, other, late, table.host, table.guest]) c.client.close();
+  });
 });
+

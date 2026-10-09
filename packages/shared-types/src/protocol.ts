@@ -82,6 +82,15 @@ export interface ResumeRequest extends RequestBase {
   takeover?: boolean;
   /** The last game state version this client applied; missed actions are returned when few enough. */
   knownStateVersion?: number;
+  /**
+   * The controlEpoch this connection was given when it last took control of
+   * the seat. Sent only by the same page re-attaching after its connection
+   * was lost (the server may not have noticed yet). If nobody has claimed the
+   * seat since, the epoch is unchanged and the stale connection is replaced;
+   * if another tab or device took over, it has moved on and the answer is
+   * session-in-use as usual. Keep it in memory only.
+   */
+  controlEpoch?: number;
 }
 
 /** Issue a new secret for this seat. It is pending until confirmed; the current secret keeps working until then. */
@@ -153,6 +162,8 @@ export interface MembershipData {
   player: RoomPlayerView;
   /** Returned only to the connection that created or joined; store it securely, it is never shown again. */
   credential: PlayerSessionCredential;
+  /** This connection's control epoch for the seat (see ResumeRequest.controlEpoch). */
+  controlEpoch: number;
 }
 
 export interface RoomStateData {
@@ -177,6 +188,8 @@ export interface ResumeData extends RoomStateData {
    * (apply the snapshot instead).
    */
   missedActions: GameActionView[] | null;
+  /** This connection's control epoch for the seat (see ResumeRequest.controlEpoch). */
+  controlEpoch: number;
 }
 
 export interface RotateCredentialData {

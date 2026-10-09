@@ -134,7 +134,7 @@ export function services(client = new FakeClient()): GameServices & { client: Fa
 }
 
 export function membership(room: RoomView, playerId: string, secret = "s3cret-value"): MembershipData {
-  return { room, player: room.players.find((p) => p.playerId === playerId)!, credential: { playerId, secret } };
+  return { room, player: room.players.find((p) => p.playerId === playerId)!, credential: { playerId, secret }, controlEpoch: 1 };
 }
 
 /** A started classic game for two players (host seat 0, guest seat 2), all tokens in base. */

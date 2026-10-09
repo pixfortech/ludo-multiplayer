@@ -98,6 +98,8 @@ export class GameConnection {
   private readonly noticeListeners = new Set<(notice: Notice) => void>();
   /** Kept in memory only, to re-attach the seat after the transport reconnects. */
   private credential: PlayerSessionCredential | null = null;
+  /** The control epoch this page was given for its seat (memory only; see ResumeRequest.controlEpoch). */
+  private controlEpoch: number | null = null;
   private everConnected = false;
   private reconciling: Promise<void> | null = null;
   private stateWatch: ReturnType<typeof setTimeout> | null = null;
@@ -138,6 +140,7 @@ export class GameConnection {
     });
     socket.on("session:ended", ({ reason }) => {
       this.credential = null;
+      this.controlEpoch = null;
       this.patch({ seat: null, ended: reason });
       this.emit({ kind: "session-ended", reason });
     });
@@ -181,7 +184,7 @@ export class GameConnection {
 
   async createRoom(input: CreateRoomInput): Promise<MembershipData> {
     const data = await this.request("room:create", input as RequestOf<"room:create">);
-    this.bind(data.room, data.player.playerId, data.credential);
+    this.bind(data.room, data.player.playerId, data.credential, data.controlEpoch);
     return data;
   }
 
@@ -191,18 +194,22 @@ export class GameConnection {
 
   async joinRoom(input: JoinRoomInput): Promise<MembershipData> {
     const data = await this.request("room:join", input);
-    this.bind(data.room, data.player.playerId, data.credential);
+    this.bind(data.room, data.player.playerId, data.credential, data.controlEpoch);
     return data;
   }
 
   /** Re-attaches a stored seat. `takeover` moves control from another tab or device (it is told). */
-  async resume(credential: PlayerSessionCredential, options: { takeover?: boolean } = {}): Promise<ResumeData> {
+  resume(credential: PlayerSessionCredential, options: { takeover?: boolean } = {}): Promise<ResumeData> {
+    return this.resumeSeat(credential, options.takeover ? { takeover: true } : {});
+  }
+
+  private async resumeSeat(credential: PlayerSessionCredential, extra: { takeover?: true; controlEpoch?: number }): Promise<ResumeData> {
     const data = await this.request("room:resume", {
       credential,
-      ...(options.takeover ? { takeover: true } : {}),
+      ...extra,
       ...(this.state.game && this.state.room?.roomId === this.state.seat?.roomId ? { knownStateVersion: this.state.game.stateVersion } : {}),
     });
-    this.bind(data.room, data.player.playerId, credential);
+    this.bind(data.room, data.player.playerId, credential, data.controlEpoch);
     if (data.game) this.applyGame(data.game);
     return data;
   }
@@ -233,6 +240,7 @@ export class GameConnection {
   async leaveRoom(): Promise<void> {
     await this.request("room:leave", {});
     this.credential = null;
+    this.controlEpoch = null;
     this.patch({ seat: null, room: null, game: null, ended: null });
   }
 
@@ -294,19 +302,23 @@ export class GameConnection {
 
   private async reattach(): Promise<void> {
     try {
-      await this.resume(this.credential!);
+      // This page held the seat until its connection dropped. The server may not have noticed the
+      // drop yet; the control epoch proves nobody else has claimed the seat since (see ResumeRequest).
+      await this.resumeSeat(this.credential!, this.controlEpoch === null ? {} : { controlEpoch: this.controlEpoch });
       this.emit({ kind: "seat-restored" });
     } catch (error) {
       const code = (error as ProtocolRequestError).code;
       if (code === "session-in-use" || code === "session-expired" || code === "unauthenticated") {
         this.credential = null;
+        this.controlEpoch = null;
         this.patch({ seat: null, ended: code === "session-in-use" ? "replaced" : "left" });
       }
     }
   }
 
-  private bind(room: RoomView, playerId: string, credential: PlayerSessionCredential): void {
+  private bind(room: RoomView, playerId: string, credential: PlayerSessionCredential, controlEpoch: number): void {
     this.credential = credential;
+    this.controlEpoch = controlEpoch;
     const sameRoom = this.state.room?.roomId === room.roomId;
     this.patch({
       seat: { roomId: room.roomId, roomCode: room.code, playerId },

@@ -61,7 +61,7 @@ describe("lobby", () => {
     s.seats.save({ roomCode: "ABC234", playerId: "p-ben", secret: "ben-secret", displayName: "Ben", roomName: null });
     s.tab.set({ roomCode: "ABC234", playerId: "p-ben" });
     const room = roomView({ players: [player(), ben] });
-    s.client.resumeResults = [{ room, game: null, player: ben, missedActions: null }];
+    s.client.resumeResults = [{ room, game: null, player: ben, missedActions: null, controlEpoch: 1 }];
     render(<App services={s} initialPath="/room/ABC234" />);
     expect(await screen.findByText("Emerald · Bottom right")).toBeTruthy();
     expect(s.client.calls[0]).toEqual({ method: "resume", args: [{ playerId: "p-ben", secret: "ben-secret" }, { takeover: false }] });
@@ -71,7 +71,7 @@ describe("lobby", () => {
     const s = services();
     s.seats.save({ roomCode: "ABC234", playerId: "p-ben", secret: "ben-secret", displayName: "Ben", roomName: null });
     const room = roomView({ players: [player(), ben] });
-    s.client.resumeResults = [new ProtocolRequestError("session-in-use", "in use"), { room, game: null, player: ben, missedActions: null }];
+    s.client.resumeResults = [new ProtocolRequestError("session-in-use", "in use"), { room, game: null, player: ben, missedActions: null, controlEpoch: 1 }];
     render(<App services={s} initialPath="/room/ABC234" />);
     const takeover = await screen.findByRole("button", { name: "Continue here as Ben" });
     expect(s.client.calls).toHaveLength(1);

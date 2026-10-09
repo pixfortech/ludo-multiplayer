@@ -100,7 +100,7 @@ export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
     const created = await rooms.createRoom(body, { clientKey: socket.data.clientKey });
     const actor = await sessions.claim(socket, await rooms.authenticate(created.credential), false);
     const { room } = await gameplay.snapshot(actor);
-    return { data: { room, player: room.players.find((p) => p.playerId === actor.playerId)!, credential: created.credential }, roomVersion: room.roomVersion };
+    return { data: { room, player: room.players.find((p) => p.playerId === actor.playerId)!, credential: created.credential, controlEpoch: actor.sessionEpoch }, roomVersion: room.roomVersion };
   });
 
   on("room:preview", async (_requestId, body) => {
@@ -115,16 +115,16 @@ export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
     const actor = await sessions.claim(socket, await rooms.authenticate(joined.credential), false);
     const { room } = await gameplay.snapshot(actor);
     publisher.roomUpdated(room);
-    return { data: { room, player: room.players.find((p) => p.playerId === actor.playerId)!, credential: joined.credential }, roomVersion: room.roomVersion };
+    return { data: { room, player: room.players.find((p) => p.playerId === actor.playerId)!, credential: joined.credential, controlEpoch: actor.sessionEpoch }, roomVersion: room.roomVersion };
   });
 
   on("room:resume", async (_requestId, body) => {
-    const input = readFields<{ credential: unknown; takeover?: boolean; knownStateVersion?: number }>(body, RULES.resume);
+    const input = readFields<{ credential: unknown; takeover?: boolean; knownStateVersion?: number; controlEpoch?: number }>(body, RULES.resume);
     const verified = await rooms.authenticate(input.credential);
     const bound = socket.data.actor;
     if (bound && bound.playerId !== verified.playerId) throw new TransportError("already-in-room", "This connection already controls another seat");
     // Claiming again from the controlling connection is a no-op, so a retried resume is harmless.
-    const actor = await sessions.claim(socket, verified, input.takeover === true);
+    const actor = await sessions.claim(socket, verified, input.takeover === true, input.controlEpoch);
     const snapshot = await gameplay.snapshot(actor);
     const missedActions =
       input.knownStateVersion !== undefined && snapshot.game && input.knownStateVersion < snapshot.game.stateVersion
@@ -133,7 +133,7 @@ export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
           ? []
           : null;
     return {
-      data: { ...snapshot, player: snapshot.room.players.find((p) => p.playerId === actor.playerId)!, missedActions },
+      data: { ...snapshot, player: snapshot.room.players.find((p) => p.playerId === actor.playerId)!, missedActions, controlEpoch: actor.sessionEpoch },
       roomVersion: snapshot.room.roomVersion,
       stateVersion: snapshot.game?.stateVersion ?? null,
     };
