@@ -38,15 +38,26 @@ jobs:
       TEST_DATABASE_URL: ""
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           persist-credentials: false
 
       - name: Set up Node.js 24
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
+
+      # Test clusters live in the temp directory and every commit waits for a WAL flush (fsync stays on, as in
+      # production). Use the runner's own scratch area — on Windows a separate, faster disk than C:.
+      - name: Use the runner scratch disk for temporary files
+        shell: bash
+        run: |
+          {
+            echo "TMPDIR=$RUNNER_TEMP"
+            echo "TEMP=$RUNNER_TEMP"
+            echo "TMP=$RUNNER_TEMP"
+          } >> "$GITHUB_ENV"
 
       - name: Install PostgreSQL 17 (Linux)
         if: runner.os == 'Linux'
