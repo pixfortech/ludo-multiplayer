@@ -21,10 +21,11 @@
     "build:packages": "npm run build -w @ludo/shared-types -w @ludo/design-tokens -w @ludo/assets -w @ludo/board-layouts -w @ludo/game-engine",
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces && tsc -p scripts/tsconfig.json",
-    "test": "npm run test --workspaces",
+    "test": "npm run test --workspaces && npm run test:repo",
     "lint": "eslint .",
     "clean": "rm -rf packages/*/dist apps/*/dist",
-    "design:generate": "tsx --conditions=source scripts/design-artifacts.ts"
+    "design:generate": "tsx --conditions=source scripts/design-artifacts.ts",
+    "test:repo": "vitest run --config scripts/vitest.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

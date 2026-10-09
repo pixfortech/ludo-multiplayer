@@ -41,8 +41,8 @@ What gets generated, with which model, in what order, and why. Spending rules: [
 
 | Check | Result |
 | --- | --- |
-| Workspace | `0154ad81…3c32`: the only workspace on the account; private, owner role, Max plan; **selected** |
-| Balance | 861.75 credits, unchanged by this phase (preflights cost nothing) |
+| Workspace | The account's only workspace; private, owner role; **selected** (identifier kept out of this public repo) |
+| Balance | Sufficient for the batch; unchanged by this phase, because preflights cost nothing (exact figure reported in chat only) |
 | Cost per job | **Verified** with the tool's `get_cost` preflight: low/1k 0.25 · medium/1k 0.5 · medium/2k 1.0 · high/1k 1.5 · high/2k 2.75. Aspect ratio does not change the price. A `count: 2` preflight also returned 2.75, so whether it multiplies by count is unclear. Every asset is therefore submitted as its own single-image job, priced individually. |
 | Output format | **Not stated** by the model metadata (the model accepts a `background: transparent` option, which implies PNG/WebP). The actual file type is recorded in the manifest on download. The repo stores optimised WebP/AVIF via LFS. |
 | Commercial use | **Not verified from the primary terms**: `higgsfield.ai` is unreachable from this cloud container (DNS blocked). Search results show Higgsfield's help center stating users own outputs and may use them commercially (Terms §4.4), with watermark-free downloads on paid plans. A third-party newsletter reads Higgsfield's retained licence (service operation and model training) more broadly. **You need to confirm** the current Terms of Use §4 before outputs are committed. |

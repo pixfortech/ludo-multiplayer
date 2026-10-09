@@ -16,3 +16,6 @@ apps/server/data/
 # Asset tooling credentials (never commit)
 .higgsfield/
 *.credentials.json
+
+# Claude Code: machine-specific permission overrides (never commit)
+.claude/settings.local.json
