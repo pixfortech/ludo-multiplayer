@@ -1,7 +1,9 @@
 // Review diagrams for the classic board, generated from the layout data:
-//  • overview: absolute track numbers 0–51, starts, stars, lanes, direction arrows
-//  • one per seat: that seat's numbered path, steps 0–56
-// Committed under docs/design/generated/ for approval; a drift test keeps them current.
+//  • overview: every shared-track cell (absolute 0–51), the clockwise route
+//    with an arrow on every step, starts, stars, home entries, lanes, home
+//  • one per seat: that seat's complete numbered journey, steps 0–56
+// SVG sources are committed under docs/design/generated/ (drift-tested); PNG
+// previews are rendered from them with `npm run design:png`.
 
 import { BOARD_SURFACES, INK, PLAYER_IDENTITIES, SAFE_STAR_PATH } from "@ludo/design-tokens";
 import {
@@ -14,7 +16,6 @@ import {
   CLASSIC_START_INDEX,
   CLASSIC_TRACK,
   classicBaseSlots,
-  classicHomeEntryIndex,
   classicSeatPath,
 } from "../classicSquareLayout.js";
 import { cellKey, type Cell } from "../layoutTypes.js";
@@ -22,156 +23,205 @@ import { buildClassicConceptSvg } from "./classicConcept.js";
 import { buildGeometryReport } from "../report/geometryReport.js";
 import { buildClassicReference } from "../report/classicReference.js";
 
-const S = 48; // px per cell
-const PAD = 16;
-const HEAD = 44;
-const FOOT = 64;
+const S = 52; // px per cell
+const PAD = 24;
+const HEAD = 78;
+const FOOT = 178;
 const SIZE = CLASSIC_GRID * S;
+export const CLASSIC_DIAGRAM_SIZE = { width: SIZE + PAD * 2, height: HEAD + SIZE + FOOT } as const;
 
 const x = (col: number) => PAD + col * S;
 const y = (row: number) => HEAD + row * S;
+const cx = (c: Cell) => x(c.col) + S / 2;
+const cy = (c: Cell) => y(c.row) + S / 2;
 const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const SEAT_POSITION = ["top-left", "top-right", "bottom-right", "bottom-left"];
 
-function text(cx: number, cy: number, value: string | number, fill: string, size = 14, weight = 600, opacity = 1): string {
-  return `<text x="${cx}" y="${cy + size * 0.35}" font-size="${size}" font-weight="${weight}" text-anchor="middle" fill="${fill}" opacity="${opacity}">${esc(String(value))}</text>`;
+function text(tx: number, ty: number, value: string | number, fill: string, size = 14, weight = 600, anchor = "middle"): string {
+  return `<text x="${tx}" y="${ty + size * 0.35}" font-size="${size}" font-weight="${weight}" text-anchor="${anchor}" fill="${fill}">${esc(String(value))}</text>`;
+}
+
+/** Number in a white pill so it stays legible on top of the route line. */
+function pill(c: Cell, value: string | number, ring: string, size = 13): string {
+  const w = String(value).length > 1 ? 26 : 22;
+  return [
+    `<rect x="${cx(c) - w / 2}" y="${cy(c) - 11}" width="${w}" height="22" rx="11" fill="#FFFFFF" stroke="${ring}" stroke-width="1.5"/>`,
+    text(cx(c), cy(c), value, INK.dark, size, 700),
+  ].join("");
 }
 
 function cellRect(cell: Cell, fill: string, opacity = 1): string {
-  return `<rect x="${x(cell.col) + 1}" y="${y(cell.row) + 1}" width="${S - 2}" height="${S - 2}" rx="5" fill="${fill}" stroke="${BOARD_SURFACES.line}" opacity="${opacity}"/>`;
+  return `<rect x="${x(cell.col) + 1}" y="${y(cell.row) + 1}" width="${S - 2}" height="${S - 2}" rx="6" fill="${fill}" stroke="${BOARD_SURFACES.line}" opacity="${opacity}"/>`;
 }
 
 function star(cell: Cell, fill: string, opacity: number): string {
-  const k = (S * 0.72) / 24;
-  return `<path d="${SAFE_STAR_PATH}" fill="${fill}" opacity="${opacity}" transform="translate(${x(cell.col) + S * 0.14} ${y(cell.row) + S * 0.14}) scale(${k})"/>`;
+  const k = (S * 0.78) / 24;
+  return `<path d="${SAFE_STAR_PATH}" fill="${fill}" opacity="${opacity}" transform="translate(${x(cell.col) + S * 0.11} ${y(cell.row) + S * 0.11}) scale(${k})"/>`;
 }
 
-function arrow(from: Cell, to: Cell): string {
-  const ax = (x(from.col) + x(to.col)) / 2 + S / 2;
-  const ay = (y(from.row) + y(to.row)) / 2 + S / 2;
+/** Continuous route line through cell centres. */
+function routeLine(cells: readonly Cell[], colour: string, width: number, opacity: number, closed = false): string {
+  const points = cells.map((c) => `${cx(c)},${cy(c)}`).join(" ");
+  const tag = closed ? "polygon" : "polyline";
+  return `<${tag} points="${points}" fill="none" stroke="${colour}" stroke-width="${width}" stroke-linejoin="round" stroke-linecap="round" opacity="${opacity}"/>`;
+}
+
+/** Large arrowhead on the edge between two consecutive cells, pointing in the direction of travel. */
+function arrow(from: Cell, to: Cell, colour: string, size = 9): string {
+  const ax = (cx(from) + cx(to)) / 2;
+  const ay = (cy(from) + cy(to)) / 2;
   const angle = (Math.atan2(to.row - from.row, to.col - from.col) * 180) / Math.PI;
-  return `<path d="M-5 -5L5 0L-5 5z" fill="${INK.dark}" opacity="0.7" transform="translate(${ax} ${ay}) rotate(${angle})"/>`;
+  return `<path d="M${-size} ${-size}L${size} 0L${-size} ${size}z" fill="${colour}" stroke="#FFFFFF" stroke-width="1.5" stroke-linejoin="round" transform="translate(${ax} ${ay}) rotate(${angle})"/>`;
 }
 
-function boardChrome(): string[] {
-  const out: string[] = [
-    `<rect x="${PAD - 6}" y="${HEAD - 6}" width="${SIZE + 12}" height="${SIZE + 12}" rx="18" fill="${BOARD_SURFACES.base}"/>`,
-  ];
+function outline(c: Cell, colour: string, dashed: boolean): string {
+  return `<rect x="${x(c.col) + 2}" y="${y(c.row) + 2}" width="${S - 4}" height="${S - 4}" rx="7" fill="none" stroke="${colour}" stroke-width="3.5"${dashed ? ' stroke-dasharray="6 4"' : ""}/>`;
+}
+
+/** Circular clockwise badge. */
+function clockwiseBadge(bx: number, by: number): string {
+  const r = 16;
+  return [
+    `<circle cx="${bx}" cy="${by}" r="${r + 9}" fill="#FFFFFF" stroke="${BOARD_SURFACES.line}"/>`,
+    `<path d="M${bx} ${by - r}A${r} ${r} 0 1 1 ${bx - r} ${by}" fill="none" stroke="${INK.dark}" stroke-width="3.5"/>`,
+    `<path d="M${bx - r - 7} ${by - 2}L${bx - r} ${by + 8}L${bx - r + 7} ${by - 2}z" fill="${INK.dark}"/>`,
+  ].join("");
+}
+
+function boardChrome(focus: number): string[] {
+  const out: string[] = [`<rect x="${PAD - 8}" y="${HEAD - 8}" width="${SIZE + 16}" height="${SIZE + 16}" rx="20" fill="${BOARD_SURFACES.base}"/>`];
   for (let seat = 0; seat < CLASSIC_SEATS; seat++) {
     const p = PLAYER_IDENTITIES[seat]!;
     const o = CLASSIC_BASE_ORIGIN[seat]!;
-    out.push(`<rect x="${x(o.col) + 2}" y="${y(o.row) + 2}" width="${6 * S - 4}" height="${6 * S - 4}" rx="18" fill="${p.body}"/>`);
-    out.push(`<rect x="${x(o.col) + S * 0.8}" y="${y(o.row) + S * 0.8}" width="${4.4 * S}" height="${4.4 * S}" rx="14" fill="${BOARD_SURFACES.cell}"/>`);
+    const dim = focus >= 0 && focus !== seat ? 0.35 : 1;
+    out.push(`<g opacity="${dim}">`);
+    out.push(`<rect x="${x(o.col) + 3}" y="${y(o.row) + 3}" width="${6 * S - 6}" height="${6 * S - 6}" rx="20" fill="${p.body}"/>`);
+    out.push(`<rect x="${x(o.col) + S * 0.75}" y="${y(o.row) + S * 0.75}" width="${4.5 * S}" height="${4.5 * S}" rx="16" fill="${BOARD_SURFACES.cell}"/>`);
     for (const slot of classicBaseSlots(seat)) {
-      out.push(`<circle cx="${PAD + slot.x * S}" cy="${HEAD + slot.y * S}" r="${S * 0.55}" fill="#FFFFFF" stroke="${p.body}" stroke-width="3"/>`);
+      out.push(`<circle cx="${PAD + slot.x * S}" cy="${HEAD + slot.y * S}" r="${S * 0.5}" fill="#FFFFFF" stroke="${p.body}" stroke-width="3"/>`);
     }
-    out.push(text(x(o.col) + 3 * S, y(o.row) + 3 * S, `Seat ${seat + 1}`, p.rim, 13, 700));
+    out.push(text(x(o.col) + 3 * S, y(o.row) + 2.75 * S, p.name, p.rim, 15, 800));
+    out.push(text(x(o.col) + 3 * S, y(o.row) + 3.25 * S, `Seat ${seat + 1} · ${SEAT_POSITION[seat]}`, "#5C6370", 11, 600));
+    out.push("</g>");
   }
-  // Centre: one triangle per seat, pointing at its own arm.
-  const cx0 = x(CLASSIC_CENTRE.col);
-  const cy0 = y(CLASSIC_CENTRE.row);
-  const m = (v: number) => v * S;
-  const mid = `${cx0 + m(1.5)},${cy0 + m(1.5)}`;
-  const tris = [
-    `${cx0},${cy0} ${cx0},${cy0 + m(3)} ${mid}`, // left  → seat 1
-    `${cx0},${cy0} ${cx0 + m(3)},${cy0} ${mid}`, // top   → seat 2
-    `${cx0 + m(3)},${cy0} ${cx0 + m(3)},${cy0 + m(3)} ${mid}`, // right → seat 3
-    `${cx0},${cy0 + m(3)} ${cx0 + m(3)},${cy0 + m(3)} ${mid}`, // bottom → seat 4
-  ];
-  tris.forEach((points, seat) => out.push(`<polygon points="${points}" fill="${PLAYER_IDENTITIES[seat]!.body}"/>`));
+  const c0x = x(CLASSIC_CENTRE.col);
+  const c0y = y(CLASSIC_CENTRE.row);
+  const m = 3 * S;
+  const mid = `${c0x + m / 2},${c0y + m / 2}`;
+  [
+    `${c0x},${c0y} ${c0x},${c0y + m} ${mid}`, // left → seat 1
+    `${c0x},${c0y} ${c0x + m},${c0y} ${mid}`, // top → seat 2
+    `${c0x + m},${c0y} ${c0x + m},${c0y + m} ${mid}`, // right → seat 3
+    `${c0x},${c0y + m} ${c0x + m},${c0y + m} ${mid}`, // bottom → seat 4
+  ].forEach((points, seat) => {
+    const dim = focus >= 0 && focus !== seat ? 0.35 : 1;
+    out.push(`<polygon points="${points}" fill="${PLAYER_IDENTITIES[seat]!.body}" opacity="${dim}"/>`);
+  });
   return out;
 }
 
-function startSeatAt(index: number): number {
-  return CLASSIC_START_INDEX.indexOf(index);
+/** Small gold star in the cell's top-right corner, drawn above the route so safe cells stay obvious. */
+function safeBadge(c: Cell): string {
+  const k = 15 / 24;
+  return `<g transform="translate(${x(c.col) + S - 19} ${y(c.row) + 2}) scale(${k})"><circle cx="12" cy="12" r="12" fill="#FFFFFF"/><path d="${SAFE_STAR_PATH}" fill="#C9A227" stroke="#6B5310" stroke-width="1.2"/></g>`;
 }
+
+const safeBadges: string[] = [];
+
+function cells(focus: number): string[] {
+  const out: string[] = [];
+  safeBadges.length = 0;
+  const pathKeys = focus >= 0 ? new Set(classicSeatPath(focus).track.map(cellKey)) : null;
+  CLASSIC_HOME_LANES.forEach((lane, seat) => {
+    for (const cell of lane) out.push(cellRect(cell, PLAYER_IDENTITIES[seat]!.lane, focus >= 0 && seat !== focus ? 0.3 : 1));
+  });
+  CLASSIC_TRACK.forEach((cell, index) => {
+    const startSeat = CLASSIC_START_INDEX.indexOf(index);
+    const fill = startSeat >= 0 ? PLAYER_IDENTITIES[startSeat]!.body : BOARD_SURFACES.cell;
+    out.push(cellRect(cell, fill, pathKeys && !pathKeys.has(cellKey(cell)) ? 0.3 : 1));
+    if (CLASSIC_SAFE_INDICES.includes(index)) {
+      out.push(star(cell, startSeat >= 0 ? "#FFFFFF" : BOARD_SURFACES.safeMark, startSeat >= 0 ? 0.5 : 0.45));
+      safeBadges.push(safeBadge(cell));
+    }
+  });
+  return out;
+}
+
+const describeSeat = (seat: number) => {
+  const { track, lane } = classicSeatPath(seat);
+  return `start ${cellKey(track[0]!)} → entry ${cellKey(track[50]!)} → lane ${cellKey(lane[0]!)}–${cellKey(lane[4]!)} → home`;
+};
 
 export type ClassicDiagramView = { kind: "overview" } | { kind: "seat"; seat: number };
 
 export function buildClassicDiagramSvg(view: ClassicDiagramView): string {
-  const parts = boardChrome();
   const focus = view.kind === "seat" ? view.seat : -1;
-  const path = focus >= 0 ? classicSeatPath(focus) : null;
-  const stepAt = new Map<string, number>();
-  path?.track.forEach((cell, step) => stepAt.set(cellKey(cell), step));
-  path?.lane.forEach((cell, i) => stepAt.set(cellKey(cell), 51 + i));
-
-  // Lanes
-  CLASSIC_HOME_LANES.forEach((lane, seat) => {
-    const dim = focus >= 0 && seat !== focus;
-    for (const cell of lane) parts.push(cellRect(cell, PLAYER_IDENTITIES[seat]!.lane, dim ? 0.35 : 1));
-  });
-
-  // Track cells
-  CLASSIC_TRACK.forEach((cell, index) => {
-    const startSeat = startSeatAt(index);
-    const onPath = focus < 0 || stepAt.has(cellKey(cell));
-    const fill = startSeat >= 0 ? PLAYER_IDENTITIES[startSeat]!.body : BOARD_SURFACES.cell;
-    parts.push(cellRect(cell, fill, onPath ? 1 : 0.4));
-    if (CLASSIC_SAFE_INDICES.includes(index)) {
-      parts.push(star(cell, startSeat >= 0 ? "#FFFFFF" : BOARD_SURFACES.safeMark, startSeat >= 0 ? 0.45 : 0.4));
-    }
-  });
+  const parts = [...boardChrome(focus), ...cells(focus)];
+  const { width, height } = CLASSIC_DIAGRAM_SIZE;
+  let title: string;
+  let subtitle: string;
+  const legend: string[] = [];
 
   if (focus < 0) {
-    // Overview: absolute numbers and a direction arrow on every edge.
-    CLASSIC_TRACK.forEach((cell, index) => {
-      const startSeat = startSeatAt(index);
-      const ink = startSeat >= 0 ? PLAYER_IDENTITIES[startSeat]!.ink : INK.dark;
-      parts.push(text(x(cell.col) + S / 2, y(cell.row) + S / 2, index, ink, 14, 700));
-    });
-    CLASSIC_TRACK.forEach((cell, index) => parts.push(arrow(cell, CLASSIC_TRACK[(index + 1) % 52]!)));
-    // Each seat: dashed turn-in cell, lane steps 51–55 with arrows, finish 56.
+    // Shared route: one closed clockwise loop with an arrow on every step.
+    parts.push(routeLine(CLASSIC_TRACK, INK.dark, 6, 0.22, true));
+    CLASSIC_TRACK.forEach((cell, index) => parts.push(arrow(cell, CLASSIC_TRACK[(index + 1) % CLASSIC_TRACK.length]!, "#3A404D", 8)));
+    // Each seat's private finish: entry → lane → home, in its colour.
     for (let seat = 0; seat < CLASSIC_SEATS; seat++) {
       const p = PLAYER_IDENTITIES[seat]!;
       const { track, lane, finish } = classicSeatPath(seat);
-      const entry = track[track.length - 1]!;
-      parts.push(`<rect x="${x(entry.col) + 2}" y="${y(entry.row) + 2}" width="${S - 4}" height="${S - 4}" rx="6" fill="none" stroke="${p.rim}" stroke-width="3" stroke-dasharray="5 3"/>`);
-      parts.push(arrow(entry, lane[0]!));
-      lane.forEach((c, i) => {
-        parts.push(text(x(c.col) + S / 2, y(c.row) + S / 2, 51 + i, INK.dark, 13, 700));
-        parts.push(arrow(c, i + 1 < lane.length ? lane[i + 1]! : finish));
-      });
-      parts.push(`<circle cx="${x(finish.col) + S / 2}" cy="${y(finish.row) + S / 2}" r="${S * 0.36}" fill="#FFFFFF" stroke="${p.rim}" stroke-width="2.5"/>`);
-      parts.push(text(x(finish.col) + S / 2, y(finish.row) + S / 2, 56, INK.dark, 13, 800));
+      const entry = track[50]!;
+      const tail = [entry, ...lane, finish];
+      parts.push(routeLine(tail, p.rim, 5, 0.55));
+      for (let i = 0; i + 1 < tail.length; i++) parts.push(arrow(tail[i]!, tail[i + 1]!, p.rim, 7));
+      parts.push(outline(entry, p.rim, true));
+      parts.push(outline(track[0]!, INK.dark, false));
+      lane.forEach((c, i) => parts.push(pill(c, 51 + i, p.rim, 12)));
+      parts.push(`<circle cx="${cx(finish)}" cy="${cy(finish)}" r="16" fill="#FFFFFF" stroke="${p.rim}" stroke-width="2.5"/>`, text(cx(finish), cy(finish), 56, INK.dark, 12, 800));
     }
+    CLASSIC_TRACK.forEach((cell, index) => parts.push(pill(cell, index, BOARD_SURFACES.line, 12)));
+    parts.push(clockwiseBadge(x(14) + S / 2 - 6, y(14) + S / 2 - 6));
+    title = "Classic 4-player board — reference (clockwise)";
+    subtitle = "Every shared-track cell is numbered with its absolute index 0–51. Lanes show seat steps 51–55; ● 56 is home.";
+    legend.push(
+      "↻ Clockwise route with one arrow per step. Solid outline = start (step 0, safe).",
+      "Gold ★ badge = safe cell (4 starts + 4 stars). Dashed outline = home entry (step 50).",
+      ...Array.from({ length: CLASSIC_SEATS }, (_, s) => `${PLAYER_IDENTITIES[s]!.name}: ${describeSeat(s)}`),
+    );
   } else {
     const p = PLAYER_IDENTITIES[focus]!;
-    // Highlight start and home entry.
-    const start = CLASSIC_TRACK[CLASSIC_START_INDEX[focus]!]!;
-    const entry = CLASSIC_TRACK[classicHomeEntryIndex(focus)]!;
-    parts.push(`<rect x="${x(start.col) - 1}" y="${y(start.row) - 1}" width="${S + 2}" height="${S + 2}" rx="7" fill="none" stroke="${INK.dark}" stroke-width="3"/>`);
-    parts.push(`<rect x="${x(entry.col) - 1}" y="${y(entry.row) - 1}" width="${S + 2}" height="${S + 2}" rx="7" fill="none" stroke="${p.rim}" stroke-width="3" stroke-dasharray="5 3"/>`);
-    for (const [key, step] of stepAt) {
-      const [row, col] = key.slice(1).split("c").map(Number) as [number, number];
-      const isStart = step === 0;
-      const ink = isStart || step > 50 ? (step > 50 ? INK.dark : p.ink) : INK.dark;
-      parts.push(text(x(col) + S / 2, y(row) + S / 2, step, ink, 14, 700));
-    }
-    const full = [...path!.track, ...path!.lane];
-    for (let i = 0; i + 1 < full.length; i++) parts.push(arrow(full[i]!, full[i + 1]!));
-    parts.push(arrow(full[full.length - 1]!, path!.finish));
-    const f = path!.finish;
-    parts.push(`<circle cx="${x(f.col) + S / 2}" cy="${y(f.row) + S / 2}" r="${S * 0.38}" fill="#FFFFFF" stroke="${p.rim}" stroke-width="3"/>`);
-    parts.push(text(x(f.col) + S / 2, y(f.row) + S / 2, 56, INK.dark, 14, 800));
+    const { track, lane, finish } = classicSeatPath(focus);
+    const journey = [...track, ...lane, finish];
+    parts.push(routeLine(journey, p.body, 12, 0.45));
+    for (let i = 0; i + 1 < journey.length; i++) parts.push(arrow(journey[i]!, journey[i + 1]!, p.rim, 9));
+    parts.push(outline(track[0]!, INK.dark, false), outline(track[50]!, p.rim, true));
+    journey.slice(0, -1).forEach((c, step) => parts.push(pill(c, step, step === 0 || step === 50 ? INK.dark : p.rim, 12)));
+    parts.push(`<circle cx="${cx(finish)}" cy="${cy(finish)}" r="20" fill="#FFFFFF" stroke="${p.rim}" stroke-width="3"/>`, text(cx(finish), cy(finish), 56, INK.dark, 14, 800));
+    const label = (c: Cell, value: string, dx: number, dy: number) =>
+      `<text x="${cx(c) + dx}" y="${cy(c) + dy}" font-size="10" font-weight="800" text-anchor="middle" fill="${INK.dark}" paint-order="stroke" stroke="#FFFFFF" stroke-width="3">${value}</text>`;
+    parts.push(label(track[0]!, "START", 0, 21), label(track[50]!, "ENTRY", 0, -15), label(finish, "HOME", 0, -24));
+    parts.push(clockwiseBadge(x(14) + S / 2 - 6, y(14) + S / 2 - 6));
+    title = `${p.name} — complete journey (seat ${focus + 1}, ${SEAT_POSITION[focus]})`;
+    subtitle = "Opening with a 6 places the token on START (step 0). Every later step is one arrow. Home needs an exact roll.";
+    legend.push(
+      `Start ${cellKey(track[0]!)} · first moves ${track.slice(1, 6).map(cellKey).join(", ")}`,
+      `Last track cells ${track.slice(46, 51).map(cellKey).join(", ")} · home entry ${cellKey(track[50]!)} (step 50)`,
+      `Home lane ${lane.map(cellKey).join(", ")} (steps 51–55) · home = centre ${cellKey(finish)} (step 56)`,
+      "Distance after opening: 50 track moves + 5 lane moves + 1 move into home = 56 dice steps.",
+      "Identical for every colour. The cell behind the start is never visited (faded).",
+    );
   }
 
-  const title =
-    focus < 0
-      ? "Classic board reference — clockwise"
-      : `Seat ${focus + 1} · ${PLAYER_IDENTITIES[focus]!.name} — numbered path, steps 0–56`;
-  const legend =
-    focus < 0
-      ? "Track: absolute index 0–51 · lanes 51–55 and finish 56: seat steps · dashed: turn-in (step 50) · ★ / coloured: safe"
-      : "0 = start (solid outline) · 1–50 shared track · 50 = turn-in cell (dashed) · 51–55 home lane · 56 = finish (exact roll)";
-  const width = SIZE + PAD * 2;
-  const height = HEAD + SIZE + FOOT;
+  parts.push(...safeBadges);
+  const legendY = HEAD + SIZE + 30;
   return [
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="Inter, system-ui, sans-serif">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="Inter, system-ui, -apple-system, Segoe UI, sans-serif">`,
     `<rect width="100%" height="100%" fill="#FFFFFF"/>`,
-    text(width / 2, 22, title, INK.dark, 16, 700),
+    text(width / 2, 26, title, INK.dark, 19, 800),
+    text(width / 2, 52, subtitle, "#5C6370", 12.5, 500),
     ...parts,
-    text(width / 2, HEAD + SIZE + 28, legend, "#5C6370", 12, 500),
-    text(width / 2, HEAD + SIZE + 48, "DRAFT — pending approval before the rules engine is built", "#C8102E", 12, 700),
+    ...legend.map((line, i) => text(PAD, legendY + i * 19, line, i === 0 ? INK.dark : "#3A404D", 12, i === 0 ? 700 : 500, "start")),
+    text(width - PAD, height - 14, "REFERENCE v1 — awaiting approval", "#C8102E", 11, 800, "end"),
     "</svg>",
   ].join("\n");
 }

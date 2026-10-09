@@ -33,38 +33,84 @@ The previous implementation (preserved on `backup/old-ludo-at-reset`) used **pos
 
 The final pushed version of the old code (counter-clockwise) had the same 58 count, with a different inconsistency: seat 1's step 51 was r6c2, followed by a diagonal jump to r7c1.
 
-**Convention (all boards):** opening with a 6 places the token on its start cell as **step 0**. Every later roll adds exactly its value. A token occupies steps 0–50 on the shared track, 51–55 in its lane, and 56 at the finish. Finishing needs the rolls after opening to total **exactly 56**. Counting the start cell, a token stands on 57 positions along the way. Every seat's path is the same shape rotated by 90°, so all four distances are equal by construction. This is tested, and the step-by-step mapping is in [generated/classic-reference.md](generated/classic-reference.md).
+## Indexing model (chosen and applied everywhere)
+
+**One model:** a token is either in **base**, or at **step 0–56**. Step 0 is its start cell, steps 0–50 are the shared track, 51–55 are its private home lane, and **56 is home** (its centre triangle). The rules engine, both renderers and every test use this model through `@ludo/board-layouts/topology` (`CLASSIC_TOPOLOGY.finishStep = 56`).
+
+| Question | Answer |
+| --- | --- |
+| Does leaving base count as a movement step? | **No.** Opening is a move that uses the 6, but it only *places* the token on its start cell (step 0); it covers no distance. The 6 is consumed by opening, and the bonus roll for the 6 still applies. |
+| Shared-track positions visited | **51**: the start cell plus 50 further cells (steps 0–50). The one track cell a token never visits is the cell directly behind its own start (r6c0 for Crimson), because the token turns into its lane at the arm tip just before reaching it. |
+| Private home-lane positions | **5** (steps 51–55): the five coloured cells printed on each arm. |
+| Does the centre count as a position? | **Yes, one.** Moving from the last lane cell into the centre is one step, and it lands exactly on 56. |
+| Dice steps from start to finish | **56** = 50 track moves + 5 lane moves + 1 move into home. The rolls after opening must total exactly 56; a roll that would pass 56 is not a legal move for that token. |
+| Positions a token occupies, counting its start | 57 (0…56). Sources that say "57 squares" count positions; this model counts moves. Both describe the same physical path. |
+
+**Why 56 and not 58.** A finish at 58 needs two positions that don't exist on a traditional board:
+
+1. A 52nd track step onto the cell behind the token's own start. That forces a detour (up to r6c0, then diagonally back to r7c1) past the lane mouth at r7c0.
+2. A 6th lane cell inside the 3 × 3 centre square, which on a printed board is the home triangle.
+
+The old engine's 58 came from counting both. The new convention isn't chosen to match or avoid old tests; it is the count of moves along the printed board, and the reviewed-coordinate tests pin it cell by cell.
 
 ## Diagrams for approval
 
-| Diagram | Shows |
-| --- | --- |
-| [classic-board-concept.svg](generated/classic-board-concept.svg) | the visual target: flat, pastel-stepped bases, crisp white track, clockwise chevrons, drawn from the real layout |
-| [classic-reference.md](generated/classic-reference.md) | every seat's step → cell table (0–56) and a complete sample journey per colour |
-| [classic-board-overview.svg](generated/classic-board-overview.svg) | **the reference diagram**: absolute track 0–51 with an arrow on every step, starts, stars, each seat's dashed turn-in, lanes numbered 51–55, finish 56 |
-| [classic-path-seat1-crimson.svg](generated/classic-path-seat1-crimson.svg) | seat 1's numbered path, steps 0–56 |
-| [classic-path-seat2-royal-blue.svg](generated/classic-path-seat2-royal-blue.svg) | seat 2 |
-| [classic-path-seat3-emerald.svg](generated/classic-path-seat3-emerald.svg) | seat 3 |
-| [classic-path-seat4-golden.svg](generated/classic-path-seat4-golden.svg) | seat 4 |
+PNG previews (for review) are rendered from the SVG sources (scalable, committed) with `npm run design:png`.
+
+### 1 · Complete board overview
+
+![Classic board overview](generated/png/classic-board-overview.png)
+
+Every shared-track cell carries its absolute number 0–51, with a bold arrow on each of the 52 clockwise steps. Coloured cells with a solid outline are the starts; gold ★ badges mark the 8 safe cells; dashed outlines are each colour's home entry; lanes are numbered 51–55, and ● 56 is home. SVG: [classic-board-overview.svg](generated/classic-board-overview.svg).
+
+### 2 · Crimson journey
+
+![Crimson journey](generated/png/classic-path-seat1-crimson.png)
+
+### 3 · Royal Blue journey
+
+![Royal Blue journey](generated/png/classic-path-seat2-royal-blue.png)
+
+### 4 · Emerald journey
+
+![Emerald journey](generated/png/classic-path-seat3-emerald.png)
+
+### 5 · Golden Yellow journey
+
+![Golden Yellow journey](generated/png/classic-path-seat4-golden.png)
+
+SVG sources: [crimson](generated/classic-path-seat1-crimson.svg) · [royal blue](generated/classic-path-seat2-royal-blue.svg) · [emerald](generated/classic-path-seat3-emerald.svg) · [golden](generated/classic-path-seat4-golden.svg). The full step → cell table for all four colours is in [classic-reference.md](generated/classic-reference.md).
+
+### Reviewed movement coordinates
+
+| | Crimson | Royal Blue | Emerald | Golden Yellow |
+| --- | --- | --- | --- | --- |
+| Start (step 0) | r6c1 | r1c8 | r8c13 | r13c6 |
+| Steps 1–5 | r6c2, r6c3, r6c4, r6c5, r5c6 | r2c8, r3c8, r4c8, r5c8, r6c9 | r8c12, r8c11, r8c10, r8c9, r9c8 | r12c6, r11c6, r10c6, r9c6, r8c5 |
+| Corner cells (steps 4, 10, 12, 17, 23, 25, 30, 36, 38, 43, 49) | r6c5, r0c6, r0c8, r5c8, r6c14, r8c14, r8c9, r14c8, r14c6, r9c6, r8c0 | r5c8, r6c14, r8c14, r8c9, r14c8, r14c6, r9c6, r8c0, r6c0, r6c5, r0c6 | r8c9, r14c8, r14c6, r9c6, r8c0, r6c0, r6c5, r0c6, r0c8, r5c8, r6c14 | r9c6, r8c0, r6c0, r6c5, r0c6, r0c8, r5c8, r6c14, r8c14, r8c9, r14c8 |
+| Steps 46–50 | r8c3, r8c2, r8c1, r8c0, **r7c0** | r3c6, r2c6, r1c6, r0c6, **r0c7** | r6c11, r6c12, r6c13, r6c14, **r7c14** | r11c8, r12c8, r13c8, r14c8, **r14c7** |
+| Home lane (51–55) | r7c1 → r7c5 | r1c7 → r5c7 | r7c13 → r7c9 | r13c7 → r9c7 |
+| Home (56) | r7c6 (left triangle) | r6c7 (top) | r7c8 (right) | r8c7 (bottom) |
+| Never visited | r6c0 | r0c8 | r8c14 | r14c6 |
+| Safe cells passed (steps 0, 8, 13, 21, 26, 34, 39, 47) | r6c1, r2c6, r1c8, r6c12, r8c13, r12c8, r13c6, r8c2 | r1c8, r6c12, r8c13, r12c8, r13c6, r8c2, r6c1, r2c6 | r8c13, r12c8, r13c6, r8c2, r6c1, r2c6, r1c8, r6c12 | r13c6, r8c2, r6c1, r2c6, r1c8, r6c12, r8c13, r12c8 |
+
+The diagonal corner crossings are steps 4→5, 17→18, 30→31 and 43→44 for every colour. These are the traditional turns around the centre square, not shortcuts.
 
 **Verified by tests:**
 
-- the loop is clockwise (positive signed area in screen coordinates);
-- rotating seat k's entire path 90° clockwise gives seat k+1's path exactly;
-- every step is to an adjacent cell, with exactly 4 diagonal corner crossings;
-- lanes are private;
-- starts and stars are at the cells above.
+- `classicReviewedPaths.test.ts` (39 tests) pins every value in the table above as hand-written literals. It also checks equal distance (56), adjacency on every step, exactly those four diagonals, no repeated cell, never visiting the cell behind the start, and never entering an opponent's lane. Reintroducing the old 58-model detour fails 10 of them.
+- `classicSquareLayout.test.ts` checks clockwise orientation (signed area) and 90° rotational symmetry between seats.
 
-**Verified visually:** the concept, the reference overview and all four seat paths were rendered in Chromium and inspected.
+**Verified visually:** the overview and all four journey PNGs were rendered in Chromium and inspected step by step against the table above.
 
 ### Approval checklist
 
-- [ ] Seat placement (crimson TL, blue TR, emerald BR, golden BL) and clockwise turn order
-- [ ] Start cells r6c1 / r1c8 / r8c13 / r13c6
-- [ ] Star cells r2c6 / r6c12 / r12c8 / r8c2 (8 steps after each start)
-- [ ] Turn-in at the arm tip (r7c0 / r0c7 / r7c14 / r14c7), lane of 5, finish at step 56 with an exact roll
-- [ ] Position convention: step 0 = start after opening, finish at 56 (replacing the old 58)
-- [ ] Visual direction of the [concept](generated/classic-board-concept.svg)
+- [ ] Diagram 1: board overview (every cell, clockwise arrows, starts, safe cells, entries, lanes, home)
+- [ ] Diagrams 2–5: the four complete journeys
+- [ ] Seat placement: Crimson top-left, Royal Blue top-right, Emerald bottom-right, Golden Yellow bottom-left; clockwise turn order
+- [ ] Reviewed coordinates table (starts, first moves, corners, last moves, entries, lanes, home, safe cells)
+- [ ] Indexing model: base, then steps 0–56; opening places the token on step 0; 56 dice steps to home with an exact roll (replacing the old 58)
+- [ ] Visual direction of the [concept](generated/classic-board-concept.svg) ([PNG](generated/png/classic-board-concept.png))
 - [x] 2-player games: rectangle by default; the square with diagonally opposite seats (1 and 3) as an option (approved provisionally)
 
 ## Visual specification

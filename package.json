@@ -25,7 +25,8 @@
     "lint": "eslint .",
     "clean": "rm -rf packages/*/dist apps/*/dist",
     "design:generate": "tsx --conditions=source scripts/design-artifacts.ts",
-    "test:repo": "vitest run --config scripts/vitest.config.ts"
+    "test:repo": "vitest run --config scripts/vitest.config.ts",
+    "design:png": "node scripts/render-png.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
