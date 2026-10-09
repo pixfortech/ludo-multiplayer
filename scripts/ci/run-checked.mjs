@@ -42,7 +42,8 @@ child.stderr.on("data", (chunk) => {
 });
 child.on("close", (code, signal) => {
   // Strip ANSI colour codes before matching.
-  const plain = output.replace(/\u001b\[[0-9;]*m/g, "");
+  const ESC = String.fromCharCode(27);
+  const plain = output.split(ESC).map((part, i) => (i === 0 ? part : part.replace(/^\[[0-9;]*m/, ""))).join("");
   const problems = FORBIDDEN.filter(({ pattern }) => pattern.test(plain)).map(({ reason, pattern }) => {
     const line = plain.split(/\r?\n/).find((l) => pattern.test(l))?.trim() ?? "";
     return `  • ${reason}: ${line.slice(0, 200)}`;
