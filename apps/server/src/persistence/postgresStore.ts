@@ -28,6 +28,8 @@ import {
 const MAX_CODE_ATTEMPTS = 8;
 const DEFAULT_EVENT_LIMIT = 100;
 const MAX_EVENT_LIMIT = 500;
+/** Raised by the rooms_status_transition trigger (migration 0002). */
+const INVALID_TRANSITION_SQLSTATE = "LD001";
 
 interface PgError {
   code?: string;
@@ -135,6 +137,9 @@ export class PostgresGameStore implements GameStore {
       return result;
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
+      if ((error as PgError)?.code === INVALID_TRANSITION_SQLSTATE) {
+        throw new StoreError("invalid-transition", (error as Error).message);
+      }
       throw error;
     } finally {
       client.release();
@@ -172,6 +177,7 @@ export class PostgresGameStore implements GameStore {
     } catch (error) {
       if (isUniqueViolation(error, "players_active_seat_idx")) throw new StoreError("seat-taken", `Seat ${p.seat} is taken`);
       if (isUniqueViolation(error, "players_active_colour_idx")) throw new StoreError("colour-taken", `Colour ${p.colour} is taken`);
+      if (isUniqueViolation(error, "players_active_name_idx")) throw new StoreError("name-taken", "That name is already used in this room");
       throw error;
     }
   }
@@ -222,35 +228,47 @@ export class PostgresGameStore implements GameStore {
     return rows[0] ? toRoom(rows[0]) : null;
   }
 
+  /** Validates and applies a patch to a locked room, bumping its version. */
+  private async applyPatch(client: PoolClient, roomId: string, patch: RoomPatch): Promise<RoomRecord> {
+    if (patch.hostPlayerId !== undefined) {
+      const { rows } = await client.query("SELECT 1 FROM players WHERE id = $1 AND room_id = $2 AND left_at IS NULL", [patch.hostPlayerId, roomId]);
+      if (rows.length === 0) throw new StoreError("not-found", "New host is not an active member of this room");
+    }
+    if (patch.maxPlayers !== undefined) {
+      const { rows } = await client.query("SELECT count(*)::int AS n FROM players WHERE room_id = $1 AND left_at IS NULL", [roomId]);
+      if (rows[0].n > patch.maxPlayers) throw new StoreError("capacity-conflict", `The room already has ${rows[0].n} players`);
+    }
+    const effective: RoomPatch = patch.status === "archived" && patch.archivedAt === undefined ? { ...patch, archivedAt: new Date() } : patch;
+    const columns: Record<keyof RoomPatch, string> = {
+      name: "name",
+      status: "status",
+      settings: "settings",
+      hostPlayerId: "host_player_id",
+      maxPlayers: "max_players",
+      expiresAt: "expires_at",
+      archivedAt: "archived_at",
+    };
+    const sets: string[] = [];
+    const params: unknown[] = [];
+    for (const [key, column] of Object.entries(columns) as [keyof RoomPatch, string][]) {
+      if (effective[key] === undefined) continue;
+      params.push(key === "settings" ? JSON.stringify(effective[key]) : effective[key]);
+      sets.push(`${column} = $${params.length + 1}`);
+    }
+    return this.bumpRoom(client, roomId, sets.join(", "), params);
+  }
+
   async updateRoom(roomId: string, expectedRoomVersion: number, patch: RoomPatch) {
     return this.tx(async (client) => {
       await this.lockRoom(client, roomId, expectedRoomVersion);
-      if (patch.hostPlayerId !== undefined) {
-        const { rows } = await client.query("SELECT 1 FROM players WHERE id = $1 AND room_id = $2 AND left_at IS NULL", [patch.hostPlayerId, roomId]);
-        if (rows.length === 0) throw new StoreError("not-found", "New host is not an active member of this room");
-      }
-      const columns: Record<keyof RoomPatch, string> = {
-        name: "name",
-        status: "status",
-        settings: "settings",
-        hostPlayerId: "host_player_id",
-        expiresAt: "expires_at",
-        archivedAt: "archived_at",
-      };
-      const sets: string[] = [];
-      const params: unknown[] = [];
-      for (const [key, column] of Object.entries(columns) as [keyof RoomPatch, string][]) {
-        if (patch[key] === undefined) continue;
-        params.push(key === "settings" ? JSON.stringify(patch[key]) : patch[key]);
-        sets.push(`${column} = $${params.length + 1}`);
-      }
-      return this.bumpRoom(client, roomId, sets.join(", "), params);
+      return this.applyPatch(client, roomId, patch);
     });
   }
 
   async addPlayer(roomId: string, expectedRoomVersion: number, player: NewPlayer) {
     return this.tx(async (client) => {
       const room = await this.lockRoom(client, roomId, expectedRoomVersion);
+      if (room.status !== "lobby") throw new StoreError("game-already-started", "Players can only join a room in the lobby");
       const { rows } = await client.query("SELECT count(*)::int AS n FROM players WHERE room_id = $1 AND left_at IS NULL", [roomId]);
       if (rows[0].n >= room.maxPlayers) throw new StoreError("room-full", "The room is full");
       const record = await this.insertPlayer(client, roomId, player);
@@ -275,7 +293,7 @@ export class PostgresGameStore implements GameStore {
     await this.pool.query("UPDATE players SET connection_status = $2, last_seen_at = $3 WHERE id = $1 AND left_at IS NULL", [playerId, status, at]);
   }
 
-  async markPlayerLeft(roomId: string, expectedRoomVersion: number, playerId: string) {
+  async markPlayerLeft(roomId: string, expectedRoomVersion: number, playerId: string, patch: RoomPatch = {}) {
     return this.tx(async (client) => {
       await this.lockRoom(client, roomId, expectedRoomVersion);
       const { rowCount } = await client.query(
@@ -283,7 +301,7 @@ export class PostgresGameStore implements GameStore {
         [playerId, roomId],
       );
       if (rowCount === 0) throw new StoreError("not-found", "Player is not an active member of this room");
-      return this.bumpRoom(client, roomId);
+      return this.applyPatch(client, roomId, patch); // a new host must still be active after this player left
     });
   }
 

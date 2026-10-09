@@ -3,8 +3,36 @@
 
 import type { RankingMode, TurnTimerSeconds } from "./settings.js";
 
-/** lobby → playing ⇄ paused → finished; abandoned/archived are terminal housekeeping states. */
+/**
+ * Stored room status. lobby → playing ⇄ paused → finished → archived; a room
+ * that ends without a result is abandoned (then archived). See
+ * ROOM_STATUS_TRANSITIONS and docs/architecture/rooms.md.
+ */
 export type RoomStatus = "lobby" | "playing" | "paused" | "finished" | "abandoned" | "archived";
+
+/**
+ * Every allowed status change. Anything else is rejected by the room service,
+ * by both stores, and by a database trigger (migration 0002).
+ */
+export const ROOM_STATUS_TRANSITIONS: Readonly<Record<RoomStatus, readonly RoomStatus[]>> = {
+  lobby: ["playing", "abandoned"],
+  playing: ["paused", "finished", "abandoned"],
+  paused: ["playing", "abandoned"],
+  finished: ["archived"],
+  abandoned: ["archived"],
+  archived: [],
+};
+
+export function canTransitionRoom(from: RoomStatus, to: RoomStatus): boolean {
+  return ROOM_STATUS_TRANSITIONS[from].includes(to);
+}
+
+/**
+ * The lifecycle phase shown to people. It is derived, never stored: "waiting"
+ * and "ready" are both the stored status "lobby", split by whether enough
+ * players have joined to start.
+ */
+export type RoomLifecycle = "waiting" | "ready" | "playing" | "paused" | "finished" | "abandoned" | "archived";
 export type RoomVisibility = "private" | "public";
 export type ConnectionStatus = "connected" | "disconnected" | "left";
 /** "remote" = own device; "local" is reserved for future same-screen (pass-and-play) seats. */
@@ -38,4 +66,70 @@ export interface RoomSettings {
   /** Reserved; timers are not enforced yet. */
   turnTimerSeconds: TurnTimerSeconds;
   rules: RoomRuleOptions;
+}
+
+/** Why a room cannot be joined right now (preview and join use the same reasons). */
+export type JoinBlockReason = "room-full" | "game-already-started" | "room-closed";
+
+export interface ColourAvailability {
+  colour: string;
+  colourName: string;
+  seat: number;
+  taken: boolean;
+  /** Display name of the player holding it (null when free). */
+  takenBy: string | null;
+}
+
+/**
+ * Read-only view of a room for someone holding its code. Contains no ids,
+ * credentials, versions or other internal data.
+ */
+export interface RoomPreview {
+  code: string;
+  name: string | null;
+  status: RoomStatus;
+  lifecycle: RoomLifecycle;
+  maxPlayers: number;
+  joinedCount: number;
+  colours: ColourAvailability[];
+  availableColours: string[];
+  occupiedSeats: number[];
+  hostName: string | null;
+  joinable: boolean;
+  /** Set when joinable is false. */
+  blockedReason: JoinBlockReason | null;
+}
+
+/** A member of a room, as other members see them. */
+export interface RoomPlayerView {
+  playerId: string;
+  displayName: string;
+  seat: number;
+  colour: string;
+  colourName: string;
+  isHost: boolean;
+  connectionStatus: ConnectionStatus;
+  joinedAt: string;
+}
+
+/** Full room state for its members. */
+export interface RoomView {
+  roomId: string;
+  code: string;
+  name: string | null;
+  status: RoomStatus;
+  lifecycle: RoomLifecycle;
+  hostPlayerId: string;
+  maxPlayers: number;
+  settings: RoomSettings;
+  /** Pass back as expectedRoomVersion for optimistic updates. */
+  roomVersion: number;
+  players: RoomPlayerView[];
+  canStart: boolean;
+}
+
+/** Returned once, to the player who created or joined. The secret is never shown again. */
+export interface PlayerSessionCredential {
+  playerId: string;
+  secret: string;
 }

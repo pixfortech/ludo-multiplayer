@@ -1,4 +1,4 @@
-# Persistence (Phase 2A)
+# Persistence (Phases 2A–2B)
 
 Rooms, players, game sessions and an action log are stored in **PostgreSQL**. The rules engine (`@ludo/game-engine`) stays the only source of gameplay. The server stores its validated state snapshot and the authoritative actions that produced it.
 
@@ -20,10 +20,28 @@ Rooms, players, game sessions and an action log are stored in **PostgreSQL**. Th
 | `game_events` | action log: seq, player, action type, client request id, payload, resulting state version, time | `(room_id, seq)` unique; `(room_id, player_id, request_id)` unique → **idempotency** |
 | `schema_migrations` | applied migration ids and checksums | — |
 
+## Migration `0002_room_lifecycle` (Phase 2B)
+
+- `players_active_name_idx`: display names are unique among a room's active players, ignoring ASCII case. The room service also compares full Unicode case- and width-folded names.
+- **Trigger `rooms_status_transition`:**
+  - status changes must follow `ROOM_STATUS_TRANSITIONS` ([rooms.md](rooms.md#lifecycle));
+  - new rooms start in the lobby;
+  - violations raise SQLSTATE `LD001`, which the store reports as `invalid-transition`.
+- **`rooms_archived_consistent`:** `archived_at` is set if and only if the status is `archived`. Archiving through the store sets it automatically.
+- **`rooms_settings_max_players`:** `settings.maxPlayers` equals `max_players`.
+
+`migrationsImmutable.test.ts` pins every migration's checksum, so an applied migration can't be edited by accident.
+
 ## Write paths and guarantees
 
 - **Create room:** room and host are inserted in one transaction. On a code collision (unique violation) a fresh code is drawn, up to 8 attempts, then `room-code-exhausted`.
-- **Room changes** (`addPlayer`, `markPlayerLeft`, `updateRoom`): each locks the room row, checks `room_version` (else `version-conflict`), writes, and increments the version, all in one transaction. Seat and colour clashes raise `seat-taken` / `colour-taken`; a full room raises `room-full`.
+- **Room changes** (`addPlayer`, `markPlayerLeft`, `updateRoom`): each locks the room row, checks `room_version` (else `version-conflict`), writes, and increments the version, all in one transaction.
+  - **Join errors:**
+    - seat, colour and name clashes raise `seat-taken`, `colour-taken` and `name-taken`;
+    - a full room raises `room-full`;
+    - a room outside the lobby raises `game-already-started`.
+  - **Leaving:** `markPlayerLeft` accepts a room patch (a new host, or `abandoned`) that is applied in the same transaction.
+  - **Updates:** `updateRoom` refuses a capacity below the active members (`capacity-conflict`).
 - **Start game:** the session row, event #1 and room status `playing` are written in one transaction.
 - **Commit a game action** (`commitGameAction`), in one transaction:
   1. Reject a `(player, requestId)` that was already committed (`duplicate-request`).
@@ -56,9 +74,9 @@ Power-loss durability depends on the host's `fsync` behaviour and isn't covered 
 ## Stores
 
 - `PostgresGameStore`: production.
-- `MemoryGameStore`: same contract, for fast unit tests of higher layers. **Not durable**, and never used when `DATABASE_URL` is set. The server will refuse to run multiplayer without a database (Batch 2B).
+- `MemoryGameStore`: same contract, for fast unit tests of higher layers. **Not durable**, and never constructed by the server. The server refuses to start without a reachable, fully migrated database ([rooms.md](rooms.md#startup-safety)).
 
-Both pass the same 22-test contract suite (`storeContract.ts`).
+Both pass the same 28-test contract suite (`storeContract.ts`).
 
 ## Local setup
 
@@ -69,7 +87,7 @@ cp .env.example .env                      # DATABASE_URL for the compose databas
 # Option B — any PostgreSQL 14+: create a database and set DATABASE_URL
 
 export DATABASE_URL=postgres://ludo:ludo_dev_only@127.0.0.1:5432/ludo
-npm run db:migrate                        # applies pending migrations (safe to repeat)
+npm run db:migrate                        # applies pending migrations (safe to repeat; required before starting the server)
 ```
 
 Production: `npm run db:migrate:prod -w @ludo/server` (compiled), before starting the server.
@@ -84,4 +102,11 @@ Tests **never** use `DATABASE_URL`.
 | `TEST_DATABASE_URL` set | A uniquely named database is created on that server and dropped afterwards. Crash tests skip, with a warning. |
 | Neither | PostgreSQL tests skip with a warning. Set `REQUIRE_POSTGRES_TESTS=1` in CI to make this a failure. |
 
-Suites: `migrate.test.ts` (6), `postgresStore.test.ts` (contract 22 + recovery 2 + integrity 4), `memoryStore.test.ts` (contract 22), plus the engine's `sessionSerializer.test.ts` (17).
+Suites:
+
+- **Persistence:**
+  - `migrate.test.ts` (7) and `migrationsImmutable.test.ts` (2);
+  - `postgresStore.test.ts`: contract 28, recovery 2, integrity 4;
+  - `memoryStore.test.ts`: contract 28.
+- **Room service (2B):** see [rooms.md](rooms.md#tests).
+- **Engine:** `sessionSerializer.test.ts` (17).

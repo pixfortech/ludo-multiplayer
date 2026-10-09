@@ -117,7 +117,7 @@ export function runGameStoreContract(name: string, setup: () => Promise<{ store:
       });
 
       it("rejects stale versions, taken seats, taken colours and full rooms", async () => {
-        const { room } = await store.createRoom(newRoom({ maxPlayers: 2 }), newPlayer(0, "crimson"), generateRoomCode);
+        const { room } = await store.createRoom(newRoom({ maxPlayers: 2, settings: { ...SETTINGS, maxPlayers: 2 } }), newPlayer(0, "crimson"), generateRoomCode);
         await expectStoreError(store.addPlayer(room.id, 5, newPlayer(1, "royal-blue")), "version-conflict");
         await expectStoreError(store.addPlayer(room.id, 0, newPlayer(0, "royal-blue")), "seat-taken");
         await expectStoreError(store.addPlayer(room.id, 0, newPlayer(1, "crimson")), "colour-taken");
@@ -328,6 +328,70 @@ export function runGameStoreContract(name: string, setup: () => Promise<{ store:
         const joins = await Promise.allSettled([1, 2, 3].map((seat) => store.addPlayer(room.id, 0, newPlayer(seat, "royal-blue"))));
         expect(joins.filter((r) => r.status === "fulfilled")).toHaveLength(1);
         expect(await store.listPlayers(room.id)).toHaveLength(2);
+      });
+    });
+
+    describe("room lifecycle guarantees (2B)", () => {
+      it("keeps active display names unique, ignoring ASCII case, and frees a name on leave", async () => {
+        const { room } = await store.createRoom(newRoom(), newPlayer(0, "crimson", "Aman"), generateRoomCode);
+        await expectStoreError(store.addPlayer(room.id, 0, newPlayer(1, "royal-blue", "aMAN")), "name-taken");
+        const guest = newPlayer(1, "royal-blue", "Ben");
+        await store.addPlayer(room.id, 0, guest);
+        await store.markPlayerLeft(room.id, 1, guest.id);
+        await store.addPlayer(room.id, 2, newPlayer(2, "emerald", "ben"));
+      });
+
+      it("only allows status changes along the lifecycle", async () => {
+        const { room } = await store.createRoom(newRoom(), newPlayer(0, "crimson"), generateRoomCode);
+        await expectStoreError(store.updateRoom(room.id, 0, { status: "paused" }), "invalid-transition");
+        await expectStoreError(store.updateRoom(room.id, 0, { status: "archived" }), "invalid-transition");
+        expect(await store.getRoom(room.id)).toMatchObject({ status: "lobby", roomVersion: 0 });
+        const abandoned = await store.updateRoom(room.id, 0, { status: "abandoned" });
+        expect(abandoned).toMatchObject({ status: "abandoned", archivedAt: null });
+        const archived = await store.updateRoom(room.id, 1, { status: "archived" });
+        expect(archived.status).toBe("archived");
+        expect(archived.archivedAt).toBeInstanceOf(Date);
+        await expectStoreError(store.updateRoom(room.id, 2, { status: "lobby" }), "invalid-transition");
+      });
+
+      it("rejects an invalid status change in a game commit without committing anything", async () => {
+        const { room, host, state } = await seededRoom(store);
+        await store.startGame(room.id, room.roomVersion, state, { playerId: host.id, actionType: "game:start", requestId: null, payload: {} });
+        await expectStoreError(
+          store.commitGameAction({ roomId: room.id, expectedStateVersion: 0, state: advance(state), event: { playerId: host.id, actionType: "game:roll", requestId: "r", payload: {} }, roomStatus: "archived" }),
+          "invalid-transition",
+        );
+        expect((await store.getGameSession(room.id))!.stateVersion).toBe(0);
+        expect(await store.listEvents(room.id)).toHaveLength(1);
+      });
+
+      it("only adds players in the lobby", async () => {
+        const { room, host, state } = await seededRoom(store);
+        const { room: started } = await store.startGame(room.id, room.roomVersion, state, { playerId: host.id, actionType: "game:start", requestId: null, payload: {} });
+        await expectStoreError(store.addPlayer(room.id, started.roomVersion, newPlayer(1, "royal-blue")), "game-already-started");
+      });
+
+      it("never shrinks capacity below the active members", async () => {
+        const { room } = await store.createRoom(newRoom(), newPlayer(0, "crimson"), generateRoomCode);
+        await store.addPlayer(room.id, 0, newPlayer(1, "royal-blue"));
+        await store.addPlayer(room.id, 1, newPlayer(2, "emerald"));
+        await expectStoreError(store.updateRoom(room.id, 2, { maxPlayers: 2, settings: { ...SETTINGS, maxPlayers: 2 } }), "capacity-conflict");
+        expect(await store.updateRoom(room.id, 2, { maxPlayers: 3, settings: { ...SETTINGS, maxPlayers: 3 } })).toMatchObject({ maxPlayers: 3, roomVersion: 3 });
+      });
+
+      it("hands over the host in the same step as the host leaving, or not at all", async () => {
+        const host = newPlayer(0, "crimson");
+        const { room } = await store.createRoom(newRoom(), host, generateRoomCode);
+        const guest = newPlayer(1, "royal-blue");
+        await store.addPlayer(room.id, 0, guest);
+        // The leaving player cannot be named the new host: nothing changes.
+        await expectStoreError(store.markPlayerLeft(room.id, 1, host.id, { hostPlayerId: host.id }), "not-found");
+        expect(await store.getPlayer(host.id)).toMatchObject({ leftAt: null });
+        expect((await store.getRoom(room.id))!.roomVersion).toBe(1);
+        const after = await store.markPlayerLeft(room.id, 1, host.id, { hostPlayerId: guest.id });
+        expect(after).toMatchObject({ hostPlayerId: guest.id, roomVersion: 2 });
+        // The last member leaving can abandon the room in the same step.
+        expect(await store.markPlayerLeft(room.id, 2, guest.id, { status: "abandoned" })).toMatchObject({ status: "abandoned", roomVersion: 3 });
       });
     });
   });

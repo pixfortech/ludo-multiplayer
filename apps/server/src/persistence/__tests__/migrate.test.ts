@@ -1,7 +1,7 @@
 // Migration runner against a real, disposable PostgreSQL server.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
-import { MIGRATIONS, MigrationError, migrate } from "../migrate.js";
+import { MIGRATIONS, MigrationError, migrate, migrationStatus } from "../migrate.js";
 import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, type TestDatabase } from "./pgHarness.js";
 
 const skip = !postgresAvailable && !POSTGRES_REQUIRED;
@@ -34,12 +34,17 @@ describe.skipIf(skip)("migrations", () => {
     expect(await migrate(pool)).toEqual({ applied: [] });
   });
 
+  it("report no drift once applied (the check the server runs at startup)", async () => {
+    expect(await migrationStatus(pool)).toEqual({ pending: [], modified: [], unknown: [] });
+    expect((await migrationStatus(pool, [...MIGRATIONS, { id: "0003_next", sql: "SELECT 1" }])).pending).toEqual(["0003_next"]);
+  });
+
   it("create the expected tables, keys and indexes", async () => {
     const tables = await pool.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name");
     expect(tables.rows.map((r) => r.table_name)).toEqual(["game_events", "game_sessions", "players", "rooms", "schema_migrations"]);
     const indexes = await pool.query("SELECT indexname FROM pg_indexes WHERE schemaname = 'public'");
     const names = indexes.rows.map((r) => r.indexname);
-    for (const name of ["rooms_code_key", "players_active_seat_idx", "players_active_colour_idx", "game_events_seq_key", "game_events_request_idx"]) {
+    for (const name of ["rooms_code_key", "players_active_seat_idx", "players_active_colour_idx", "players_active_name_idx", "game_events_seq_key", "game_events_request_idx"]) {
       expect(names).toContain(name);
     }
   });

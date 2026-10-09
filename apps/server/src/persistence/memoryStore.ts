@@ -5,6 +5,7 @@
 // its first await, so every call is atomic.
 
 import { deserializeGameState, type GameState } from "@ludo/game-engine";
+import { canTransitionRoom, type RoomStatus } from "@ludo/shared-types";
 import {
   StoreError,
   type CommitGameActionInput,
@@ -26,6 +27,7 @@ interface StoredPlayer extends PlayerRecord {
 
 const clone = <T>(value: T): T => structuredClone(value);
 const now = () => new Date();
+const asciiLower = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
 
 export class MemoryGameStore implements GameStore {
   private rooms = new Map<string, RoomRecord>();
@@ -62,10 +64,50 @@ export class MemoryGameStore implements GameStore {
     const active = this.active(roomId);
     if (active.some((x) => x.seat === p.seat)) throw new StoreError("seat-taken", `Seat ${p.seat} is taken`);
     if (active.some((x) => x.colour === p.colour)) throw new StoreError("colour-taken", `Colour ${p.colour} is taken`);
+    // Mirrors lower(display_name) under the C collation used by the database tests.
+    const key = asciiLower(p.displayName);
+    if (active.some((x) => asciiLower(x.displayName) === key)) throw new StoreError("name-taken", "That name is already used in this room");
   }
 
+  private checkTransition(from: RoomStatus, to: RoomStatus | undefined): void {
+    if (to !== undefined && to !== from && !canTransitionRoom(from, to)) {
+      throw new StoreError("invalid-transition", `Room status cannot change from ${from} to ${to}`);
+    }
+  }
+
+  /** Validates a patch completely before anything is changed, so a failure leaves no trace. */
+  private checkPatch(room: RoomRecord, patch: RoomPatch, leavingPlayerId?: string): RoomPatch {
+    const active = this.active(room.id).filter((p) => p.id !== leavingPlayerId);
+    if (patch.hostPlayerId !== undefined && !active.some((p) => p.id === patch.hostPlayerId)) {
+      throw new StoreError("not-found", "New host is not an active member of this room");
+    }
+    if (patch.maxPlayers !== undefined && active.length > patch.maxPlayers) {
+      throw new StoreError("capacity-conflict", `The room already has ${active.length} players`);
+    }
+    this.checkTransition(room.status, patch.status);
+    const effective = patch.status === "archived" && patch.archivedAt === undefined ? { ...patch, archivedAt: now() } : patch;
+    const status = effective.status ?? room.status;
+    const archivedAt = effective.archivedAt !== undefined ? effective.archivedAt : room.archivedAt;
+    const maxPlayers = effective.maxPlayers ?? room.maxPlayers;
+    const settings = effective.settings ?? room.settings;
+    // The same consistency rules as the database CHECK constraints (migration 0002).
+    if ((status === "archived") !== (archivedAt !== null)) throw new Error("rooms_archived_consistent violated");
+    if (settings.maxPlayers !== maxPlayers) throw new Error("rooms_settings_max_players violated");
+    return effective;
+  }
+
+  private applyPatch(room: RoomRecord, patch: RoomPatch): void {
+    for (const [key, value] of Object.entries(patch)) {
+      if (value !== undefined) (room as unknown as Record<string, unknown>)[key] = clone(value);
+    }
+  }
+
+  private lastJoinedAt = 0;
+
   private makePlayer(roomId: string, p: NewPlayer): StoredPlayer {
-    const t = now();
+    // Strictly increasing join times, like distinct transaction timestamps in PostgreSQL.
+    this.lastJoinedAt = Math.max(Date.now(), this.lastJoinedAt + 1);
+    const t = new Date(this.lastJoinedAt);
     return {
       id: p.id,
       roomId,
@@ -115,6 +157,7 @@ export class MemoryGameStore implements GameStore {
   }
 
   async createRoom(room: NewRoom, host: NewPlayer, generateCode: () => string) {
+    if (room.settings.maxPlayers !== room.maxPlayers) throw new Error("rooms_settings_max_players violated");
     for (let attempt = 0; attempt < 8; attempt++) {
       const code = generateCode();
       if ([...this.rooms.values()].some((r) => r.code === code)) continue;
@@ -155,17 +198,13 @@ export class MemoryGameStore implements GameStore {
 
   async updateRoom(roomId: string, expectedRoomVersion: number, patch: RoomPatch) {
     const room = this.room(roomId, expectedRoomVersion);
-    if (patch.hostPlayerId !== undefined && !this.active(roomId).some((p) => p.id === patch.hostPlayerId)) {
-      throw new StoreError("not-found", "New host is not an active member of this room");
-    }
-    for (const [key, value] of Object.entries(patch)) {
-      if (value !== undefined) (room as unknown as Record<string, unknown>)[key] = clone(value);
-    }
+    this.applyPatch(room, this.checkPatch(room, patch));
     return this.bump(room);
   }
 
   async addPlayer(roomId: string, expectedRoomVersion: number, player: NewPlayer) {
     const room = this.room(roomId, expectedRoomVersion);
+    if (room.status !== "lobby") throw new StoreError("game-already-started", "Players can only join a room in the lobby");
     if (this.active(roomId).length >= room.maxPlayers) throw new StoreError("room-full", "The room is full");
     this.checkSeat(roomId, player);
     const record = this.makePlayer(roomId, player);
@@ -193,12 +232,14 @@ export class MemoryGameStore implements GameStore {
     }
   }
 
-  async markPlayerLeft(roomId: string, expectedRoomVersion: number, playerId: string) {
+  async markPlayerLeft(roomId: string, expectedRoomVersion: number, playerId: string, patch: RoomPatch = {}) {
     const room = this.room(roomId, expectedRoomVersion);
     const p = this.players.get(playerId);
     if (!p || p.roomId !== roomId || p.leftAt !== null) throw new StoreError("not-found", "Player is not an active member of this room");
+    const effective = this.checkPatch(room, patch, playerId);
     p.leftAt = now();
     p.connectionStatus = "left";
+    this.applyPatch(room, effective);
     return this.bump(room);
   }
 
@@ -258,6 +299,7 @@ export class MemoryGameStore implements GameStore {
     if (session.stateVersion !== input.expectedStateVersion) {
       throw new StoreError("version-conflict", `Game is at version ${session.stateVersion}, expected ${input.expectedStateVersion}`);
     }
+    this.checkTransition(this.room(input.roomId).status, input.roomStatus);
     const eventRecord = this.appendEvent(input.roomId, event, state.stateVersion);
     session.state = state;
     session.stateVersion = state.stateVersion;

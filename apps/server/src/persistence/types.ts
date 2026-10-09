@@ -92,7 +92,13 @@ export interface GameEventRecord extends NewGameEvent {
   createdAt: Date;
 }
 
-export type RoomPatch = Partial<Pick<RoomRecord, "name" | "status" | "settings" | "hostPlayerId" | "expiresAt" | "archivedAt">>;
+/**
+ * Room fields a caller may change. Status changes must follow
+ * ROOM_STATUS_TRANSITIONS (else invalid-transition); archiving sets archivedAt
+ * automatically; maxPlayers must not drop below the active member count
+ * (else capacity-conflict) and must match settings.maxPlayers.
+ */
+export type RoomPatch = Partial<Pick<RoomRecord, "name" | "status" | "settings" | "hostPlayerId" | "maxPlayers" | "expiresAt" | "archivedAt">>;
 
 export type StoreErrorCode =
   | "not-found"
@@ -100,9 +106,12 @@ export type StoreErrorCode =
   | "duplicate-request"
   | "seat-taken"
   | "colour-taken"
+  | "name-taken"
   | "room-full"
   | "room-code-exhausted"
   | "game-already-started"
+  | "invalid-transition"
+  | "capacity-conflict"
   | "invalid-state";
 
 export class StoreError extends Error {
@@ -133,14 +142,21 @@ export interface GameStore {
   /** Updates room fields if `expectedRoomVersion` still matches; bumps the version. */
   updateRoom(roomId: string, expectedRoomVersion: number, patch: RoomPatch): Promise<RoomRecord>;
 
-  /** Adds a player if the room version matches and a seat is free; bumps the room version. */
+  /**
+   * Adds a player if the room version matches, the room is in the lobby and has
+   * a free place, and the seat, colour and name are free; bumps the room version.
+   */
   addPlayer(roomId: string, expectedRoomVersion: number, player: NewPlayer): Promise<{ room: RoomRecord; player: PlayerRecord }>;
   getPlayer(playerId: string): Promise<PlayerRecord | null>;
   listPlayers(roomId: string, options?: { includeLeft?: boolean }): Promise<PlayerRecord[]>;
   /** Presence updates do not bump the room version (they are frequent and not structural). */
   setConnectionStatus(playerId: string, status: Exclude<ConnectionStatus, "left">, at?: Date): Promise<void>;
-  /** Marks the player as having left; frees their seat and colour; bumps the room version. */
-  markPlayerLeft(roomId: string, expectedRoomVersion: number, playerId: string): Promise<RoomRecord>;
+  /**
+   * Marks the player as having left (freeing their seat, colour and name) and
+   * applies `patch` (e.g. a new host, or abandoning an empty room) in the same
+   * transaction; bumps the room version once.
+   */
+  markPlayerLeft(roomId: string, expectedRoomVersion: number, playerId: string, patch?: RoomPatch): Promise<RoomRecord>;
   setFinishPlace(playerId: string, place: number | null): Promise<void>;
 
   getCredential(playerId: string): Promise<PlayerCredential | null>;

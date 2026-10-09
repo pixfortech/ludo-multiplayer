@@ -40,7 +40,7 @@ Visual assets are produced through Higgsfield under an explicit approval and cos
 
 ## Getting started
 
-Multiplayer needs PostgreSQL (14+). See [docs/architecture/persistence.md](docs/architecture/persistence.md) for local setup (Docker optional), `npm run db:migrate`, and how tests get a disposable database.
+The server requires PostgreSQL (14+): it refuses to start without a reachable, migrated database set in `DATABASE_URL`. See [docs/architecture/persistence.md](docs/architecture/persistence.md) for local setup (Docker optional), `npm run db:migrate`, and how tests get a disposable database.
 
 Requires Node.js 22 or newer (`.nvmrc` pins 22). Install [Git LFS](https://git-lfs.com) (`git lfs install`) before committing binary assets; see [docs/design/asset-pipeline.md](docs/design/asset-pipeline.md).
 
@@ -68,7 +68,7 @@ Every phase must pass `test`, `typecheck` and `build` before it is committed.
 | 0 | Reset and scaffold the monorepo; Higgsfield pipeline preparation | ✅ |
 | 0.5 | Visual design system, 15-player palette, classic reference geometry, 2–15 topology, Higgsfield plan ([docs/design](docs/design/README.md)) | ✅ geometry approved |
 | 1 | Classic 2–4 player game engine with full rules and tests ([engine](docs/architecture/game-engine.md)) | ✅ |
-| 2 | Rooms and sessions backend: create, join, resume, identity, persistence foundation | In progress: 2A persistence ✅ |
+| 2 | Rooms and sessions backend: create, join, resume, identity, persistence foundation | In progress: 2A persistence ✅, 2B rooms and players ✅ ([rooms](docs/architecture/rooms.md)) |
 | 3 | Basic 2D client: lobby, room, classic board, dice, movement, reconnect | |
 | 4 | Premium 2D UI: animation, responsive layouts, fullscreen, accessibility | |
 | 5 | Polygon board geometry for 2–15 players, with previews and tests | |

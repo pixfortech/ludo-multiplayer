@@ -15,8 +15,13 @@ export interface RunningServer {
   close: () => Promise<void>;
 }
 
-export async function startServer(config: Pick<ServerConfig, "port" | "clientOrigins">): Promise<RunningServer> {
-  const httpServer = createServer(createApp());
+export interface StartServerOptions extends Pick<ServerConfig, "port" | "clientOrigins"> {
+  /** Whether dependencies (the database) are usable; drives /api/ready. */
+  readiness?: () => Promise<boolean>;
+}
+
+export async function startServer(config: StartServerOptions): Promise<RunningServer> {
+  const httpServer = createServer(createApp({ readiness: config.readiness }));
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
     cors: { origin: config.clientOrigins },
   });

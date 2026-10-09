@@ -5,13 +5,14 @@
 import { createHash } from "node:crypto";
 import type { Pool } from "pg";
 import * as m0001 from "./migrations/0001_initial.js";
+import * as m0002 from "./migrations/0002_room_lifecycle.js";
 
 export interface Migration {
   id: string;
   sql: string;
 }
 
-export const MIGRATIONS: readonly Migration[] = [m0001];
+export const MIGRATIONS: readonly Migration[] = [m0001, m0002];
 
 /** Arbitrary constant key for pg_advisory_lock ("LUDO"). */
 const MIGRATION_LOCK_KEY = 0x4c55444f;
@@ -62,4 +63,28 @@ export async function migrate(pool: Pool, migrations: readonly Migration[] = MIG
     await client.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]).catch(() => undefined);
     client.release();
   }
+}
+
+export interface MigrationStatus {
+  /** Known migrations not yet applied, in order. */
+  pending: string[];
+  /** Applied migrations whose text has changed since. */
+  modified: string[];
+  /** Applied migrations this server does not know (database is newer than the code). */
+  unknown: string[];
+}
+
+/** Read-only comparison of the database with the migrations this server ships. */
+export async function migrationStatus(pool: Pool, migrations: readonly Migration[] = MIGRATIONS): Promise<MigrationStatus> {
+  const exists = await pool.query<{ t: string | null }>("SELECT to_regclass('schema_migrations')::text AS t");
+  const rows = exists.rows[0]?.t
+    ? (await pool.query<{ id: string; checksum: string }>("SELECT id, checksum FROM schema_migrations")).rows
+    : [];
+  const done = new Map(rows.map((r) => [r.id, r.checksum]));
+  const known = new Set(migrations.map((m) => m.id));
+  return {
+    pending: migrations.filter((m) => !done.has(m.id)).map((m) => m.id),
+    modified: migrations.filter((m) => done.has(m.id) && done.get(m.id) !== checksum(m.sql)).map((m) => m.id),
+    unknown: [...done.keys()].filter((id) => !known.has(id)),
+  };
 }

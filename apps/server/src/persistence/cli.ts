@@ -4,6 +4,7 @@
 
 import pg from "pg";
 import { loadConfig } from "../config.js";
+import { redactSecrets } from "../redact.js";
 import { migrate } from "./migrate.js";
 
 async function main(command: string | undefined): Promise<void> {
@@ -20,6 +21,6 @@ async function main(command: string | undefined): Promise<void> {
 }
 
 main(process.argv[2]).catch((error: unknown) => {
-  console.error(`db: ${(error as Error).message}`);
+  console.error(`db: ${redactSecrets((error as Error).message)}`);
   process.exit(1);
 });
