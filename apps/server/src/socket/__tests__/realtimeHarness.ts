@@ -35,6 +35,19 @@ export class ScriptedDice implements DiceSource {
   }
 }
 
+/** Deterministic die values from a seed (mulberry32): reproducible full games without a client ever choosing dice. */
+export function seededDieValues(seed: number, count: number): number[] {
+  let a = seed >>> 0;
+  const values: number[] = [];
+  for (let i = 0; i < count; i++) {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let x = Math.imul(a ^ (a >>> 15), 1 | a);
+    x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x;
+    values.push((Math.floor((((x ^ (x >>> 14)) >>> 0) / 4294967296) * 6) % 6) + 1);
+  }
+  return values;
+}
+
 const GENEROUS: RateLimitPolicy = { limit: 1_000_000, windowMs: 1000 };
 
 export interface TestServer {
