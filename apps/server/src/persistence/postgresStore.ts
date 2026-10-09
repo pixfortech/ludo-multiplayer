@@ -479,7 +479,7 @@ export class PostgresGameStore implements GameStore {
       const { rows } = await client.query(
         `UPDATE game_sessions SET state = $3, state_version = $4, phase = $5, current_player_id = $6,
            settings = $7, winner_player_id = $8, ranking = $9, updated_at = now()
-         WHERE room_id = $1 AND state_version = $2 RETURNING *`,
+         WHERE room_id = $1 AND state_version = $2 RETURNING room_id, state_version, created_at, updated_at`,
         [roomId, input.expectedStateVersion, c.state, c.stateVersion, c.phase, c.currentPlayerId, c.settings, c.winnerPlayerId, c.ranking],
       );
       if (rows.length === 0) {
@@ -498,7 +498,9 @@ export class PostgresGameStore implements GameStore {
       const eventRecord = await this.insertEvent(client, roomId, event, state.stateVersion);
       if (input.roomStatus) await this.bumpRoom(client, roomId, "status = $2", [input.roomStatus]);
       else await client.query("UPDATE rooms SET last_activity_at = now(), updated_at = now() WHERE id = $1", [roomId]);
-      return { session: toSession(rows[0]), event: eventRecord };
+      // The state written is the one validated above; reading the (large) snapshot back would only repeat that work.
+      const r = rows[0];
+      return { session: { roomId: r.room_id, state, stateVersion: r.state_version, createdAt: r.created_at, updatedAt: r.updated_at }, event: eventRecord };
     });
   }
 
