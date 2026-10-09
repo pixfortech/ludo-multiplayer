@@ -22,3 +22,4 @@ export { OPENING_ROLL, canTokenMove, getMovableTokens, validateMove, type MoveVa
 export { checkCapture } from "./captureEngine.js";
 export { MAX_CONSECUTIVE_SIXES, nextActivePlayerIndex } from "./turnEngine.js";
 export { applyMove, moveToken, rollDice } from "./gameEngine.js";
+export { GameStateValidationError, deserializeGameState, serializeGameState } from "./sessionSerializer.js";

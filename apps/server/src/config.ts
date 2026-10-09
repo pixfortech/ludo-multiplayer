@@ -2,6 +2,8 @@ export interface ServerConfig {
   port: number;
   /** Origins allowed to open Socket.IO connections (the client app). */
   clientOrigins: string[];
+  /** PostgreSQL connection string; null means no durable storage is configured. */
+  databaseUrl: string | null;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -13,5 +15,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
-  return { port, clientOrigins };
+  const databaseUrl = env.DATABASE_URL?.trim() || null;
+  if (databaseUrl !== null && !/^postgres(ql)?:\/\//.test(databaseUrl)) {
+    throw new Error("Invalid DATABASE_URL: expected a postgres:// or postgresql:// connection string");
+  }
+  return { port, clientOrigins, databaseUrl };
 }

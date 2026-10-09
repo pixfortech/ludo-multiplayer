@@ -39,17 +39,24 @@ describe("server scaffold", () => {
 
 describe("loadConfig", () => {
   it("uses sensible defaults", () => {
-    expect(loadConfig({})).toEqual({ port: 3001, clientOrigins: ["http://localhost:5173"] });
+    expect(loadConfig({})).toEqual({ port: 3001, clientOrigins: ["http://localhost:5173"], databaseUrl: null });
   });
 
   it("parses a comma-separated origin list", () => {
     expect(loadConfig({ PORT: "4000", CLIENT_ORIGIN: "https://a.test, https://b.test" })).toEqual({
       port: 4000,
       clientOrigins: ["https://a.test", "https://b.test"],
+      databaseUrl: null,
     });
   });
 
   it("rejects an invalid port", () => {
     expect(() => loadConfig({ PORT: "abc" })).toThrow(/Invalid PORT/);
+  });
+
+  it("reads DATABASE_URL and rejects non-PostgreSQL URLs without echoing them", () => {
+    expect(loadConfig({ DATABASE_URL: "postgres://ludo:pw@db:5432/ludo" }).databaseUrl).toBe("postgres://ludo:pw@db:5432/ludo");
+    expect(() => loadConfig({ DATABASE_URL: "mysql://u:secret@h/db" })).toThrow(/Invalid DATABASE_URL/);
+    expect(() => loadConfig({ DATABASE_URL: "mysql://u:secret@h/db" })).not.toThrow(/secret/);
   });
 });

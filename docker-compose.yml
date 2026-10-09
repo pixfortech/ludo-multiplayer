@@ -1,0 +1,21 @@
+# Optional local PostgreSQL for development (Docker is not required: any
+# PostgreSQL 14+ works). Start: docker compose up -d   Stop: docker compose down
+# Data persists in the named volume until: docker compose down -v
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ludo
+      POSTGRES_PASSWORD: ludo_dev_only
+      POSTGRES_DB: ludo
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ludo-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ludo -d ludo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  ludo-pg-data:

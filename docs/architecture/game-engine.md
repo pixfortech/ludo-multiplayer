@@ -70,6 +70,21 @@ applyMove: move token → capture every opponent on a non-safe shared cell → h
 - **Consecutive sixes** reset when a non-6 is rolled or the turn passes; a non-6 capture or home bonus continues the turn with the count at 0.
 - **Full ranking:** finished players are skipped. The game ends when one unfinished player remains, who takes last place.
 
+## Configurable rule choices
+
+Ludo conventions vary, so these are **room options** (`RoomRuleOptions` in `@ludo/shared-types`), not universal law. The defaults reproduce the tested engine behaviour, and the engine currently implements only the defaults. Rooms requesting anything else are rejected until the variant is implemented.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `sixWithoutMoveGrantsRoll` | `true` | A 6 with no legal move still grants another roll |
+| `captureStackedOpponents` | `true` | Landing on a non-safe cell captures every opponent token there |
+| `blocksEnabled` | `false` | Two own tokens form a barrier (not implemented) |
+| `autoMove` (room setting) | `true` | Exactly one movable token moves automatically |
+
+## Persistence
+
+`serializeGameState` / `deserializeGameState` (`sessionSerializer.ts`) validate a stored snapshot. That covers its structure and the engine invariants: finished flags, no two colours on one non-safe cell, clockwise seat order and a contiguous history. The server uses it on every save and load ([persistence.md](persistence.md)).
+
 ## Tests (`packages/game-engine/src/__tests__`, 95 tests)
 
 | File | Covers |

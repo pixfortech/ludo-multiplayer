@@ -15,7 +15,7 @@ export interface RunningServer {
   close: () => Promise<void>;
 }
 
-export async function startServer(config: ServerConfig): Promise<RunningServer> {
+export async function startServer(config: Pick<ServerConfig, "port" | "clientOrigins">): Promise<RunningServer> {
   const httpServer = createServer(createApp());
   const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
     cors: { origin: config.clientOrigins },

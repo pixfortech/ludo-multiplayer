@@ -40,6 +40,8 @@ Visual assets are produced through Higgsfield under an explicit approval and cos
 
 ## Getting started
 
+Multiplayer needs PostgreSQL (14+). See [docs/architecture/persistence.md](docs/architecture/persistence.md) for local setup (Docker optional), `npm run db:migrate`, and how tests get a disposable database.
+
 Requires Node.js 22 or newer (`.nvmrc` pins 22). Install [Git LFS](https://git-lfs.com) (`git lfs install`) before committing binary assets; see [docs/design/asset-pipeline.md](docs/design/asset-pipeline.md).
 
 ```bash
@@ -54,6 +56,7 @@ npm run dev        # server on :3001, client on :5173 (proxied)
 | `npm run typecheck` | Runs strict `tsc` in every workspace              |
 | `npm run build`     | Builds packages, server and client in dependency order |
 | `npm run lint`      | Runs ESLint across the repo                       |
+| `npm run db:migrate` | Applies pending database migrations (`DATABASE_URL`) |
 | `npm run design:generate` | Regenerates the palette report and board diagrams in `docs/design/generated/` |
 
 Every phase must pass `test`, `typecheck` and `build` before it is committed.
@@ -65,7 +68,7 @@ Every phase must pass `test`, `typecheck` and `build` before it is committed.
 | 0 | Reset and scaffold the monorepo; Higgsfield pipeline preparation | ✅ |
 | 0.5 | Visual design system, 15-player palette, classic reference geometry, 2–15 topology, Higgsfield plan ([docs/design](docs/design/README.md)) | ✅ geometry approved |
 | 1 | Classic 2–4 player game engine with full rules and tests ([engine](docs/architecture/game-engine.md)) | ✅ |
-| 2 | Rooms and sessions backend: create, join, resume, identity, persistence foundation | Next |
+| 2 | Rooms and sessions backend: create, join, resume, identity, persistence foundation | In progress: 2A persistence ✅ |
 | 3 | Basic 2D client: lobby, room, classic board, dice, movement, reconnect | |
 | 4 | Premium 2D UI: animation, responsive layouts, fullscreen, accessibility | |
 | 5 | Polygon board geometry for 2–15 players, with previews and tests | |
