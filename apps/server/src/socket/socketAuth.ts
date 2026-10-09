@@ -32,33 +32,43 @@ export function clientKeyFor(handshake: { address: string; headers: IncomingHttp
 export interface HandshakeAuthOptions {
   rooms: RoomService;
   trustProxyHops: number;
+  /** Whether another connection controls the seat (fast refusal before the connection is accepted). */
+  isControlled: (playerId: string) => boolean;
   /** Failed credential checks allowed per client key. */
   failedAuthLimiter?: SlidingWindowLimiter;
 }
 
 type Next = (error?: Error) => void;
 
-function refuse(next: Next, code: "unauthenticated" | "rate-limited" | "storage-unavailable"): void {
+function refuse(next: Next, code: string): void {
   const error = new Error(code) as Error & { data?: { code: string } };
   error.data = { code };
   next(error);
 }
 
+/**
+ * Verifies a handshake credential. The seat is claimed after the connection
+ * is established (the same claim as room:resume); here an in-use seat is
+ * refused early unless the client asked to take over.
+ */
 export function handshakeAuth(options: HandshakeAuthOptions): (socket: LudoSocket, next: Next) => void {
   const failures = options.failedAuthLimiter ?? new SlidingWindowLimiter({ limit: 20, windowMs: 10 * 60_000 });
   return (socket, next) => {
     socket.data.clientKey = clientKeyFor(socket.handshake, options.trustProxyHops);
     socket.data.actor = null;
-    const auth = socket.handshake.auth as { credential?: unknown } | undefined;
+    socket.data.pending = null;
+    const auth = socket.handshake.auth as { credential?: unknown; takeover?: unknown } | undefined;
     if (auth?.credential === undefined) return next();
     if (failures.retryAfterMs(socket.data.clientKey) > 0) return refuse(next, "rate-limited");
     options.rooms.authenticate(auth.credential).then(
       (actor) => {
-        socket.data.actor = actor;
+        const takeover = auth.takeover === true;
+        if (!takeover && options.isControlled(actor.playerId)) return refuse(next, "session-in-use");
+        socket.data.pending = { actor, takeover };
         next();
       },
       (error: { code?: string }) => {
-        if (error?.code === "storage-unavailable") return refuse(next, "storage-unavailable");
+        if (error?.code === "storage-unavailable" || error?.code === "session-expired") return refuse(next, error.code);
         failures.record(socket.data.clientKey);
         refuse(next, "unauthenticated");
       },

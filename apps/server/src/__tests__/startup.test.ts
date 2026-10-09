@@ -124,7 +124,7 @@ describe.skipIf(skip)("startup with PostgreSQL", () => {
 
   it("refuses an unmigrated database and names the fix", async () => {
     const error = await startupError({ DATABASE_URL: freshUrl });
-    expect(error.message).toMatch(/schema is out of date \(pending: 0001_initial, 0002_room_lifecycle\).*npm run db:migrate/);
+    expect(error.message).toMatch(/schema is out of date \(pending: 0001_initial, 0002_room_lifecycle, 0003_session_resume\).*npm run db:migrate/);
   });
 
   it("refuses a database whose applied migration was edited", async () => {

@@ -35,6 +35,11 @@ export function toRoomView(room: RoomRecord, players: readonly PlayerRecord[]): 
     roomVersion: room.roomVersion,
     players: [...players].sort((a, b) => a.seat - b.seat).map((p) => toPlayerView(room, p)),
     canStart: canStart(room.status, players.length),
+    pause:
+      room.status === "paused" && room.pauseReason && room.pausedAt
+        ? { reason: room.pauseReason, playerId: room.pausedPlayerId, since: room.pausedAt.toISOString() }
+        : null,
+    endedReason: room.endedReason,
   };
 }
 

@@ -173,7 +173,8 @@ describe.skipIf(skip)("PostgreSQL", () => {
           await c.query("SET CONSTRAINTS ALL IMMEDIATE"); // flush deferred FK checks so the table can be altered
           await c.query("ALTER TABLE rooms DISABLE TRIGGER rooms_status_transition");
           for (const [status, id] of ids) {
-            await c.query("UPDATE rooms SET status = $2, archived_at = CASE WHEN $2 = 'archived' THEN now() END WHERE id = $1", [id, status]);
+            await c.query(`UPDATE rooms SET status = $2, archived_at = CASE WHEN $2 = 'archived' THEN now() END,
+               pause_reason = CASE WHEN $2 = 'paused' THEN 'host' END, paused_at = CASE WHEN $2 = 'paused' THEN now() END WHERE id = $1`, [id, status]);
           }
           await c.query("ALTER TABLE rooms ENABLE TRIGGER rooms_status_transition");
           for (const from of statuses) {
@@ -182,7 +183,8 @@ describe.skipIf(skip)("PostgreSQL", () => {
               await c.query("SAVEPOINT attempt");
               let allowed = true;
               try {
-                await c.query("UPDATE rooms SET status = $2, archived_at = CASE WHEN $2 = 'archived' THEN now() END WHERE id = $1", [id, to]);
+                await c.query(`UPDATE rooms SET status = $2, archived_at = CASE WHEN $2 = 'archived' THEN now() END,
+               pause_reason = CASE WHEN $2 = 'paused' THEN 'host' END, paused_at = CASE WHEN $2 = 'paused' THEN now() END WHERE id = $1`, [id, to]);
               } catch (error) {
                 if ((error as { code?: string }).code !== "LD001") throw error;
                 allowed = false;

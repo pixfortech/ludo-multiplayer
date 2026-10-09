@@ -7,10 +7,10 @@
 
 import type { ErrorDetails, ProtocolErrorCode } from "./errors.js";
 import type { GameActionView, GameStateView } from "./game.js";
-import type { PlayerSessionCredential, RoomPlayerView, RoomPreview, RoomRuleOptions, RoomView, RoomVisibility } from "./rooms.js";
+import type { PauseInfo, PlayerSessionCredential, RoomPlayerView, RoomPreview, RoomRuleOptions, RoomView, RoomVisibility } from "./rooms.js";
 import type { RankingMode, TurnTimerSeconds } from "./settings.js";
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** Largest accepted event payload (serialised JSON), in bytes. */
 export const MAX_PAYLOAD_BYTES = 4096;
@@ -29,6 +29,8 @@ export interface ServerHello {
  */
 export interface SocketAuth {
   credential?: PlayerSessionCredential;
+  /** Take control from another connection that currently controls this seat. */
+  takeover?: boolean;
 }
 
 // ── Requests ───────────────────────────────────────────────────────────────
@@ -68,6 +70,37 @@ export interface LeaveRoomRequest extends RequestBase {
 }
 
 export type GetStateRequest = RequestBase;
+
+/**
+ * Re-attach to a seat after a refresh, a closed browser, a lost network or a
+ * server restart. Exactly one connection controls a seat at a time: if another
+ * connection holds it, this fails with session-in-use unless `takeover` is
+ * set, in which case the other connection receives session:ended "replaced".
+ */
+export interface ResumeRequest extends RequestBase {
+  credential: PlayerSessionCredential;
+  takeover?: boolean;
+  /** The last game state version this client applied; missed actions are returned when few enough. */
+  knownStateVersion?: number;
+}
+
+/** Issue a new secret for this seat. It is pending until confirmed; the current secret keeps working until then. */
+export type RotateCredentialRequest = RequestBase;
+
+export interface ConfirmCredentialRequest extends RequestBase {
+  /** The new secret from session:rotate, proving the client stored it. */
+  secret: string;
+}
+
+export interface TransferHostRequest extends RequestBase {
+  playerId: string;
+  expectedRoomVersion?: number;
+}
+
+/** Host-only room actions: game:pause, game:resume, room:close. */
+export interface HostRoomRequest extends RequestBase {
+  expectedRoomVersion?: number;
+}
 
 export interface StartGameRequest extends RequestBase {
   expectedRoomVersion?: number;
@@ -136,6 +169,21 @@ export interface ActionData {
   game: GameStateView;
 }
 
+export interface ResumeData extends RoomStateData {
+  player: RoomPlayerView;
+  /**
+   * Actions after knownStateVersion, oldest first, when there are at most 100
+   * of them; null when knownStateVersion was not given or more were missed
+   * (apply the snapshot instead).
+   */
+  missedActions: GameActionView[] | null;
+}
+
+export interface RotateCredentialData {
+  /** Pending until session:confirmCredential succeeds (or until it is first used to resume). */
+  credential: PlayerSessionCredential;
+}
+
 export interface HistoryData {
   actions: GameActionView[];
   /** Pass as afterSeq to fetch the next page. */
@@ -155,7 +203,22 @@ export interface ClientToServerEvents {
   "game:roll": (request: RollRequest, ack: AckCallback<ActionData>) => void;
   "game:move": (request: MoveRequest, ack: AckCallback<ActionData>) => void;
   "game:getHistory": (request: HistoryRequest, ack: AckCallback<HistoryData>) => void;
+  "room:resume": (request: ResumeRequest, ack: AckCallback<ResumeData>) => void;
+  "room:transferHost": (request: TransferHostRequest, ack: AckCallback<{ room: RoomView }>) => void;
+  "room:close": (request: HostRoomRequest, ack: AckCallback<{ room: RoomView }>) => void;
+  "game:pause": (request: HostRoomRequest, ack: AckCallback<{ room: RoomView; changed: boolean }>) => void;
+  "game:resume": (request: HostRoomRequest, ack: AckCallback<{ room: RoomView; changed: boolean }>) => void;
+  "session:rotate": (request: RotateCredentialRequest, ack: AckCallback<RotateCredentialData>) => void;
+  "session:confirmCredential": (request: ConfirmCredentialRequest, ack: AckCallback<{ credentialVersion: number }>) => void;
 }
+
+export type SessionEndReason =
+  /** Another connection took control of this seat. */
+  | "replaced"
+  /** The player left or was removed from the room. */
+  | "left"
+  /** The room was archived (retention). */
+  | "expired";
 
 export interface PresencePayload {
   roomId: string;
@@ -173,4 +236,9 @@ export interface ServerToClientEvents {
   "game:finished": (payload: { roomId: string; stateVersion: number; winnerId: string | null; ranking: string[] }) => void;
   "player:connected": (payload: PresencePayload) => void;
   "player:disconnected": (payload: PresencePayload) => void;
+  /** The game was paused: the current player's connection was lost beyond the grace period, or the host paused it. */
+  "game:paused": (payload: { roomId: string; roomVersion: number; pause: PauseInfo }) => void;
+  "game:resumed": (payload: { roomId: string; roomVersion: number }) => void;
+  /** This connection no longer controls its seat; it has been detached from the room. */
+  "session:ended": (payload: { roomId: string; reason: SessionEndReason }) => void;
 }

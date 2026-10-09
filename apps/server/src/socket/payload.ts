@@ -35,7 +35,7 @@ export function readEnvelope(raw: unknown): { requestId: string; body: Record<st
   return { requestId, body };
 }
 
-type FieldKind = "integer" | "string";
+type FieldKind = "integer" | "string" | "boolean" | "credential";
 
 interface FieldRule {
   kind: FieldKind;
@@ -58,10 +58,27 @@ export function readFields<T>(body: Record<string, unknown>, rules: Record<strin
     const ok =
       rule.kind === "integer"
         ? typeof value === "number" && Number.isInteger(value) && value >= (rule.min ?? -Infinity) && value <= (rule.max ?? Infinity)
-        : typeof value === "string" && value.length <= (rule.max ?? Infinity);
+        : rule.kind === "boolean"
+          ? typeof value === "boolean"
+          : rule.kind === "credential"
+            ? isCredentialShape(value)
+            : typeof value === "string" && value.length <= (rule.max ?? Infinity);
     if (!ok) throw new TransportError("invalid-payload", `Invalid value for ${key}`, { field: key });
   }
   return body as T;
+}
+
+/** { playerId, secret } with nothing else; the values themselves are verified by RoomService. */
+function isCredentialShape(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  const keys = Object.keys(value);
+  return (
+    keys.length === 2 &&
+    typeof value.playerId === "string" &&
+    value.playerId.length <= 64 &&
+    typeof value.secret === "string" &&
+    value.secret.length <= 128
+  );
 }
 
 const VERSION = { kind: "integer", min: 0, max: 2_147_483_647 } as const;
@@ -73,4 +90,11 @@ export const RULES = {
   roll: { expectedStateVersion: { ...VERSION, required: true } },
   move: { expectedStateVersion: { ...VERSION, required: true }, tokenId: { kind: "integer", required: true, min: 0, max: 3 } },
   history: { afterSeq: { ...VERSION, required: false }, limit: { kind: "integer", required: false, min: 1, max: 100 } },
+  resume: {
+    credential: { kind: "credential", required: true },
+    takeover: { kind: "boolean", required: false },
+    knownStateVersion: { ...VERSION, required: false },
+  },
+  confirmCredential: { secret: { kind: "string", required: true, max: 128 } },
+  transferHost: { playerId: { kind: "string", required: true, max: 64 }, expectedRoomVersion: { ...VERSION, required: false } },
 } satisfies Record<string, Record<string, FieldRule>>;

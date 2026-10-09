@@ -32,6 +32,19 @@ Rooms, players, game sessions and an action log are stored in **PostgreSQL**. Th
 
 `migrationsImmutable.test.ts` pins every migration's checksum, so an applied migration can't be edited by accident.
 
+## Migration `0003_session_resume` (Phase 2D)
+
+- **`players.session_epoch`:** which connection controls the seat (moved on at every claim).
+- **`players.pending_credential_hash` / `_issued_at`:** two-step credential rotation.
+- **`rooms.pause_reason` (`connection-lost` | `host`), `paused_player_id`, `paused_at`:** set exactly while paused (`rooms_pause_consistent`).
+- **`rooms.ended_reason`:** `closed-by-host` | `everyone-left` | `expired`.
+- **`rooms_retention_idx`:** supports the retention sweep.
+
+**Behaviour that changed in the store:**
+- `markPlayerLeft` revokes the credential in the same transaction.
+- `commitGameAction` locks the room and refuses unless it is `playing` (`room-not-playing`).
+- New methods cover rotation, epochs, presence reset and the retention sweep. See [sessions.md](sessions.md).
+
 ## Write paths and guarantees
 
 - **Create room:** room and host are inserted in one transaction. On a code collision (unique violation) a fresh code is drawn, up to 8 attempts, then `room-code-exhausted`.

@@ -39,6 +39,8 @@ function recorder(): GamePublisher & { calls: string[] } {
     gameAction: (_roomId, action) => calls.push(`event:${action.type}:${action.stateVersion}`),
     gameState: (_roomId, game) => calls.push(`state:${game.stateVersion}`),
     gameFinished: (_roomId, notice) => calls.push(`finished:${notice.stateVersion}`),
+    gamePaused: (_roomId, notice) => calls.push(`paused:${notice.pause.reason}:${notice.roomVersion}`),
+    gameResumed: (_roomId, notice) => calls.push(`resumed:${notice.roomVersion}`),
   };
 }
 
@@ -48,7 +50,14 @@ async function setup(dice: number[]) {
   const gameplay = new GameplayService({ store, rooms, dice: createFixedDice(dice), publisher });
   const host = await rooms.createRoom({ hostName: "Asha", maxPlayers: 2 }, { clientKey: "svc" });
   const guest = await rooms.joinRoom({ code: host.room.code, displayName: "Ben" }, { clientKey: "svc" });
-  return { rooms, gameplay, publisher, host: await rooms.authenticate(host.credential), guest: await rooms.authenticate(guest.credential) };
+  return {
+    rooms,
+    gameplay,
+    publisher,
+    hostCredential: host.credential,
+    host: await rooms.authenticate(host.credential),
+    guest: await rooms.authenticate(guest.credential),
+  };
 }
 
 describe.skipIf(skip)("GameplayService (no transport)", () => {
@@ -74,6 +83,40 @@ describe.skipIf(skip)("GameplayService (no transport)", () => {
     await expect(gameplay.move(host, { requestId: "y", expectedStateVersion: 0, tokenId: 0 })).rejects.toMatchObject({ code: "not-awaiting-move" });
     await expect(gameplay.roll(host, { requestId: "z", expectedStateVersion: 5 })).rejects.toMatchObject({ code: "stale-state", details: { stateVersion: 0 } });
     expect(publisher.calls).toEqual([]);
+  });
+
+  it("lets PostgreSQL arbitrate conflicting actions from two independent server processes", async () => {
+    const { gameplay, host, hostCredential } = await setup([6]);
+    await gameplay.start(host, { requestId: "s" });
+    const otherStore = PostgresGameStore.connect(db.url); // another process: its own pool, services and action queue
+    try {
+      const otherRooms = new RoomService({ store: otherStore });
+      const other = new GameplayService({ store: otherStore, rooms: otherRooms, dice: createFixedDice([5]) });
+      const otherHost = await otherRooms.authenticate(hostCredential);
+      const results = await Promise.allSettled([
+        gameplay.roll(host, { requestId: "p1", expectedStateVersion: 0 }),
+        other.roll(otherHost, { requestId: "p2", expectedStateVersion: 0 }),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      const lost = results.find((r): r is PromiseRejectedResult => r.status === "rejected")!;
+      expect(lost.reason).toMatchObject({ code: "stale-state" });
+      expect((await store.listEvents(host.roomId)).filter((e) => e.actionType === "game:roll")).toHaveLength(1);
+    } finally {
+      await otherStore.close();
+    }
+  });
+
+  it("pauses only for an absent current player, and resumes only for the awaited one", async () => {
+    const { gameplay, publisher, host, guest } = await setup([]);
+    await gameplay.start(host, { requestId: "s" });
+    publisher.calls.length = 0;
+    expect(await gameplay.pauseIfAway(host.roomId, guest.playerId, () => true)).toBeNull(); // not the guest's turn
+    expect(await gameplay.pauseIfAway(host.roomId, host.playerId, () => false)).toBeNull(); // the host came back
+    const paused = await gameplay.pauseIfAway(host.roomId, host.playerId, () => true);
+    expect(paused?.pause).toMatchObject({ reason: "connection-lost", playerId: host.playerId });
+    expect(await gameplay.resumeIfAwaited(host.roomId, guest.playerId)).toBeNull();
+    expect((await gameplay.resumeIfAwaited(host.roomId, host.playerId))?.status).toBe("playing");
+    expect(publisher.calls).toEqual(["room:paused:3", "paused:connection-lost:3", "room:playing:4", "resumed:4"]);
   });
 
   it("refuses gameplay before the start and makes a retried start a replay", async () => {

@@ -3,7 +3,7 @@
 // unit tests of higher layers). Both pass the same contract test suite.
 
 import type { GameState } from "@ludo/game-engine";
-import type { ConnectionStatus, ParticipantKind, RoomSettings, RoomStatus, RoomVisibility } from "@ludo/shared-types";
+import type { ConnectionStatus, EndedReason, ParticipantKind, PauseReason, RoomSettings, RoomStatus, RoomVisibility } from "@ludo/shared-types";
 
 export interface RoomRecord {
   id: string;
@@ -21,6 +21,13 @@ export interface RoomRecord {
   lastActivityAt: Date;
   expiresAt: Date | null;
   archivedAt: Date | null;
+  /** Set exactly while status = "paused". */
+  pauseReason: PauseReason | null;
+  /** The player the game is waiting for (connection-lost pauses). */
+  pausedPlayerId: string | null;
+  pausedAt: Date | null;
+  /** Why the room was abandoned, if it was. */
+  endedReason: EndedReason | null;
 }
 
 export interface PlayerRecord {
@@ -38,6 +45,8 @@ export interface PlayerRecord {
   lastSeenAt: Date;
   leftAt: Date | null;
   finishPlace: number | null;
+  /** Incremented each time a connection takes control of this seat. */
+  sessionEpoch: number;
 }
 
 /** Credential material is only ever handled as a SHA-256 digest (32 bytes). */
@@ -46,6 +55,8 @@ export interface PlayerCredential {
   hash: Buffer;
   version: number;
   revokedAt: Date | null;
+  /** A rotated secret waiting to be confirmed (digest), if any. */
+  pendingHash: Buffer | null;
 }
 
 export interface NewPlayer {
@@ -95,10 +106,26 @@ export interface GameEventRecord extends NewGameEvent {
 /**
  * Room fields a caller may change. Status changes must follow
  * ROOM_STATUS_TRANSITIONS (else invalid-transition); archiving sets archivedAt
- * automatically; maxPlayers must not drop below the active member count
- * (else capacity-conflict) and must match settings.maxPlayers.
+ * automatically; pausing requires pauseReason (pausedAt is set automatically)
+ * and leaving "paused" clears the pause fields; maxPlayers must not drop below
+ * the active member count (else capacity-conflict) and must match
+ * settings.maxPlayers.
  */
-export type RoomPatch = Partial<Pick<RoomRecord, "name" | "status" | "settings" | "hostPlayerId" | "maxPlayers" | "expiresAt" | "archivedAt">>;
+export type RoomPatch = Partial<
+  Pick<RoomRecord, "name" | "status" | "settings" | "hostPlayerId" | "maxPlayers" | "expiresAt" | "archivedAt" | "pauseReason" | "pausedPlayerId" | "endedReason">
+>;
+
+/** Inactivity cut-offs for the retention sweep. */
+export interface RetentionCutoffs {
+  /** The sweep's clock. Expiring a room counts as activity at this time, so its archive period starts then. */
+  now: Date;
+  /** Lobby rooms inactive since before this become abandoned ("expired"). */
+  lobbyBefore: Date;
+  /** Playing or paused games inactive since before this become abandoned ("expired"). */
+  activeBefore: Date;
+  /** Finished or abandoned rooms inactive since before this are archived. */
+  endedBefore: Date;
+}
 
 export type StoreErrorCode =
   | "not-found"
@@ -112,6 +139,8 @@ export type StoreErrorCode =
   | "game-already-started"
   | "invalid-transition"
   | "capacity-conflict"
+  /** A game action reached a room that is no longer playing (paused, finished, closed). */
+  | "room-not-playing"
   | "invalid-state";
 
 export class StoreError extends Error {
@@ -152,7 +181,8 @@ export interface GameStore {
   /** Presence updates do not bump the room version (they are frequent and not structural). */
   setConnectionStatus(playerId: string, status: Exclude<ConnectionStatus, "left">, at?: Date): Promise<void>;
   /**
-   * Marks the player as having left (freeing their seat, colour and name) and
+   * Marks the player as having left (freeing their seat, colour and name, and
+   * revoking their credential) and
    * applies `patch` (e.g. a new host, or abandoning an empty room) in the same
    * transaction; bumps the room version once.
    */
@@ -160,6 +190,28 @@ export interface GameStore {
   setFinishPlace(playerId: string, place: number | null): Promise<void>;
 
   getCredential(playerId: string): Promise<PlayerCredential | null>;
+  /**
+   * Stores a pending (rotated) credential digest if the credential is still at
+   * `expectedVersion` and not revoked. Returns false if it has moved on.
+   */
+  setPendingCredential(playerId: string, expectedVersion: number, pendingHash: Buffer): Promise<boolean>;
+  /**
+   * Promotes the pending digest to current if it still equals `pendingHash`
+   * (atomic compare-and-swap); returns the new credential version, or null.
+   */
+  promotePendingCredential(playerId: string, pendingHash: Buffer): Promise<number | null>;
+  /** Gives the seat to a new controlling connection; returns the new epoch (null if not an active member). */
+  bumpSessionEpoch(playerId: string): Promise<number | null>;
+  /** Marks every connected player disconnected (single-instance startup after a restart); returns the count. */
+  resetPresence(): Promise<number>;
+  /** Ids of rooms in a status (e.g. games to watch after a restart), oldest activity first. */
+  listRoomIdsByStatus(status: RoomStatus, limit: number): Promise<string[]>;
+  /**
+   * Abandons ("expired") live rooms and archives ended rooms that have been
+   * inactive since before the cut-offs. Rooms locked by an in-flight
+   * operation are skipped and re-checked next time. Never deletes anything.
+   */
+  expireInactiveRooms(cutoffs: RetentionCutoffs, limit: number): Promise<{ expired: string[]; archived: string[] }>;
   /** Replaces the credential digest (rotation); returns the new version. */
   rotateCredential(playerId: string, newHash: Buffer): Promise<number>;
   revokeCredential(playerId: string): Promise<void>;
@@ -169,7 +221,8 @@ export interface GameStore {
   getGameSession(roomId: string): Promise<GameSessionRecord | null>;
   /**
    * Durably commits a new authoritative state and its event in one transaction.
-   * Rejects with version-conflict if storage is no longer at `expectedStateVersion`,
+   * Rejects with room-not-playing unless the room is playing (checked under the room lock),
+   * with version-conflict if storage is no longer at `expectedStateVersion`,
    * and with duplicate-request if the (player, requestId) was already committed.
    */
   commitGameAction(input: CommitGameActionInput): Promise<{ session: GameSessionRecord; event: GameEventRecord }>;

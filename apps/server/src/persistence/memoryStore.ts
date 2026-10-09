@@ -17,12 +17,14 @@ import {
   type NewRoom,
   type PlayerCredential,
   type PlayerRecord,
+  type RetentionCutoffs,
   type RoomPatch,
   type RoomRecord,
 } from "./types.js";
 
 interface StoredPlayer extends PlayerRecord {
   credentialHash: Buffer;
+  pendingHash: Buffer | null;
 }
 
 const clone = <T>(value: T): T => structuredClone(value);
@@ -56,7 +58,7 @@ export class MemoryGameStore implements GameStore {
     return [...this.players.values()].filter((p) => p.roomId === roomId && p.leftAt === null);
   }
 
-  private publicPlayer({ credentialHash: _hash, ...p }: StoredPlayer): PlayerRecord {
+  private publicPlayer({ credentialHash: _hash, pendingHash: _pending, ...p }: StoredPlayer): PlayerRecord {
     return clone(p);
   }
 
@@ -76,7 +78,7 @@ export class MemoryGameStore implements GameStore {
   }
 
   /** Validates a patch completely before anything is changed, so a failure leaves no trace. */
-  private checkPatch(room: RoomRecord, patch: RoomPatch, leavingPlayerId?: string): RoomPatch {
+  private checkPatch(room: RoomRecord, patch: RoomPatch, leavingPlayerId?: string): Partial<RoomRecord> {
     const active = this.active(room.id).filter((p) => p.id !== leavingPlayerId);
     if (patch.hostPlayerId !== undefined && !active.some((p) => p.id === patch.hostPlayerId)) {
       throw new StoreError("not-found", "New host is not an active member of this room");
@@ -85,7 +87,13 @@ export class MemoryGameStore implements GameStore {
       throw new StoreError("capacity-conflict", `The room already has ${active.length} players`);
     }
     this.checkTransition(room.status, patch.status);
-    const effective = patch.status === "archived" && patch.archivedAt === undefined ? { ...patch, archivedAt: now() } : patch;
+    const effective: Partial<RoomRecord> = patch.status === "archived" && patch.archivedAt === undefined ? { ...patch, archivedAt: now() } : { ...patch };
+    if (patch.status === "paused") {
+      if (!patch.pauseReason) throw new StoreError("invalid-state", "Pausing requires a pause reason");
+      effective.pausedAt = now();
+    } else if (patch.status !== undefined) {
+      Object.assign(effective, { pauseReason: null, pausedPlayerId: null, pausedAt: null });
+    }
     const status = effective.status ?? room.status;
     const archivedAt = effective.archivedAt !== undefined ? effective.archivedAt : room.archivedAt;
     const maxPlayers = effective.maxPlayers ?? room.maxPlayers;
@@ -96,7 +104,7 @@ export class MemoryGameStore implements GameStore {
     return effective;
   }
 
-  private applyPatch(room: RoomRecord, patch: RoomPatch): void {
+  private applyPatch(room: RoomRecord, patch: Partial<RoomRecord>): void {
     for (const [key, value] of Object.entries(patch)) {
       if (value !== undefined) (room as unknown as Record<string, unknown>)[key] = clone(value);
     }
@@ -124,6 +132,8 @@ export class MemoryGameStore implements GameStore {
       lastSeenAt: t,
       leftAt: null,
       finishPlace: null,
+      sessionEpoch: 0,
+      pendingHash: null,
     };
   }
 
@@ -177,6 +187,10 @@ export class MemoryGameStore implements GameStore {
         lastActivityAt: t,
         expiresAt: room.expiresAt ?? null,
         archivedAt: null,
+        pauseReason: null,
+        pausedPlayerId: null,
+        pausedAt: null,
+        endedReason: null,
       };
       const hostRecord = this.makePlayer(room.id, host);
       this.rooms.set(room.id, record);
@@ -239,6 +253,8 @@ export class MemoryGameStore implements GameStore {
     const effective = this.checkPatch(room, patch, playerId);
     p.leftAt = now();
     p.connectionStatus = "left";
+    p.credentialRevokedAt = now();
+    p.pendingHash = null;
     this.applyPatch(room, effective);
     return this.bump(room);
   }
@@ -250,7 +266,84 @@ export class MemoryGameStore implements GameStore {
 
   async getCredential(playerId: string): Promise<PlayerCredential | null> {
     const p = this.players.get(playerId);
-    return p ? { playerId, hash: Buffer.from(p.credentialHash), version: p.credentialVersion, revokedAt: p.credentialRevokedAt } : null;
+    return p
+      ? {
+          playerId,
+          hash: Buffer.from(p.credentialHash),
+          version: p.credentialVersion,
+          revokedAt: p.credentialRevokedAt,
+          pendingHash: p.pendingHash ? Buffer.from(p.pendingHash) : null,
+        }
+      : null;
+  }
+
+  async setPendingCredential(playerId: string, expectedVersion: number, pendingHash: Buffer) {
+    const p = this.players.get(playerId);
+    if (!p || p.credentialVersion !== expectedVersion || p.credentialRevokedAt !== null || p.leftAt !== null) return false;
+    p.pendingHash = Buffer.from(pendingHash);
+    return true;
+  }
+
+  async promotePendingCredential(playerId: string, pendingHash: Buffer) {
+    const p = this.players.get(playerId);
+    if (!p || !p.pendingHash || !p.pendingHash.equals(pendingHash) || p.credentialRevokedAt !== null || p.leftAt !== null) return null;
+    p.credentialHash = p.pendingHash;
+    p.pendingHash = null;
+    p.credentialVersion += 1;
+    p.credentialIssuedAt = now();
+    return p.credentialVersion;
+  }
+
+  async bumpSessionEpoch(playerId: string) {
+    const p = this.players.get(playerId);
+    if (!p || p.leftAt !== null || p.credentialRevokedAt !== null) return null;
+    p.sessionEpoch += 1;
+    return p.sessionEpoch;
+  }
+
+  async resetPresence() {
+    let count = 0;
+    for (const p of this.players.values()) {
+      if (p.connectionStatus === "connected") {
+        p.connectionStatus = "disconnected";
+        count++;
+      }
+    }
+    return count;
+  }
+
+  async listRoomIdsByStatus(status: RoomRecord["status"], limit: number) {
+    return [...this.rooms.values()]
+      .filter((r) => r.status === status)
+      .sort((a, b) => a.lastActivityAt.getTime() - b.lastActivityAt.getTime())
+      .slice(0, limit)
+      .map((r) => r.id);
+  }
+
+  async expireInactiveRooms(cutoffs: RetentionCutoffs, limit: number) {
+    const live = [...this.rooms.values()]
+      .filter(
+        (r) =>
+          r.archivedAt === null &&
+          ((r.status === "lobby" && r.lastActivityAt < cutoffs.lobbyBefore) || ((r.status === "playing" || r.status === "paused") && r.lastActivityAt < cutoffs.activeBefore)),
+      )
+      .slice(0, limit);
+    for (const r of live) {
+      Object.assign(r, { status: "abandoned", endedReason: "expired", pauseReason: null, pausedPlayerId: null, pausedAt: null });
+      r.roomVersion += 1;
+      r.updatedAt = now();
+      r.lastActivityAt = cutoffs.now;
+    }
+    const ended = [...this.rooms.values()]
+      .filter((r) => r.archivedAt === null && (r.status === "finished" || r.status === "abandoned") && r.lastActivityAt < cutoffs.endedBefore)
+      .slice(0, limit);
+    for (const r of ended) {
+      r.status = "archived";
+      r.archivedAt = now();
+      r.roomVersion += 1;
+      r.updatedAt = now();
+    }
+    return { expired: live.map((r) => r.id), archived: ended.map((r) => r.id) };
   }
 
   async rotateCredential(playerId: string, newHash: Buffer) {
@@ -296,6 +389,8 @@ export class MemoryGameStore implements GameStore {
     const { event } = input;
     const duplicate = event.requestId !== null && (this.events.get(input.roomId) ?? []).some((e) => e.playerId === event.playerId && e.requestId === event.requestId);
     if (duplicate) throw new StoreError("duplicate-request", "This request was already committed");
+    const current = this.room(input.roomId);
+    if (current.status !== "playing") throw new StoreError("room-not-playing", `The room is ${current.status}`);
     if (session.stateVersion !== input.expectedStateVersion) {
       throw new StoreError("version-conflict", `Game is at version ${session.stateVersion}, expected ${input.expectedStateVersion}`);
     }

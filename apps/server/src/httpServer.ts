@@ -57,6 +57,7 @@ export async function startServer(config: StartServerOptions): Promise<RunningSe
     realtime,
     close: () =>
       new Promise<void>((resolve, reject) => {
+        realtime?.dispose();
         // io.close() also closes the underlying HTTP server.
         void io.close((err) => (err ? reject(err) : resolve()));
       }),

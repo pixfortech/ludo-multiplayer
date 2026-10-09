@@ -9,8 +9,10 @@ import type { AuthenticatedPlayer } from "../rooms/roomService.js";
 export interface SocketData {
   /** Rate-limit key derived by the server from the connection (never from client input). */
   clientKey: string;
-  /** The verified player this connection acts as, once it has created, joined or authenticated. */
+  /** The seat this connection controls, once it has created, joined or resumed. */
   actor: AuthenticatedPlayer | null;
+  /** A credential verified at the handshake, claimed once the connection is established. */
+  pending: { actor: AuthenticatedPlayer; takeover: boolean } | null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type -- no server-to-server events yet

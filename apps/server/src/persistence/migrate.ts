@@ -6,13 +6,14 @@ import { createHash } from "node:crypto";
 import type { Pool } from "pg";
 import * as m0001 from "./migrations/0001_initial.js";
 import * as m0002 from "./migrations/0002_room_lifecycle.js";
+import * as m0003 from "./migrations/0003_session_resume.js";
 
 export interface Migration {
   id: string;
   sql: string;
 }
 
-export const MIGRATIONS: readonly Migration[] = [m0001, m0002];
+export const MIGRATIONS: readonly Migration[] = [m0001, m0002, m0003];
 
 /** Arbitrary constant key for pg_advisory_lock ("LUDO"). */
 const MIGRATION_LOCK_KEY = 0x4c55444f;

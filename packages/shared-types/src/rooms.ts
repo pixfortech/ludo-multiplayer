@@ -34,6 +34,24 @@ export function canTransitionRoom(from: RoomStatus, to: RoomStatus): boolean {
  */
 export type RoomLifecycle = "waiting" | "ready" | "playing" | "paused" | "finished" | "abandoned" | "archived";
 export type RoomVisibility = "private" | "public";
+
+/**
+ * Why a game is paused. "connection-lost": the player whose turn it is has
+ * been away longer than the reconnect grace period (resumes automatically
+ * when they return). "host": the host paused it (only the host resumes it).
+ */
+export type PauseReason = "connection-lost" | "host";
+
+/** Why a room was abandoned. */
+export type EndedReason = "closed-by-host" | "everyone-left" | "expired";
+
+export interface PauseInfo {
+  reason: PauseReason;
+  /** For connection-lost pauses: the player the game is waiting for. */
+  playerId: string | null;
+  /** ISO time the pause began. */
+  since: string;
+}
 export type ConnectionStatus = "connected" | "disconnected" | "left";
 /** "remote" = own device; "local" is reserved for future same-screen (pass-and-play) seats. */
 export type ParticipantKind = "remote" | "local";
@@ -126,6 +144,10 @@ export interface RoomView {
   roomVersion: number;
   players: RoomPlayerView[];
   canStart: boolean;
+  /** Set while the game is paused. */
+  pause: PauseInfo | null;
+  /** Set once the room has been abandoned. */
+  endedReason: EndedReason | null;
 }
 
 /** Returned once, to the player who created or joined. The secret is never shown again. */

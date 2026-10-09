@@ -39,11 +39,19 @@ describe("server scaffold", () => {
 
 describe("loadConfig", () => {
   it("uses sensible defaults", () => {
-    expect(loadConfig({})).toEqual({ port: 3001, clientOrigins: ["http://localhost:5173"], databaseUrl: null, trustProxyHops: 0 });
+    expect(loadConfig({})).toEqual({
+      port: 3001,
+      clientOrigins: ["http://localhost:5173"],
+      databaseUrl: null,
+      trustProxyHops: 0,
+      reconnectGraceMs: 15_000,
+      retention: { lobbyDays: 30, activeDays: 90, endedDays: 30 },
+      retentionSweepMs: 3_600_000,
+    });
   });
 
   it("parses a comma-separated origin list", () => {
-    expect(loadConfig({ PORT: "4000", CLIENT_ORIGIN: "https://a.test, https://b.test" })).toEqual({
+    expect(loadConfig({ PORT: "4000", CLIENT_ORIGIN: "https://a.test, https://b.test" })).toMatchObject({
       port: 4000,
       clientOrigins: ["https://a.test", "https://b.test"],
       databaseUrl: null,
@@ -55,6 +63,14 @@ describe("loadConfig", () => {
     expect(loadConfig({ TRUST_PROXY_HOPS: "1" }).trustProxyHops).toBe(1);
     expect(() => loadConfig({ TRUST_PROXY_HOPS: "-1" })).toThrow(/TRUST_PROXY_HOPS/);
     expect(() => loadConfig({ TRUST_PROXY_HOPS: "yes" })).toThrow(/TRUST_PROXY_HOPS/);
+  });
+
+  it("reads the reconnect grace period and retention policy", () => {
+    expect(
+      loadConfig({ RECONNECT_GRACE_SECONDS: "5", ROOM_RETENTION_LOBBY_DAYS: "7", ROOM_RETENTION_ACTIVE_DAYS: "120", ROOM_RETENTION_ENDED_DAYS: "60", RETENTION_SWEEP_MINUTES: "0" }),
+    ).toMatchObject({ reconnectGraceMs: 5000, retention: { lobbyDays: 7, activeDays: 120, endedDays: 60 }, retentionSweepMs: 0 });
+    expect(() => loadConfig({ RECONNECT_GRACE_SECONDS: "-1" })).toThrow(/RECONNECT_GRACE_SECONDS/);
+    expect(() => loadConfig({ ROOM_RETENTION_LOBBY_DAYS: "0" })).toThrow(/ROOM_RETENTION_LOBBY_DAYS/);
   });
 
   it("rejects an invalid port", () => {

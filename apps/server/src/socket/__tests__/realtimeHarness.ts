@@ -51,6 +51,8 @@ export interface TestServerOptions {
   /** Wraps the real store (e.g. to inject a commit failure). */
   wrapStore?: (store: PostgresGameStore) => GameStore;
   perConnection?: RateLimitPolicy;
+  /** Reconnect grace before an automatic pause (default 15 s, as in production). */
+  reconnectGraceMs?: number;
 }
 
 export async function startTestServer(databaseUrl: string, options: TestServerOptions = {}): Promise<TestServer> {
@@ -68,7 +70,13 @@ export async function startTestServer(databaseUrl: string, options: TestServerOp
   const server = await startServer({
     port: 0,
     clientOrigins: ["http://localhost:5173"],
-    realtime: { rooms, gameplay, log: (line) => logs.push(line), limits: { perConnection: options.perConnection ?? GENEROUS, perPlayer: GENEROUS } },
+    realtime: {
+      rooms,
+      gameplay,
+      log: (line) => logs.push(line),
+      limits: { perConnection: options.perConnection ?? GENEROUS, perPlayer: GENEROUS },
+      ...(options.reconnectGraceMs === undefined ? {} : { reconnectGraceMs: options.reconnectGraceMs }),
+    },
   });
   return {
     url: `http://127.0.0.1:${server.port}`,
@@ -116,12 +124,12 @@ export interface Connected {
 }
 
 /** Opens a real Socket.IO connection (WebSocket); rejects with the server's refusal reason. */
-export function open(url: string, credential?: unknown): Promise<Connected> {
+export function open(url: string, credential?: unknown, options: { takeover?: boolean } = {}): Promise<Connected> {
   const client: Client = connect(url, {
     transports: ["websocket"],
     reconnection: false,
     forceNew: true,
-    ...(credential === undefined ? {} : { auth: { credential } }),
+    ...(credential === undefined ? {} : { auth: { credential, ...(options.takeover ? { takeover: true } : {}) } }),
   });
   const rec = new Recorder(client);
   return new Promise((resolve, reject) => {

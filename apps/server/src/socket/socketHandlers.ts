@@ -4,23 +4,22 @@
 // { ok, requestId, roomVersion, stateVersion, data | error }. Rules live in
 // the services and the engine; nothing here decides gameplay.
 
-import type { Ack, ClientToServerEvents, PresencePayload } from "@ludo/shared-types";
+import type { Ack, ClientToServerEvents } from "@ludo/shared-types";
 import type { GameplayService } from "../gameplay/gameplayService.js";
 import { RoomError } from "../rooms/errors.js";
 import type { SlidingWindowLimiter } from "../rooms/rateLimiter.js";
 import type { AuthenticatedPlayer, RoomService } from "../rooms/roomService.js";
 import type { SocketPublisher } from "./broadcaster.js";
 import { RULES, peekRequestId, readEnvelope, readFields } from "./payload.js";
-import type { ConnectionRegistry } from "./presence.js";
+import type { SessionManager } from "./sessions.js";
 import { TransportError, toProtocolError, type Logger } from "./socketErrors.js";
-import { roomChannel, type LudoServer, type LudoSocket } from "./socketEvents.js";
+import type { LudoSocket } from "./socketEvents.js";
 
 export interface HandlerDeps {
-  io: LudoServer;
   rooms: RoomService;
   gameplay: GameplayService;
   publisher: SocketPublisher;
-  registry: ConnectionRegistry;
+  sessions: SessionManager;
   /** Events per connection. */
   connectionLimiter: SlidingWindowLimiter;
   /** Gameplay requests per player, across all their connections. */
@@ -46,48 +45,13 @@ function throttle(limiter: SlidingWindowLimiter, key: string): void {
   limiter.record(key);
 }
 
-/** Binds a connection to a verified player: joins the room's channel and records presence. */
-export async function bindConnection(socket: LudoSocket, actor: AuthenticatedPlayer, deps: HandlerDeps): Promise<void> {
-  socket.data.actor = actor;
-  await socket.join(roomChannel(actor.roomId));
-  if (deps.registry.add(actor.playerId, socket.id)) {
-    await deps.rooms.setPresence(actor, "connected");
-    const presence: PresencePayload = { roomId: actor.roomId, playerId: actor.playerId };
-    socket.to(roomChannel(actor.roomId)).emit("player:connected", presence);
-  }
-}
-
-/** Detaches every connection of a player who left the room. */
-async function unbindPlayer(actor: AuthenticatedPlayer, deps: HandlerDeps): Promise<void> {
-  for (const socketId of deps.registry.connectionsOf(actor.playerId)) {
-    deps.registry.remove(actor.playerId, socketId);
-    const socket = deps.io.sockets.sockets.get(socketId);
-    if (socket) {
-      socket.data.actor = null;
-      await socket.leave(roomChannel(actor.roomId));
-    }
-  }
-}
-
-/** Presence after a dropped connection. The seat, tokens and turn order are untouched. */
-export async function handleDisconnect(socket: LudoSocket, deps: HandlerDeps): Promise<void> {
-  const actor = socket.data.actor;
-  if (!actor || !deps.registry.remove(actor.playerId, socket.id)) return;
-  try {
-    await deps.rooms.setPresence(actor, "disconnected");
-  } catch (error) {
-    toProtocolError(error, "disconnect", deps.log); // logged; presence is best-effort
-  }
-  const presence: PresencePayload = { roomId: actor.roomId, playerId: actor.playerId };
-  deps.io.to(roomChannel(actor.roomId)).emit("player:disconnected", presence);
-}
-
 export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
-  const { rooms, gameplay, publisher } = deps;
+  const { rooms, gameplay, publisher, sessions } = deps;
 
   const requireActor = (): AuthenticatedPlayer => {
     const actor = socket.data.actor;
-    if (!actor) throw new TransportError("not-in-room", "Create or join a room first");
+    if (!actor) throw new TransportError("not-in-room", "Create, join or resume a room first");
+    throttle(deps.playerLimiter, actor.playerId);
     return actor;
   };
   const requireUnbound = (): void => {
@@ -115,6 +79,8 @@ export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
           reply({ ok: true, requestId, roomVersion: result.roomVersion ?? null, stateVersion: result.stateVersion ?? null, data: result.data });
         } catch (error) {
           const protocolError = toProtocolError(error, event, deps.log);
+          // Control moved to a newer connection (possibly in another server process): detach this one.
+          if (protocolError.code === "session-replaced") await sessions.detach(socket, "replaced").catch(() => undefined);
           reply({
             ok: false,
             requestId,
@@ -132,8 +98,7 @@ export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
   on("room:create", async (_requestId, body) => {
     requireUnbound();
     const created = await rooms.createRoom(body, { clientKey: socket.data.clientKey });
-    const actor = await rooms.authenticate(created.credential);
-    await bindConnection(socket, actor, deps);
+    const actor = await sessions.claim(socket, await rooms.authenticate(created.credential), false);
     const { room } = await gameplay.snapshot(actor);
     return { data: { room, player: room.players.find((p) => p.playerId === actor.playerId)!, credential: created.credential }, roomVersion: room.roomVersion };
   });
@@ -147,19 +112,38 @@ export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
   on("room:join", async (_requestId, body) => {
     requireUnbound();
     const joined = await rooms.joinRoom(body, { clientKey: socket.data.clientKey });
-    const actor = await rooms.authenticate(joined.credential);
-    await bindConnection(socket, actor, deps);
+    const actor = await sessions.claim(socket, await rooms.authenticate(joined.credential), false);
     const { room } = await gameplay.snapshot(actor);
     publisher.roomUpdated(room);
     return { data: { room, player: room.players.find((p) => p.playerId === actor.playerId)!, credential: joined.credential }, roomVersion: room.roomVersion };
   });
 
+  on("room:resume", async (_requestId, body) => {
+    const input = readFields<{ credential: unknown; takeover?: boolean; knownStateVersion?: number }>(body, RULES.resume);
+    const verified = await rooms.authenticate(input.credential);
+    const bound = socket.data.actor;
+    if (bound && bound.playerId !== verified.playerId) throw new TransportError("already-in-room", "This connection already controls another seat");
+    // Claiming again from the controlling connection is a no-op, so a retried resume is harmless.
+    const actor = await sessions.claim(socket, verified, input.takeover === true);
+    const snapshot = await gameplay.snapshot(actor);
+    const missedActions =
+      input.knownStateVersion !== undefined && snapshot.game && input.knownStateVersion < snapshot.game.stateVersion
+        ? await gameplay.actionsSince(actor, input.knownStateVersion)
+        : input.knownStateVersion !== undefined && snapshot.game
+          ? []
+          : null;
+    return {
+      data: { ...snapshot, player: snapshot.room.players.find((p) => p.playerId === actor.playerId)!, missedActions },
+      roomVersion: snapshot.room.roomVersion,
+      stateVersion: snapshot.game?.stateVersion ?? null,
+    };
+  });
+
   on("room:leave", async (_requestId, body) => {
     const actor = requireActor();
     const input = readFields<{ expectedRoomVersion?: number }>(body, RULES.roomVersionOnly);
-    throttle(deps.playerLimiter, actor.playerId);
     const room = await rooms.leaveRoom(actor, input);
-    await unbindPlayer(actor, deps);
+    await sessions.forget(socket);
     publisher.roomUpdated(room);
     return { data: { left: true as const }, roomVersion: room.roomVersion };
   });
@@ -167,9 +151,38 @@ export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
   on("room:getState", async (_requestId, body) => {
     const actor = requireActor();
     readFields(body, RULES.none);
-    throttle(deps.playerLimiter, actor.playerId);
     const snapshot = await gameplay.snapshot(actor);
     return { data: snapshot, roomVersion: snapshot.room.roomVersion, stateVersion: snapshot.game?.stateVersion ?? null };
+  });
+
+  on("room:transferHost", async (_requestId, body) => {
+    const actor = requireActor();
+    const input = readFields<{ playerId: string; expectedRoomVersion?: number }>(body, RULES.transferHost);
+    const room = await rooms.transferHost(actor, input);
+    publisher.roomUpdated(room);
+    return { data: { room }, roomVersion: room.roomVersion };
+  });
+
+  on("room:close", async (_requestId, body) => {
+    const actor = requireActor();
+    const input = readFields<{ expectedRoomVersion?: number }>(body, RULES.roomVersionOnly);
+    const room = await rooms.closeRoom(actor, input);
+    publisher.roomUpdated(room);
+    return { data: { room }, roomVersion: room.roomVersion };
+  });
+
+  // ── Sessions ─────────────────────────────────────────────────────────────
+
+  on("session:rotate", async (_requestId, body) => {
+    const actor = requireActor();
+    readFields(body, RULES.none);
+    return { data: { credential: await rooms.rotateCredential(actor) } };
+  });
+
+  on("session:confirmCredential", async (_requestId, body) => {
+    const actor = requireActor();
+    const { secret } = readFields<{ secret: string }>(body, RULES.confirmCredential);
+    return { data: { credentialVersion: await rooms.confirmRotation(actor, secret) } };
   });
 
   // ── Gameplay ─────────────────────────────────────────────────────────────
@@ -177,7 +190,6 @@ export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
   on("game:start", async (requestId, body) => {
     const actor = requireActor();
     const input = readFields<{ expectedRoomVersion?: number }>(body, RULES.roomVersionOnly);
-    throttle(deps.playerLimiter, actor.playerId);
     const started = await gameplay.start(actor, { requestId, ...input });
     return { data: { room: started.room, game: started.game }, roomVersion: started.room.roomVersion, stateVersion: started.game.stateVersion };
   });
@@ -185,7 +197,6 @@ export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
   on("game:roll", async (requestId, body) => {
     const actor = requireActor();
     const input = readFields<{ expectedStateVersion: number }>(body, RULES.roll);
-    throttle(deps.playerLimiter, actor.playerId);
     const outcome = await gameplay.roll(actor, { requestId, ...input });
     return { data: { action: outcome.action, replayed: outcome.replayed, game: outcome.game }, roomVersion: outcome.roomVersion, stateVersion: outcome.game.stateVersion };
   });
@@ -193,15 +204,27 @@ export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
   on("game:move", async (requestId, body) => {
     const actor = requireActor();
     const input = readFields<{ expectedStateVersion: number; tokenId: number }>(body, RULES.move);
-    throttle(deps.playerLimiter, actor.playerId);
     const outcome = await gameplay.move(actor, { requestId, ...input });
     return { data: { action: outcome.action, replayed: outcome.replayed, game: outcome.game }, roomVersion: outcome.roomVersion, stateVersion: outcome.game.stateVersion };
+  });
+
+  on("game:pause", async (_requestId, body) => {
+    const actor = requireActor();
+    const input = readFields<{ expectedRoomVersion?: number }>(body, RULES.roomVersionOnly);
+    const outcome = await gameplay.pause(actor, input);
+    return { data: outcome, roomVersion: outcome.room.roomVersion };
+  });
+
+  on("game:resume", async (_requestId, body) => {
+    const actor = requireActor();
+    const input = readFields<{ expectedRoomVersion?: number }>(body, RULES.roomVersionOnly);
+    const outcome = await gameplay.resume(actor, input);
+    return { data: outcome, roomVersion: outcome.room.roomVersion };
   });
 
   on("game:getHistory", async (_requestId, body) => {
     const actor = requireActor();
     const input = readFields<{ afterSeq?: number; limit?: number }>(body, RULES.history);
-    throttle(deps.playerLimiter, actor.playerId);
     return { data: await gameplay.history(actor, input) };
   });
 }

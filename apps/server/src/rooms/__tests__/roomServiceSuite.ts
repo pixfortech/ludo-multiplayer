@@ -366,7 +366,7 @@ export function runRoomServiceSuite(name: string, setup: () => Promise<{ store: 
         const view = await rooms.removePlayer(host, { playerId: ben.playerId });
         expect(view.players.map((p) => p.displayName)).toEqual(["Aman", "Chen"]);
         expect((await rooms.previewRoom(code, ctx)).availableColours).toContain("emerald");
-        await expectRoomError(rooms.authenticate(members[1]!.credential), "unauthenticated");
+        await expectRoomError(rooms.authenticate(members[1]!.credential), "session-expired"); // revoked on removal
         await expectRoomError(rooms.getRoomView(ben), "not-a-member");
       });
 

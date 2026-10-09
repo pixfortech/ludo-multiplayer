@@ -21,6 +21,7 @@ import {
   type NewRoom,
   type PlayerCredential,
   type PlayerRecord,
+  type RetentionCutoffs,
   type RoomPatch,
   type RoomRecord,
 } from "./types.js";
@@ -54,6 +55,10 @@ const toRoom = (r: any): RoomRecord => ({
   lastActivityAt: r.last_activity_at,
   expiresAt: r.expires_at,
   archivedAt: r.archived_at,
+  pauseReason: r.pause_reason,
+  pausedPlayerId: r.paused_player_id,
+  pausedAt: r.paused_at,
+  endedReason: r.ended_reason,
 });
 
 const toPlayer = (r: any): PlayerRecord => ({
@@ -71,6 +76,7 @@ const toPlayer = (r: any): PlayerRecord => ({
   lastSeenAt: r.last_seen_at,
   leftAt: r.left_at,
   finishPlace: r.finish_place,
+  sessionEpoch: r.session_epoch,
 });
 
 const toEvent = (r: any): GameEventRecord => ({
@@ -238,21 +244,29 @@ export class PostgresGameStore implements GameStore {
       const { rows } = await client.query("SELECT count(*)::int AS n FROM players WHERE room_id = $1 AND left_at IS NULL", [roomId]);
       if (rows[0].n > patch.maxPlayers) throw new StoreError("capacity-conflict", `The room already has ${rows[0].n} players`);
     }
-    const effective: RoomPatch = patch.status === "archived" && patch.archivedAt === undefined ? { ...patch, archivedAt: new Date() } : patch;
-    const columns: Record<keyof RoomPatch, string> = {
-      name: "name",
-      status: "status",
-      settings: "settings",
-      hostPlayerId: "host_player_id",
-      maxPlayers: "max_players",
-      expiresAt: "expires_at",
-      archivedAt: "archived_at",
+    const columns: Record<string, unknown> = {
+      name: patch.name,
+      status: patch.status,
+      settings: patch.settings === undefined ? undefined : JSON.stringify(patch.settings),
+      host_player_id: patch.hostPlayerId,
+      max_players: patch.maxPlayers,
+      expires_at: patch.expiresAt,
+      archived_at: patch.status === "archived" && patch.archivedAt === undefined ? new Date() : patch.archivedAt,
+      pause_reason: patch.pauseReason,
+      paused_player_id: patch.pausedPlayerId,
+      ended_reason: patch.endedReason,
     };
+    if (patch.status === "paused") {
+      columns.paused_at = new Date(); // a missing pause reason is refused by rooms_pause_consistent (after the transition trigger)
+    } else if (patch.status !== undefined) {
+      // Leaving "paused" (or any other status change) clears the pause details.
+      Object.assign(columns, { pause_reason: null, paused_player_id: null, paused_at: null });
+    }
     const sets: string[] = [];
     const params: unknown[] = [];
-    for (const [key, column] of Object.entries(columns) as [keyof RoomPatch, string][]) {
-      if (effective[key] === undefined) continue;
-      params.push(key === "settings" ? JSON.stringify(effective[key]) : effective[key]);
+    for (const [column, value] of Object.entries(columns)) {
+      if (value === undefined) continue;
+      params.push(value);
       sets.push(`${column} = $${params.length + 1}`);
     }
     return this.bumpRoom(client, roomId, sets.join(", "), params);
@@ -297,7 +311,8 @@ export class PostgresGameStore implements GameStore {
     return this.tx(async (client) => {
       await this.lockRoom(client, roomId, expectedRoomVersion);
       const { rowCount } = await client.query(
-        "UPDATE players SET left_at = now(), connection_status = 'left' WHERE id = $1 AND room_id = $2 AND left_at IS NULL",
+        `UPDATE players SET left_at = now(), connection_status = 'left', credential_revoked_at = now(), pending_credential_hash = NULL
+         WHERE id = $1 AND room_id = $2 AND left_at IS NULL`,
         [playerId, roomId],
       );
       if (rowCount === 0) throw new StoreError("not-found", "Player is not an active member of this room");
@@ -310,9 +325,78 @@ export class PostgresGameStore implements GameStore {
   }
 
   async getCredential(playerId: string): Promise<PlayerCredential | null> {
-    const { rows } = await this.pool.query("SELECT id, credential_hash, credential_version, credential_revoked_at FROM players WHERE id = $1", [playerId]);
+    const { rows } = await this.pool.query(
+      "SELECT id, credential_hash, credential_version, credential_revoked_at, pending_credential_hash FROM players WHERE id = $1",
+      [playerId],
+    );
     const r = rows[0];
-    return r ? { playerId: r.id, hash: r.credential_hash, version: r.credential_version, revokedAt: r.credential_revoked_at } : null;
+    return r
+      ? { playerId: r.id, hash: r.credential_hash, version: r.credential_version, revokedAt: r.credential_revoked_at, pendingHash: r.pending_credential_hash }
+      : null;
+  }
+
+  async setPendingCredential(playerId: string, expectedVersion: number, pendingHash: Buffer) {
+    const { rowCount } = await this.pool.query(
+      `UPDATE players SET pending_credential_hash = $3, pending_credential_issued_at = now()
+       WHERE id = $1 AND credential_version = $2 AND credential_revoked_at IS NULL AND left_at IS NULL`,
+      [playerId, expectedVersion, pendingHash],
+    );
+    return rowCount === 1;
+  }
+
+  async promotePendingCredential(playerId: string, pendingHash: Buffer) {
+    const { rows } = await this.pool.query(
+      `UPDATE players SET credential_hash = pending_credential_hash, credential_version = credential_version + 1,
+         credential_issued_at = now(), pending_credential_hash = NULL, pending_credential_issued_at = NULL
+       WHERE id = $1 AND pending_credential_hash = $2 AND credential_revoked_at IS NULL AND left_at IS NULL
+       RETURNING credential_version`,
+      [playerId, pendingHash],
+    );
+    return rows[0] ? (rows[0].credential_version as number) : null;
+  }
+
+  async bumpSessionEpoch(playerId: string) {
+    const { rows } = await this.pool.query(
+      "UPDATE players SET session_epoch = session_epoch + 1 WHERE id = $1 AND left_at IS NULL AND credential_revoked_at IS NULL RETURNING session_epoch",
+      [playerId],
+    );
+    return rows[0] ? (rows[0].session_epoch as number) : null;
+  }
+
+  async resetPresence() {
+    const { rowCount } = await this.pool.query("UPDATE players SET connection_status = 'disconnected' WHERE connection_status = 'connected'");
+    return rowCount ?? 0;
+  }
+
+  async listRoomIdsByStatus(status: RoomRecord["status"], limit: number) {
+    const { rows } = await this.pool.query("SELECT id FROM rooms WHERE status = $1 ORDER BY last_activity_at LIMIT $2", [status, limit]);
+    return rows.map((r) => r.id as string);
+  }
+
+  async expireInactiveRooms(cutoffs: RetentionCutoffs, limit: number) {
+    // SKIP LOCKED: a room whose row is locked by an in-flight operation (a move being committed,
+    // a player joining) is left alone; the operation refreshes its activity time.
+    const expired = await this.pool.query(
+      `WITH due AS (
+         SELECT id FROM rooms
+         WHERE archived_at IS NULL
+           AND ((status = 'lobby' AND last_activity_at < $1) OR (status IN ('playing', 'paused') AND last_activity_at < $2))
+         ORDER BY last_activity_at LIMIT $3 FOR UPDATE SKIP LOCKED)
+       UPDATE rooms r SET status = 'abandoned', ended_reason = 'expired', pause_reason = NULL, paused_player_id = NULL, paused_at = NULL,
+         room_version = room_version + 1, updated_at = now(), last_activity_at = $4
+       FROM due WHERE r.id = due.id RETURNING r.id`,
+      [cutoffs.lobbyBefore, cutoffs.activeBefore, limit, cutoffs.now],
+    );
+    const archived = await this.pool.query(
+      `WITH due AS (
+         SELECT id FROM rooms
+         WHERE archived_at IS NULL AND status IN ('finished', 'abandoned') AND last_activity_at < $1
+         ORDER BY last_activity_at LIMIT $2 FOR UPDATE SKIP LOCKED)
+       UPDATE rooms r SET status = 'archived', archived_at = now(), room_version = room_version + 1, updated_at = now()
+       FROM due WHERE r.id = due.id RETURNING r.id`,
+      [cutoffs.endedBefore, limit],
+    );
+    return { expired: expired.rows.map((r) => r.id as string), archived: archived.rows.map((r) => r.id as string) };
   }
 
   async rotateCredential(playerId: string, newHash: Buffer) {
@@ -366,6 +450,9 @@ export class PostgresGameStore implements GameStore {
     }
     return this.tx(async (client) => {
       const { event, roomId } = input;
+      // Lock the room first: a pause, close or expiry cannot slip in between this check and the commit.
+      const locked = await client.query("SELECT status FROM rooms WHERE id = $1 FOR UPDATE", [roomId]);
+      if (locked.rows.length === 0) throw new StoreError("not-found", `Room ${roomId} not found`);
       if (event.requestId !== null && event.playerId !== null) {
         const existing = await client.query("SELECT 1 FROM game_events WHERE room_id = $1 AND player_id = $2 AND request_id = $3", [
           roomId,
@@ -374,6 +461,7 @@ export class PostgresGameStore implements GameStore {
         ]);
         if (existing.rows.length > 0) throw new StoreError("duplicate-request", "This request was already committed");
       }
+      if (locked.rows[0].status !== "playing") throw new StoreError("room-not-playing", `The room is ${locked.rows[0].status}`);
       const c = sessionColumns(state);
       const { rows } = await client.query(
         `UPDATE game_sessions SET state = $3, state_version = $4, phase = $5, current_player_id = $6,

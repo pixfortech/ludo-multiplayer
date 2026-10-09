@@ -394,5 +394,72 @@ export function runGameStoreContract(name: string, setup: () => Promise<{ store:
         expect(await store.markPlayerLeft(room.id, 2, guest.id, { status: "abandoned" })).toMatchObject({ status: "abandoned", roomVersion: 3 });
       });
     });
+
+    describe("sessions, pauses and retention (2D)", () => {
+      it("rotates credentials in two steps with compare-and-swap, and revokes on leave", async () => {
+        const { room, host, guest } = await seededRoom(store);
+        const before = (await store.getCredential(host.id))!;
+        expect(before.pendingHash).toBeNull();
+        const next = issueCredential();
+        expect(await store.setPendingCredential(host.id, before.version + 1, next.hash)).toBe(false); // stale version
+        expect(await store.setPendingCredential(host.id, before.version, next.hash)).toBe(true);
+        expect((await store.getCredential(host.id))!.hash.equals(before.hash)).toBe(true); // current secret still valid
+        const promotions = await Promise.all([store.promotePendingCredential(host.id, next.hash), store.promotePendingCredential(host.id, next.hash)]);
+        expect(promotions.filter((v) => v !== null)).toEqual([before.version + 1]); // exactly one wins
+        const after = (await store.getCredential(host.id))!;
+        expect(after.hash.equals(next.hash)).toBe(true);
+        expect(after.pendingHash).toBeNull();
+        await store.markPlayerLeft(room.id, room.roomVersion, guest.id);
+        expect((await store.getCredential(guest.id))!.revokedAt).toBeInstanceOf(Date);
+        expect(await store.setPendingCredential(guest.id, 1, issueCredential().hash)).toBe(false);
+      });
+
+      it("moves the session epoch on for active members only", async () => {
+        const { room, host, guest } = await seededRoom(store);
+        expect((await store.getPlayer(host.id))!.sessionEpoch).toBe(0);
+        expect(await store.bumpSessionEpoch(host.id)).toBe(1);
+        expect(await store.bumpSessionEpoch(host.id)).toBe(2);
+        await store.markPlayerLeft(room.id, room.roomVersion, guest.id);
+        expect(await store.bumpSessionEpoch(guest.id)).toBeNull();
+      });
+
+      it("pauses with a reason, clears it on resume, and refuses game commits while not playing", async () => {
+        const { room, host, guest, state } = await seededRoom(store);
+        const started = await store.startGame(room.id, room.roomVersion, state, { playerId: host.id, actionType: "game:start", requestId: null, payload: {} });
+        const paused = await store.updateRoom(room.id, started.room.roomVersion, { status: "paused", pauseReason: "connection-lost", pausedPlayerId: guest.id });
+        expect(paused).toMatchObject({ status: "paused", pauseReason: "connection-lost", pausedPlayerId: guest.id });
+        expect(paused.pausedAt).toBeInstanceOf(Date);
+        await expectStoreError(
+          store.commitGameAction({ roomId: room.id, expectedStateVersion: 0, state: advance(state), event: { playerId: host.id, actionType: "game:roll", requestId: "while-paused", payload: {} } }),
+          "room-not-playing",
+        );
+        expect((await store.getGameSession(room.id))!.stateVersion).toBe(0);
+        const resumed = await store.updateRoom(room.id, paused.roomVersion, { status: "playing" });
+        expect(resumed).toMatchObject({ status: "playing", pauseReason: null, pausedPlayerId: null, pausedAt: null });
+      });
+
+      it("expires inactive live rooms and archives ended ones, never deleting them", async () => {
+        const { room } = await store.createRoom(newRoom(), newPlayer(0, "crimson"), generateRoomCode);
+        const future = new Date(Date.now() + 365 * 86_400_000);
+        const none = await store.expireInactiveRooms({ now: new Date(), lobbyBefore: new Date(0), activeBefore: new Date(0), endedBefore: new Date(0) }, 500);
+        expect(none.expired).not.toContain(room.id);
+        const first = await store.expireInactiveRooms({ now: new Date(), lobbyBefore: future, activeBefore: new Date(0), endedBefore: new Date(0) }, 500);
+        expect(first.expired).toContain(room.id);
+        expect(await store.getRoom(room.id)).toMatchObject({ status: "abandoned", endedReason: "expired" });
+        const second = await store.expireInactiveRooms({ now: new Date(), lobbyBefore: new Date(0), activeBefore: new Date(0), endedBefore: future }, 500);
+        expect(second.archived).toContain(room.id);
+        expect(await store.getRoom(room.id)).toMatchObject({ status: "archived", endedReason: "expired" });
+        expect(await store.listPlayers(room.id)).toHaveLength(1); // nothing deleted
+      });
+
+      it("resets presence and lists rooms in play", async () => {
+        const { room, host, state } = await seededRoom(store);
+        await store.startGame(room.id, room.roomVersion, state, { playerId: host.id, actionType: "game:start", requestId: null, payload: {} });
+        await store.setConnectionStatus(host.id, "connected");
+        expect(await store.resetPresence()).toBeGreaterThanOrEqual(1);
+        expect((await store.getPlayer(host.id))!.connectionStatus).toBe("disconnected");
+        expect(await store.listRoomIdsByStatus("playing", 10_000)).toContain(room.id);
+      });
+    });
   });
 }

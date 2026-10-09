@@ -1,6 +1,7 @@
 // Attaches the realtime layer to a Socket.IO server: handshake
-// authentication, per-connection handlers, presence and the broadcaster that
-// the gameplay service publishes committed changes through.
+// authentication, per-connection handlers, seat sessions (control, hand-over,
+// reconnect grace) and the broadcaster the gameplay service publishes
+// committed changes through.
 
 import { PROTOCOL_VERSION } from "@ludo/shared-types";
 import type { GameplayService } from "../gameplay/gameplayService.js";
@@ -8,16 +9,19 @@ import { SlidingWindowLimiter, type RateLimitPolicy } from "../rooms/rateLimiter
 import type { RoomService } from "../rooms/roomService.js";
 import { SocketPublisher } from "./broadcaster.js";
 import { ConnectionRegistry } from "./presence.js";
+import { SessionManager } from "./sessions.js";
 import { handshakeAuth } from "./socketAuth.js";
 import { toProtocolError, type Logger } from "./socketErrors.js";
 import type { LudoServer } from "./socketEvents.js";
-import { bindConnection, handleDisconnect, registerHandlers, type HandlerDeps } from "./socketHandlers.js";
+import { registerHandlers, type HandlerDeps } from "./socketHandlers.js";
 
 export interface RealtimeOptions {
   rooms: RoomService;
   gameplay: GameplayService;
   /** Number of trusted reverse proxies in front of the server (for client addresses). Default 0. */
   trustProxyHops?: number;
+  /** How long the current player may be disconnected before the game pauses (default 15 s). */
+  reconnectGraceMs?: number;
   limits?: {
     perConnection?: RateLimitPolicy;
     perPlayer?: RateLimitPolicy;
@@ -28,10 +32,14 @@ export interface RealtimeOptions {
 
 export const DEFAULT_CONNECTION_LIMIT: RateLimitPolicy = { limit: 60, windowMs: 10_000 };
 export const DEFAULT_PLAYER_LIMIT: RateLimitPolicy = { limit: 40, windowMs: 10_000 };
+export const DEFAULT_RECONNECT_GRACE_MS = 15_000;
 
 export interface RealtimeHandle {
   publisher: SocketPublisher;
   registry: ConnectionRegistry;
+  sessions: SessionManager;
+  /** Stops timers; call before closing the server. */
+  dispose(): void;
 }
 
 export function attachRealtime(io: LudoServer, options: RealtimeOptions): RealtimeHandle {
@@ -39,13 +47,21 @@ export function attachRealtime(io: LudoServer, options: RealtimeOptions): Realti
   const publisher = new SocketPublisher(io);
   const registry = new ConnectionRegistry();
   options.gameplay.attachPublisher(publisher);
-
-  const deps: HandlerDeps = {
+  const sessions = new SessionManager({
     io,
     rooms: options.rooms,
     gameplay: options.gameplay,
-    publisher,
     registry,
+    publisher,
+    graceMs: options.reconnectGraceMs ?? DEFAULT_RECONNECT_GRACE_MS,
+    log,
+  });
+
+  const deps: HandlerDeps = {
+    rooms: options.rooms,
+    gameplay: options.gameplay,
+    publisher,
+    sessions,
     connectionLimiter: new SlidingWindowLimiter(options.limits?.perConnection ?? DEFAULT_CONNECTION_LIMIT),
     playerLimiter: new SlidingWindowLimiter(options.limits?.perPlayer ?? DEFAULT_PLAYER_LIMIT),
     log,
@@ -55,6 +71,7 @@ export function attachRealtime(io: LudoServer, options: RealtimeOptions): Realti
     handshakeAuth({
       rooms: options.rooms,
       trustProxyHops: options.trustProxyHops ?? 0,
+      isControlled: (playerId) => registry.isControlled(playerId),
       ...(options.limits?.failedAuth ? { failedAuthLimiter: new SlidingWindowLimiter(options.limits.failedAuth) } : {}),
     }),
   );
@@ -63,15 +80,16 @@ export function attachRealtime(io: LudoServer, options: RealtimeOptions): Realti
     socket.emit("server:hello", { protocolVersion: PROTOCOL_VERSION, serverTime: Date.now() });
     registerHandlers(socket, deps);
     socket.on("disconnect", () => {
-      handleDisconnect(socket, deps).catch((error: unknown) => toProtocolError(error, "disconnect", log));
+      sessions.release(socket).catch((error: unknown) => toProtocolError(error, "disconnect", log));
     });
     socket.on("error", (error) => toProtocolError(error, "socket", log));
 
-    const actor = socket.data.actor;
-    if (actor) {
-      // Authenticated at the handshake: bind, then send the current snapshot.
+    const pending = socket.data.pending;
+    socket.data.pending = null;
+    if (pending) {
+      // Credential verified at the handshake: claim the seat, then send the current snapshot.
       (async () => {
-        await bindConnection(socket, actor, deps);
+        const actor = await sessions.claim(socket, pending.actor, pending.takeover);
         const snapshot = await options.gameplay.snapshot(actor);
         socket.emit("room:updated", { room: snapshot.room });
         if (snapshot.game) socket.emit("game:state", { roomId: snapshot.room.roomId, game: snapshot.game });
@@ -82,5 +100,5 @@ export function attachRealtime(io: LudoServer, options: RealtimeOptions): Realti
     }
   });
 
-  return { publisher, registry };
+  return { publisher, registry, sessions, dispose: () => sessions.dispose() };
 }

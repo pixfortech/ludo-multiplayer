@@ -9,6 +9,21 @@ export interface ServerConfig {
    * trusted for client addresses (rate limiting). 0 = use the peer address.
    */
   trustProxyHops: number;
+  /** How long the player whose turn it is may be disconnected before the game pauses. */
+  reconnectGraceMs: number;
+  /** Days of inactivity before rooms expire or are archived (see rooms/retention.ts). */
+  retention: { lobbyDays: number; activeDays: number; endedDays: number };
+  /** How often the retention sweep runs; 0 disables it. */
+  retentionSweepMs: number;
+}
+
+function wholeNumber(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max: number): number {
+  const raw = env[name];
+  const value = raw === undefined || raw.trim() === "" ? fallback : Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new Error(`Invalid ${name}: expected a whole number from ${min} to ${max}`);
+  }
+  return value;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -28,5 +43,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   if (!Number.isInteger(trustProxyHops) || trustProxyHops < 0 || trustProxyHops > 10) {
     throw new Error("Invalid TRUST_PROXY_HOPS: expected a whole number from 0 to 10");
   }
-  return { port, clientOrigins, databaseUrl, trustProxyHops };
+  return {
+    port,
+    clientOrigins,
+    databaseUrl,
+    trustProxyHops,
+    reconnectGraceMs: wholeNumber(env, "RECONNECT_GRACE_SECONDS", 15, 0, 3600) * 1000,
+    retention: {
+      lobbyDays: wholeNumber(env, "ROOM_RETENTION_LOBBY_DAYS", 30, 1, 3650),
+      activeDays: wholeNumber(env, "ROOM_RETENTION_ACTIVE_DAYS", 90, 1, 3650),
+      endedDays: wholeNumber(env, "ROOM_RETENTION_ENDED_DAYS", 30, 1, 3650),
+    },
+    retentionSweepMs: wholeNumber(env, "RETENTION_SWEEP_MINUTES", 60, 0, 10_080) * 60_000,
+  };
 }

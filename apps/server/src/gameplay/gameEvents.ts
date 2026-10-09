@@ -2,7 +2,7 @@
 // GamePublisher only after PostgreSQL has committed; the Socket.IO
 // broadcaster implements it, tests record it. Nothing here knows about sockets.
 
-import type { GameActionView, GameStateView, RoomView } from "@ludo/shared-types";
+import type { GameActionView, GameStateView, PauseInfo, RoomView } from "@ludo/shared-types";
 
 export interface GameFinishedNotice {
   stateVersion: number;
@@ -15,6 +15,8 @@ export interface GamePublisher {
   gameAction(roomId: string, action: GameActionView): void;
   gameState(roomId: string, game: GameStateView): void;
   gameFinished(roomId: string, notice: GameFinishedNotice): void;
+  gamePaused(roomId: string, notice: { roomVersion: number; pause: PauseInfo }): void;
+  gameResumed(roomId: string, notice: { roomVersion: number }): void;
 }
 
 export const SILENT_PUBLISHER: GamePublisher = {
@@ -22,4 +24,6 @@ export const SILENT_PUBLISHER: GamePublisher = {
   gameAction: () => undefined,
   gameState: () => undefined,
   gameFinished: () => undefined,
+  gamePaused: () => undefined,
+  gameResumed: () => undefined,
 };

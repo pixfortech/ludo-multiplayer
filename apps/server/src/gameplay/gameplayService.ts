@@ -14,7 +14,7 @@
 
 import { createCryptoDice, moveToken, rollDice, type ActionResult, type DiceSource } from "@ludo/game-engine";
 import type { GameActionType, GameActionView, GameStateView, RoomView } from "@ludo/shared-types";
-import { StoreError, type GameSessionRecord, type GameStore, type RoomRecord } from "../persistence/types.js";
+import { StoreError, type GameSessionRecord, type GameStore, type PlayerRecord, type RoomRecord } from "../persistence/types.js";
 import { RoomError } from "../rooms/errors.js";
 import { translate, type AuthenticatedPlayer, type RoomService } from "../rooms/roomService.js";
 import { toRoomView } from "../rooms/views.js";
@@ -69,6 +69,13 @@ export interface HistoryPage {
 }
 
 const MAX_HISTORY_PAGE = 100;
+const ACTION_TYPES = new Set<string>(["game:start", "game:roll", "game:move"]);
+
+export interface PauseOutcome {
+  room: RoomView;
+  /** False when the game was already in the requested state. */
+  changed: boolean;
+}
 
 export class GameplayService {
   private readonly store: GameStore;
@@ -164,6 +171,145 @@ export class GameplayService {
     });
   }
 
+  // ── Pause and resume ─────────────────────────────────────────────────────
+
+  /** Host only: pause a running game. Pausing a paused game changes nothing. */
+  async pause(actor: AuthenticatedPlayer, request: { expectedRoomVersion?: number }): Promise<PauseOutcome> {
+    return this.coordinator.run(actor.roomId, () =>
+      this.guard(async () => {
+        const { room, players } = await this.hostRoom(actor, request.expectedRoomVersion);
+        if (room.status === "paused") return { room: toRoomView(room, players), changed: false };
+        await this.playableSession(room);
+        const paused = await this.store.updateRoom(room.id, room.roomVersion, { status: "paused", pauseReason: "host", pausedPlayerId: null });
+        return { room: this.publishPause(paused, players), changed: true };
+      }),
+    );
+  }
+
+  /** Host only: resume a paused game (for either reason). Resuming a running game changes nothing. */
+  async resume(actor: AuthenticatedPlayer, request: { expectedRoomVersion?: number }): Promise<PauseOutcome> {
+    return this.coordinator.run(actor.roomId, () =>
+      this.guard(async () => {
+        const { room, players } = await this.hostRoom(actor, request.expectedRoomVersion);
+        if (room.status === "playing") return { room: toRoomView(room, players), changed: false };
+        if (room.status !== "paused") await this.playableSession(room); // throws the precise reason
+        const resumed = await this.store.updateRoom(room.id, room.roomVersion, { status: "playing" });
+        return { room: this.publishResume(resumed, players), changed: true };
+      }),
+    );
+  }
+
+  /**
+   * System: pause because `playerId` must act but has been away past the grace
+   * period. Re-checked under the room's slot against committed state, and only
+   * if `stillAway()` still holds. Returns the paused room, or null if nothing changed.
+   */
+  async pauseIfAway(roomId: string, playerId: string, stillAway: () => boolean): Promise<RoomView | null> {
+    return this.coordinator.run(roomId, () =>
+      this.guard(async () => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const room = await this.store.getRoom(roomId);
+          if (!room || room.status !== "playing" || !stillAway()) return null;
+          const session = await this.store.getGameSession(roomId);
+          const current = session?.state.phase === "playing" ? session.state.players[session.state.currentPlayerIndex]?.id : null;
+          if (current !== playerId) return null;
+          try {
+            const paused = await this.store.updateRoom(roomId, room.roomVersion, { status: "paused", pauseReason: "connection-lost", pausedPlayerId: playerId });
+            return this.publishPause(paused, await this.store.listPlayers(roomId));
+          } catch (error) {
+            if (!(error instanceof StoreError && error.code === "version-conflict")) throw error;
+          }
+        }
+        return null;
+      }),
+    );
+  }
+
+  /** System: the player a connection-lost pause was waiting for is back; resume. Returns the room, or null if nothing changed. */
+  async resumeIfAwaited(roomId: string, playerId: string): Promise<RoomView | null> {
+    return this.coordinator.run(roomId, () =>
+      this.guard(async () => {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const room = await this.store.getRoom(roomId);
+          if (!room || room.status !== "paused" || room.pauseReason !== "connection-lost" || room.pausedPlayerId !== playerId) return null;
+          try {
+            const resumed = await this.store.updateRoom(roomId, room.roomVersion, { status: "playing" });
+            return this.publishResume(resumed, await this.store.listPlayers(roomId));
+          } catch (error) {
+            if (!(error instanceof StoreError && error.code === "version-conflict")) throw error;
+          }
+        }
+        return null;
+      }),
+    );
+  }
+
+  /** Startup after a restart (single instance): no connection survived, so nobody is connected. */
+  async resetPresence(): Promise<number> {
+    return this.guard(() => this.store.resetPresence());
+  }
+
+  /** Rooms with a running game (to give their current players a grace period after a restart). */
+  async roomsInPlay(limit: number): Promise<string[]> {
+    return this.guard(() => this.store.listRoomIdsByStatus("playing", limit));
+  }
+
+  /** Status and whose turn it is, for the reconnect monitor. */
+  async turnInfo(roomId: string): Promise<{ status: RoomRecord["status"]; currentPlayerId: string | null } | null> {
+    return this.guard(async () => {
+      const room = await this.store.getRoom(roomId);
+      if (!room) return null;
+      const session = room.status === "playing" ? await this.store.getGameSession(roomId) : null;
+      const state = session?.state;
+      return { status: room.status, currentPlayerId: state && state.phase === "playing" ? (state.players[state.currentPlayerIndex]?.id ?? null) : null };
+    });
+  }
+
+  /** Committed actions after a client's last known state version, or null when too many were missed. */
+  async actionsSince(actor: AuthenticatedPlayer, knownStateVersion: number, max = 100): Promise<GameActionView[] | null> {
+    return this.guard(async () => {
+      const { room } = await this.rooms.resolveMember(actor);
+      const actions: GameActionView[] = [];
+      let afterSeq = 0;
+      for (;;) {
+        const page = await this.store.listEvents(room.id, { afterSeq, limit: 500 });
+        for (const event of page) {
+          if (event.resultStateVersion > knownStateVersion && ACTION_TYPES.has(event.actionType)) actions.push(toActionView(event));
+        }
+        if (actions.length > max) return null;
+        if (page.length < 500) return actions;
+        afterSeq = page.at(-1)!.seq;
+      }
+    });
+  }
+
+  private async hostRoom(actor: AuthenticatedPlayer, expectedRoomVersion?: number) {
+    const loaded = await this.rooms.resolveMember(actor);
+    if (loaded.room.hostPlayerId !== actor.playerId) throw new RoomError("not-host", "Only the host can do that");
+    if (expectedRoomVersion !== undefined && expectedRoomVersion !== loaded.room.roomVersion) {
+      throw new RoomError("version-conflict", "The room changed in the meantime; reload it and try again", { roomVersion: loaded.room.roomVersion });
+    }
+    return loaded;
+  }
+
+  private publishPause(room: RoomRecord, players: PlayerRecord[]): RoomView {
+    const view = toRoomView(room, players);
+    this.publish(() => {
+      this.publisher.roomUpdated(view);
+      this.publisher.gamePaused(room.id, { roomVersion: view.roomVersion, pause: view.pause! });
+    });
+    return view;
+  }
+
+  private publishResume(room: RoomRecord, players: PlayerRecord[]): RoomView {
+    const view = toRoomView(room, players);
+    this.publish(() => {
+      this.publisher.roomUpdated(view);
+      this.publisher.gameResumed(room.id, { roomVersion: view.roomVersion });
+    });
+    return view;
+  }
+
   // ── Internals ────────────────────────────────────────────────────────────
 
   private act(
@@ -199,6 +345,11 @@ export class GameplayService {
           if (error instanceof StoreError && error.code === "duplicate-request") {
             const replay = await this.replayAction(room, actor, request, type);
             if (replay) return replay;
+          }
+          if (error instanceof StoreError && error.code === "room-not-playing") {
+            // Paused, finished or closed between our check and the commit (e.g. a pause or expiry won the room lock).
+            const fresh = await this.store.getRoom(room.id);
+            if (fresh) await this.playableSession(fresh);
           }
           if (error instanceof StoreError && error.code === "version-conflict") {
             const current = await this.store.getGameSession(room.id);

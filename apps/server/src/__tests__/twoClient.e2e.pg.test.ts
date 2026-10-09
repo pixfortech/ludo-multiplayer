@@ -3,9 +3,6 @@
 // LUDO_E2E_COMPILED=1) against a real PostgreSQL, with production crypto
 // dice. Two independent Socket.IO clients play until the turn has passed
 // several times, then both clients and the database must agree exactly.
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import type { GameStateView } from "@ludo/shared-types";
@@ -14,16 +11,15 @@ import { migrate } from "../persistence/migrate.js";
 import { PostgresGameStore } from "../persistence/postgresStore.js";
 import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, unavailableReason, type TestDatabase } from "../persistence/__tests__/pgHarness.js";
 import { ask, expectOk, open, rid, type Connected } from "../socket/__tests__/realtimeHarness.js";
-import { SERVER_DIR, TSX_CLI, baseChildEnv } from "./childProcess.js";
+import { spawnServer, type ServerProcess } from "./childProcess.js";
 
 const COMPILED = process.env.LUDO_E2E_COMPILED === "1";
 const skip = !postgresAvailable && !POSTGRES_REQUIRED;
 if (skip) console.warn(`⚠ two-client end-to-end test SKIPPED: ${unavailableReason()}`);
 
 let db: TestDatabase;
-let server: ChildProcess | null = null;
+let server: ServerProcess | null = null;
 let url = "";
-let serverOutput = "";
 
 beforeAll(async () => {
   if (skip) return;
@@ -31,32 +27,12 @@ beforeAll(async () => {
   const pool = new pg.Pool({ connectionString: db.url });
   await migrate(pool);
   await pool.end();
-
-  const entry = COMPILED ? [join(SERVER_DIR, "dist", "server.js")] : [TSX_CLI, "--conditions=source", "src/server.ts"];
-  if (COMPILED && !existsSync(entry[0]!)) throw new Error("LUDO_E2E_COMPILED=1 needs a build: run npm run build first");
-  server = spawn(process.execPath, entry, { cwd: SERVER_DIR, windowsHide: true, env: { ...baseChildEnv(), PORT: "0", DATABASE_URL: db.url } });
-  url = await new Promise<string>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`server did not start:\n${serverOutput}`)), 60_000);
-    const onData = (chunk: Buffer) => {
-      serverOutput += chunk.toString();
-      const m = /listening on http:\/\/localhost:(\d+)/.exec(serverOutput);
-      if (m) {
-        clearTimeout(timer);
-        resolve(`http://127.0.0.1:${m[1]}`);
-      }
-    };
-    server!.stdout!.on("data", onData);
-    server!.stderr!.on("data", onData);
-    server!.once("exit", (code) => reject(new Error(`server exited with ${code}:\n${serverOutput}`)));
-  });
+  server = await spawnServer(db.url, { compiled: COMPILED });
+  url = server.url;
 }, 120_000);
 
 afterAll(async () => {
-  if (server && server.exitCode === null) {
-    const exited = new Promise((r) => server!.once("exit", r));
-    server.kill("SIGTERM");
-    await exited;
-  }
+  await server?.stop();
   await db?.dispose();
 }, 60_000);
 

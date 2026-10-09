@@ -41,6 +41,12 @@ import { toPlayerView, toRoomPreview, toRoomView } from "./views.js";
 export interface AuthenticatedPlayer {
   readonly playerId: string;
   readonly roomId: string;
+  /**
+   * The seat's session epoch this identity was issued under. When another
+   * connection takes control (takeControl), the epoch moves on and this
+   * identity stops working (session-replaced), in every server process.
+   */
+  readonly sessionEpoch: number;
 }
 
 export interface RequestContext {
@@ -223,19 +229,86 @@ export class RoomService {
     const playerId = parsePlayerId(rawId, "unauthenticated");
     try {
       const [credential, player] = await Promise.all([this.store.getCredential(playerId), this.store.getPlayer(playerId)]);
-      const matches = verifyCredential(secret, credential?.hash ?? UNKNOWN_PLAYER_DIGEST);
-      if (!matches || !credential || credential.revokedAt !== null || !player || player.leftAt !== null) throw fail();
-      const actor: AuthenticatedPlayer = Object.freeze({ playerId, roomId: player.roomId });
-      this.actors.add(actor);
-      return actor;
+      const current = verifyCredential(secret, credential?.hash ?? UNKNOWN_PLAYER_DIGEST);
+      const pending = !current && credential?.pendingHash ? verifyCredential(secret, credential.pendingHash) : false;
+      if ((!current && !pending) || !credential || !player) throw fail();
+      // The caller has proven they hold this seat's secret, so it is safe to say why it no longer works.
+      if (credential.revokedAt !== null || player.leftAt !== null) {
+        throw new RoomError("session-expired", "You are no longer a member of this room", { reason: "left" });
+      }
+      const room = await this.store.getRoom(player.roomId);
+      if (!room || room.status === "archived") throw new RoomError("session-expired", "This room has been archived", { reason: "expired" });
+      if (pending) {
+        // First use of a rotated secret confirms the rotation; the old secret stops working.
+        const version = await this.store.promotePendingCredential(playerId, credential.pendingHash!);
+        if (version === null) throw new RoomError("credential-conflict", "The credential changed at the same moment; try again");
+      }
+      return this.issue({ playerId, roomId: player.roomId, sessionEpoch: player.sessionEpoch });
     } catch (error) {
       throw translate(error);
     }
   }
 
+  /**
+   * Gives the seat to the caller's connection: the session epoch moves on, so
+   * every identity issued before (another tab, another device, another server
+   * process) loses control at its next action. Returns the new identity.
+   */
+  async takeControl(actor: AuthenticatedPlayer): Promise<AuthenticatedPlayer> {
+    this.assertIssued(actor);
+    try {
+      const epoch = await this.store.bumpSessionEpoch(actor.playerId);
+      if (epoch === null) throw new RoomError("session-expired", "You are no longer a member of this room", { reason: "left" });
+      return this.issue({ playerId: actor.playerId, roomId: actor.roomId, sessionEpoch: epoch });
+    } catch (error) {
+      throw translate(error);
+    }
+  }
+
+  /**
+   * Starts a credential rotation: returns a new secret, stored as pending. The
+   * current secret keeps working until the new one is confirmed (or first used
+   * to resume), so a lost acknowledgement cannot lock the player out.
+   */
+  async rotateCredential(actor: AuthenticatedPlayer): Promise<PlayerSessionCredential> {
+    return this.attempt(true, async () => {
+      await this.loadMember(actor);
+      const credential = await this.store.getCredential(actor.playerId);
+      const issued = issueCredential();
+      if (!credential || !(await this.store.setPendingCredential(actor.playerId, credential.version, issued.hash))) {
+        throw new RoomError("credential-conflict", "The credential changed at the same moment; try again");
+      }
+      return { playerId: actor.playerId, secret: issued.secret };
+    });
+  }
+
+  /** Completes a rotation: the pending secret becomes the only valid one. Returns the new credential version. */
+  async confirmRotation(actor: AuthenticatedPlayer, secret: unknown): Promise<number> {
+    return this.attempt(true, async () => {
+      await this.loadMember(actor);
+      const credential = await this.store.getCredential(actor.playerId);
+      if (!credential?.pendingHash || !verifyCredential(secret, credential.pendingHash)) {
+        throw new RoomError("credential-conflict", "That is not the pending credential; rotate again");
+      }
+      const version = await this.store.promotePendingCredential(actor.playerId, credential.pendingHash);
+      if (version === null) throw new RoomError("credential-conflict", "The credential changed at the same moment; try again");
+      return version;
+    });
+  }
+
+  private issue(actor: AuthenticatedPlayer): AuthenticatedPlayer {
+    const frozen = Object.freeze({ ...actor });
+    this.actors.add(frozen);
+    return frozen;
+  }
+
+  private assertIssued(actor: AuthenticatedPlayer): void {
+    if (!this.actors.has(actor)) throw new RoomError("unauthenticated", "Not signed in to this room");
+  }
+
   /** Records presence for a member's live connections. Does not change the room version. */
   async setPresence(actor: AuthenticatedPlayer, status: "connected" | "disconnected"): Promise<void> {
-    if (!this.actors.has(actor)) throw new RoomError("unauthenticated", "Not signed in to this room");
+    this.assertIssued(actor);
     try {
       await this.store.setConnectionStatus(actor.playerId, status);
     } catch (error) {
@@ -319,7 +392,7 @@ export class RoomService {
       const remaining = players.filter((p) => p.id !== actor.playerId);
       const patch: RoomPatch = {};
       if (room.hostPlayerId === actor.playerId && remaining.length > 0) patch.hostPlayerId = [...remaining].sort(byJoinOrder)[0]!.id;
-      if (remaining.length === 0 && room.status === "lobby") patch.status = "abandoned";
+      if (remaining.length === 0 && room.status === "lobby") Object.assign(patch, { status: "abandoned", endedReason: "everyone-left" });
       const updated = await this.store.markPlayerLeft(room.id, room.roomVersion, actor.playerId, patch);
       return toRoomView(updated, remaining);
     });
@@ -386,7 +459,8 @@ export class RoomService {
     return this.attempt(expected !== undefined, async () => {
       const { room, players } = await this.loadHost(actor, expected);
       assertTransition(room.status, to);
-      return toRoomView(await this.store.updateRoom(room.id, room.roomVersion, { status: to }), players);
+      const patch: RoomPatch = to === "abandoned" ? { status: to, endedReason: "closed-by-host" } : { status: to };
+      return toRoomView(await this.store.updateRoom(room.id, room.roomVersion, patch), players);
     });
   }
 
@@ -448,11 +522,15 @@ export class RoomService {
   }
 
   private async loadMember(actor: AuthenticatedPlayer, expectedRoomVersion?: number) {
-    if (!this.actors.has(actor)) throw new RoomError("unauthenticated", "Not signed in to this room");
+    this.assertIssued(actor);
     const room = await this.store.getRoom(actor.roomId);
     if (!room) throw new RoomError("room-not-found", "Room not found");
     const players = await this.store.listPlayers(room.id);
-    if (!players.some((p) => p.id === actor.playerId)) throw new RoomError("not-a-member", "You are no longer a member of this room");
+    const me = players.find((p) => p.id === actor.playerId);
+    if (!me) throw new RoomError("not-a-member", "You are no longer a member of this room");
+    if (me.sessionEpoch !== actor.sessionEpoch) {
+      throw new RoomError("session-replaced", "Another connection has taken control of this seat");
+    }
     if (expectedRoomVersion !== undefined && expectedRoomVersion !== room.roomVersion) {
       throw new RoomError("version-conflict", "The room changed in the meantime; reload it and try again", { roomVersion: room.roomVersion });
     }

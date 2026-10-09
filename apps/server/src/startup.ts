@@ -11,6 +11,7 @@ import { migrationStatus } from "./persistence/migrate.js";
 import { PostgresGameStore } from "./persistence/postgresStore.js";
 import { redactSecrets } from "./redact.js";
 import { GameplayService } from "./gameplay/gameplayService.js";
+import { RetentionSweeper } from "./rooms/retention.js";
 import { RoomService } from "./rooms/roomService.js";
 
 export class StartupError extends Error {
@@ -69,6 +70,7 @@ export interface Application {
   store: PostgresGameStore;
   rooms: RoomService;
   gameplay: GameplayService;
+  retention: RetentionSweeper;
   close(): Promise<void>;
 }
 
@@ -111,19 +113,30 @@ export async function bootstrap(env: NodeJS.ProcessEnv = process.env, options: B
         () => true,
         () => false,
       ),
-      realtime: { rooms, gameplay, trustProxyHops: config.trustProxyHops, log },
+      realtime: { rooms, gameplay, trustProxyHops: config.trustProxyHops, reconnectGraceMs: config.reconnectGraceMs, log },
     });
   } catch (error) {
     await pool.end().catch(() => undefined);
     throw error;
   }
 
+  // Restart recovery: every saved game is still in PostgreSQL; nobody is connected yet, so each running
+  // game's current player gets a fresh grace period to come back before the game pauses.
+  const recovered = await server.realtime!.sessions.recoverAfterRestart();
+  if (recovered.gamesWatched > 0) log(`[recovery] ${recovered.gamesWatched} game(s) in progress are waiting for their players to reconnect`);
+
+  const retention = new RetentionSweeper(store, config.retention, { intervalMs: config.retentionSweepMs, log });
+  retention.start();
+  void retention.sweepOnce().catch((error: unknown) => log(`[retention] sweep failed: ${(error as Error).message}`));
+
   return {
     server,
     store,
     rooms,
     gameplay,
+    retention,
     close: async () => {
+      retention.stop();
       await server.close();
       await store.close();
     },

@@ -1,5 +1,7 @@
 # Real-time multiplayer (Phase 2C)
 
+Resume, single-seat control, credential rotation, automatic pausing, restart recovery and retention (Phase 2D) are described in [sessions.md](sessions.md).
+
 Persistent rooms are playable live over Socket.IO. The server is the only authority: it draws the dice, the Phase 1 engine decides what is legal, PostgreSQL commits every action, and only then are room members told.
 
 ## Layers
@@ -74,7 +76,7 @@ Every client → server event is `(request, ack)`, and every request carries a `
 - **The secret appears once:** in the create or join ack, to the connection that asked. It is never broadcast or logged; tests check every received event and every log line.
 - **One connection, one room:** create or join on a bound connection gives `already-in-room`.
 
-The handshake credential is the interim reconnect path. Batch 2D adds the full resume flow (credential rotation, multi-tab rules, pausing for a disconnected player) on top of it.
+Reconnecting uses `room:resume` (or the same credential in the handshake): see [sessions.md](sessions.md) for single-seat control, takeover and rotation.
 
 ## Server authority and gameplay
 
@@ -132,6 +134,8 @@ Reconnecting with the credential sends them `room:updated` and `game:state` snap
 - **Unexpected errors** become `internal-error` with an incident id. The details are logged redacted, and the connection and server keep running.
 - **TLS:** the Node process speaks plain HTTP/WebSocket. In production it must sit behind a TLS-terminating proxy or load balancer, so clients use `https://`/`wss://`. Restrict `CLIENT_ORIGIN` to the real client origin.
 - **Database:** pooled connections set `statement_timeout = 10 s`, so a stuck query can't block a room's action queue.
+
+In 2D, a disconnected current player triggers a pause after a grace period ([sessions.md](sessions.md)).
 
 **Multi-instance deployment needs (Batch 2E):**
 - a shared rate limiter;

@@ -33,6 +33,15 @@ export type RoomErrorCode =
   | "not-a-member"
   | "not-host"
   | "invalid-target"
+  // sessions (Phase 2D)
+  /** The credential was valid but no longer is: the player left or was removed, or the room was archived. */
+  | "session-expired"
+  /** Another connection controls this seat; resume with takeover to move control here. */
+  | "session-in-use"
+  /** This connection lost control of the seat to a newer one. */
+  | "session-replaced"
+  /** A concurrent credential rotation won; fetch state and retry. */
+  | "credential-conflict"
   // concurrency and infrastructure
   | "version-conflict"
   | "rate-limited"

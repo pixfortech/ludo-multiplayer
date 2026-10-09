@@ -357,24 +357,25 @@ describe.skipIf(skip)("real-time multiplayer over Socket.IO + PostgreSQL", () =>
       t.dice.roll(); // discard
     });
 
-    it("keeps conflicting actions from two server processes on one database to a single commit", async () => {
+    it("lets a second server process take over a seat: the first connection can no longer act, even with a queued roll", async () => {
       const table = await seatTwo(t);
       track(table.host);
       track(table.guest);
       const second = await startTestServer(db.url); // separate pool, services and coordinator: another process
       try {
-        const viaSecond = track(await open(second.url, table.host.credential));
+        const viaSecond = track(await open(second.url, table.host.credential)); // the other process cannot see this one's connections
         await viaSecond.rec.waitFor("game:state");
-        t.dice.push(6);
         second.dice.push(5);
+        const drawsBefore = t.dice.draws;
         const results = await Promise.all([roll(table.host.client, 0), roll(viaSecond.client, 0)]);
-        expect(results.map((r) => (r.ok ? "ok" : r.error.code)).sort()).toEqual(["ok", "stale-state"]);
+        expect(results.map((r) => (r.ok ? "ok" : r.error.code)).sort()).toEqual(["ok", "session-replaced"]);
+        expect(await table.host.rec.waitFor("session:ended")).toEqual({ roomId: table.roomId, reason: "replaced" });
         expect((await t.store.listEvents(table.roomId)).filter((e) => e.actionType === "game:roll")).toHaveLength(1);
         expect((await dbState(table.roomId)).stateVersion).toBe(1);
+        expect(t.dice.draws).toBe(drawsBefore); // the replaced connection never reached the dice
       } finally {
         await second.close();
       }
-      while (t.dice.remaining > 0) t.dice.roll();
     });
 
     it("never reports or broadcasts success when the database commit fails", async () => {
@@ -472,8 +473,11 @@ describe.skipIf(skip)("real-time multiplayer over Socket.IO + PostgreSQL", () =>
       await refused({ playerId: table.host.id, secret: "guessed" });
       await refused({ playerId: "not-a-uuid", secret: "x" });
       await refused("just a string");
-      const ok = track(await open(t.url, table.guest.credential));
-      expect(ok.client.connected).toBe(true);
+      // The real credential works, but the seat is open on another connection: no silent takeover.
+      expect(await open(t.url, table.guest.credential).then((c) => (c.client.close(), "connected"), (e: Error) => e.message)).toBe("session-in-use");
+      const taken = track(await open(t.url, { ...table.guest.credential }, { takeover: true }));
+      expect(taken.client.connected).toBe(true);
+      expect(await table.guest.rec.waitFor("session:ended")).toEqual({ roomId: table.roomId, reason: "replaced" });
     });
 
     it("ignores identity claims in payloads and refuses unauthorised actions", async () => {
