@@ -41,7 +41,7 @@ Lobby-worthy changes are derived from authoritative updates and become toasts: a
 
 ### Reconnects
 
-After a transport reconnect (a new server-side socket), the connection re-attaches its seat with `room:resume`, using the credential it holds in memory. If the seat is now controlled elsewhere, it does **not** take over.
+After a transport reconnect (a new server-side socket), the connection re-attaches its seat with `room:resume`, using the credential it holds in memory. If the seat is now controlled elsewhere, it does **not** take over. It also sends the `controlEpoch` it was given (memory only), so a stale connection the server has not yet noticed is replaced. If another tab took over meanwhile, the epoch has moved on and nothing is displaced ([sessions](sessions.md)).
 
 ## The 2D board (Phase 3B)
 
@@ -199,6 +199,10 @@ Sizes that depend on height (the hero board, the create preview) use `svh`.
 These sizes were checked with headless Chromium for no horizontal overflow and no console errors: 1920×1080, 1366×768, 1024×768, 768×1024, 390×844 and 360×800. Reduced motion turns off the animations.
 
 ## Tests
+
+### Browser end-to-end (Phase 3C.1)
+
+Complete 2-, 3- and 4-player games, the classic rules, and refresh or reconnect, played in real Chromium against the real server and PostgreSQL: [docs/qa/browser-e2e.md](../qa/browser-e2e.md).
 
 ### Phase 3B
 

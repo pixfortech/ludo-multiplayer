@@ -56,6 +56,7 @@ npm run dev        # server on :3001, client on :5173 (proxied)
 | `npm run typecheck` | Runs strict `tsc` in every workspace              |
 | `npm run build`     | Builds packages, server and client in dependency order |
 | `npm run lint`      | Runs ESLint across the repo                       |
+| `npm run test:e2e`  | Browser end-to-end tests in Chromium: complete games, rules, reconnect (after `npm run build`; see [docs/qa/browser-e2e.md](docs/qa/browser-e2e.md)) |
 | `npm run db:migrate` | Applies pending database migrations (`DATABASE_URL`) |
 | `npm run design:generate` | Regenerates the palette report and board diagrams in `docs/design/generated/` |
 
@@ -65,7 +66,7 @@ Every phase must pass `test`, `typecheck` and `build` before it is committed.
 
 GitHub Actions (`.github/workflows/ci.yml`) runs every push to `fresh/ludo-rebuild` and every pull request on **Ubuntu and Windows** with **Node.js 24** and **PostgreSQL 17**.
 
-- **Steps:** `npm ci`, typecheck, lint, build, the full test suite with `REQUIRE_POSTGRES_TESTS=1`, then the startup, two-client and restart tests against the compiled server.
+- **Steps:** `npm ci`, typecheck, lint, build, the full test suite with `REQUIRE_POSTGRES_TESTS=1`, the startup, two-client and restart tests against the compiled server, then the browser end-to-end tests in Chromium.
 - **Strict checks:** `scripts/ci/run-checked.mjs` fails a step on any skipped or todo test, harness skip warning, unhandled error or time-out, even if the test command exits 0.
 - **Safety:** the workflow has read-only permissions and uses no secrets. Every database test runs on a throwaway cluster on the runner.
 

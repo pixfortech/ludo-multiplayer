@@ -19,3 +19,7 @@ apps/server/data/
 
 # Claude Code: machine-specific permission overrides (never commit)
 .claude/settings.local.json
+
+# Playwright output
+e2e/test-results/
+playwright-report/

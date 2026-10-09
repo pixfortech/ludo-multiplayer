@@ -1,4 +1,5 @@
-# Continuous integration: Linux and Windows, Node.js 24, PostgreSQL 17.
+# Continuous integration: Linux and Windows, Node.js 24, PostgreSQL 17,
+# plus browser end-to-end tests in Chromium.
 #
 # Every database test runs against a private, throwaway PostgreSQL cluster
 # that the test harness creates from the installed binaries (initdb in the
@@ -29,7 +30,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       # Missing PostgreSQL fails the run instead of skipping database tests.
       REQUIRE_POSTGRES_TESTS: "1"
@@ -107,3 +108,21 @@ jobs:
         env:
           LUDO_E2E_COMPILED: "1"
         run: node ../../scripts/ci/run-checked.mjs npx vitest run src/__tests__/startup.test.ts src/__tests__/twoClient.e2e.pg.test.ts src/__tests__/restart.e2e.pg.test.ts
+
+      # Real Chromium players against the production client build, the real Socket.IO server and an isolated
+      # PostgreSQL (e2e/): complete 2-, 3- and 4-player games, the classic rules, refresh and network loss.
+      - name: Install Chromium for the browser tests
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser end-to-end tests (complete games, rules, reconnect)
+        run: npm run test:e2e
+
+      - name: Keep browser test traces (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-${{ matrix.os }}
+          path: e2e/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+

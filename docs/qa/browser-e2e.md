@@ -1,0 +1,80 @@
+# Browser end-to-end tests (Phase 3C.1)
+
+Real Chromium players play complete games through the real UI. They connect to the production client build (`vite preview`), the real Socket.IO server and an isolated PostgreSQL.
+
+```bash
+npm run build
+npm run test:e2e   # Playwright, about 7 minutes
+```
+
+CI runs the suite on Ubuntu and Windows after the other checks. If it fails, traces and screenshots are uploaded as an artifact.
+
+## How it works
+
+| Part | Role |
+| ---- | ---- |
+| `playwright.config.ts` | One worker (one shared server), and the client build served by `vite preview` on 127.0.0.1:4173 |
+| `e2e/support/globalSetup.ts` | Starts the test server for the run. Stops it with a graceful shutdown over the control port, so it behaves the same on Windows. |
+| `e2e/support/testServer.ts` | **Test only.** The production `startServer`, room and gameplay services on a disposable PostgreSQL (the server tests' `pgHarness`). See below. |
+| `e2e/support/game.ts` | Players on different devices; create, join and start through the UI; rolling and moving like a person; the in-sync checks; the game driver |
+| `e2e/tests/*.spec.ts` | The scenarios |
+
+### What the test server changes
+
+The test server differs from production in one place: the gameplay service's dice source. That is the documented test seam (`GameplayServiceOptions.dice`):
+
+- Values the tests queue are drawn first, then secure random dice.
+- The queue is reachable only through a control port bound to 127.0.0.1, which needs a per-run token.
+- Browsers and Socket.IO clients cannot choose a die.
+- None of this is in `apps/server/src` or the server build.
+
+### Every action goes through the UI
+
+Every roll is a click on Roll (or a tap on the die on touch devices). Every move is chosen in the move tray, or by clicking a token on the board. On touch devices that means tap to preview, then tap again.
+
+After every action, three things must hold:
+
+1. **Same board:** every player's page draws exactly the server's committed token positions.
+2. **Right controls:** only the current player can roll or move.
+3. **No duplicates:**
+   - one committed roll per Roll click, and one committed move per chosen move (from the server's action log);
+   - one `game:roll` / `game:move` WebSocket frame per action;
+   - versions advance by exactly one per action.
+
+### The game driver
+
+The driver reads the authoritative state and queues dice so a game ends deterministically. One player at a time advances a single token: a six for the bonus roll, never a third six, and an exact roll to finish. Everyone else rolls a 1 and is auto-passed.
+
+## Scenarios
+
+| # | Requirement | Where |
+| - | ----------- | ----- |
+| 1 | Two-player game, room creation to victory | `full-games` › two players (desktop + phone) |
+| 2 | Three-player game to completion | `full-games` › three players, full ranking: every place decided, second place played on a phone |
+| 3 | Four-player game to completion | `full-games` › four players (desktop, phone, tablet, wide desktop); turns pass clockwise through seats 0→1→2→3 |
+| 4 | Clockwise movement | `rules`: at each stop the drawn cell equals `@ludo/board-layouts` for that step, and the angle around the centre only increases (most of a lap) |
+| 5 | Safe-cell protection | `rules`: landing on the opponent's start does not capture; both tokens share the cell |
+| 6 | Capture and bonus turn | `rules`: the captured token returns to base on both screens; capture bonus roll; "Capture: roll again" |
+| 7 | Six and three sixes | `rules`: a six gives a bonus roll; a third six forfeits the turn with no move, with banners on both screens |
+| 8 | Home lane and exact finish | `rules`: step 51 is the first lane cell; a six that would overshoot is not offered; an exact five finishes, with a home bonus |
+| 9 | Finished tokens are immovable | `rules`: the finished token is drawn as finished, not offered in the tray, and is not a button; the game driver checks this on every choice |
+| 10 | Auto-move when exactly one move is legal | `rules` and every full game: no tray, the server moves the token, "(auto)" in the log |
+| 11 | Winning and ranking screens | every full game: "You win!" / "{name} wins!", ranking rows in the server's order with places, no game actions left, and the route home |
+| 12 | Refresh and reconnect during a game | `resilience`: refresh on your own turn; refresh during a roll animation; network loss while the other player moves, then reconnect |
+| 13 | No duplicated movements or rolls | every test: action log and WebSocket frames match clicks. `rules`: synchronous double clicks on Roll and on a move. `resilience`: no hop-by-hop replay after reconnect (the token jumps straight to the server's step). |
+
+## Bugs found and fixed
+
+1. **A double click sent two requests.** Two clicks in the same moment, before React re-rendered, sent two `game:roll` (or `game:move`) requests. The server's state-version check refused the second as stale, so the game state was never wrong. But the client sent a duplicate request and could briefly show a refusal.
+   - **Fix:** a synchronous in-flight guard in `GameScreen`.
+   - **Tests:** a game-screen test for each case, both failing on the old code, plus the browser frame count.
+2. **After a real network drop, the seat was not re-attached.** The server notices a silently dropped connection only when the Socket.IO heartbeat times out, which takes up to about 45 s. Until then, the page's automatic re-attach was refused with `session-in-use`. The page then wrongly said the seat was open elsewhere and showed no board. The Phase 3A live test had closed the socket cleanly, which the server notices at once.
+   - **Fix:** create, join and resume return a `controlEpoch`, which the page keeps in memory and sends when it re-attaches. If the seat's epoch is unchanged, nobody else has claimed the seat, so the page's own stale connection is replaced. A takeover by another tab moves the epoch on, so that tab is never displaced silently. See [sessions](../architecture/sessions.md).
+   - **Tests:** a new `sessions.pg` test, and the browser network-loss test, which failed before the fix.
+3. **The tray said "1 squares".** Fixed to "1 square".
+
+## Not covered here
+
+- Browsers other than Chromium.
+- Real mobile devices: phones and tablets are emulated, with touch, by viewport.
+- Pause after the reconnect grace period: this is covered by the server's session tests.

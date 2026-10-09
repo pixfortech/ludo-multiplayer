@@ -2,7 +2,7 @@
   "name": "ludo-platform",
   "version": "0.0.0",
   "private": true,
-  "description": "Server-authoritative multiplayer Ludo platform for 2–15 players.",
+  "description": "Server-authoritative multiplayer Ludo platform for 2\u201315 players.",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -20,17 +20,19 @@
     "dev": "npm run build:packages && concurrently -k -n server,client -c cyan,magenta \"npm run dev -w @ludo/server\" \"npm run dev -w @ludo/client\"",
     "build:packages": "npm run build -w @ludo/shared-types -w @ludo/design-tokens -w @ludo/assets -w @ludo/board-layouts -w @ludo/game-engine",
     "build": "npm run build --workspaces",
-    "typecheck": "npm run typecheck --workspaces && tsc -p scripts/tsconfig.json",
+    "typecheck": "npm run typecheck --workspaces && tsc -p scripts/tsconfig.json && tsc -p e2e/tsconfig.json",
     "test": "npm run test --workspaces && npm run test:repo",
     "lint": "eslint .",
     "clean": "node scripts/clean.mjs",
     "design:generate": "tsx --conditions=source scripts/design-artifacts.ts",
     "test:repo": "vitest run --config scripts/vitest.config.ts",
     "design:png": "node scripts/render-png.mjs",
-    "db:migrate": "npm run db:migrate -w @ludo/server"
+    "db:migrate": "npm run db:migrate -w @ludo/server",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@playwright/test": "1.56.1",
     "@types/node": "^22.20.5",
     "concurrently": "^9.2.1",
     "eslint": "^9.39.5",
