@@ -61,6 +61,16 @@ npm run dev        # server on :3001, client on :5173 (proxied)
 
 Every phase must pass `test`, `typecheck` and `build` before it is committed.
 
+### Continuous integration
+
+GitHub Actions (`.github/workflows/ci.yml`) runs every push to `fresh/ludo-rebuild` and every pull request on **Ubuntu and Windows** with **Node.js 24** and **PostgreSQL 17**.
+
+- **Steps:** `npm ci`, typecheck, lint, build, the full test suite with `REQUIRE_POSTGRES_TESTS=1`, then the startup, two-client and restart tests against the compiled server.
+- **Strict checks:** `scripts/ci/run-checked.mjs` fails a step on any skipped or todo test, harness skip warning, unhandled error or time-out, even if the test command exits 0.
+- **Safety:** the workflow has read-only permissions and uses no secrets. Every database test runs on a throwaway cluster on the runner.
+
+See [docs/qa/phase-2e.md](docs/qa/phase-2e.md) for the backend QA report.
+
 ### Database tests
 
 `npm run test` needs PostgreSQL **server binaries** (`initdb`, `pg_ctl`; version 14 or newer, 16 and 17 tested). It never uses `DATABASE_URL` and never touches your development or production database.

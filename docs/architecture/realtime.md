@@ -132,7 +132,7 @@ Reconnecting with the credential sends them `room:updated` and `game:state` snap
 
   The client address is the peer address. Set `TRUST_PROXY_HOPS=n` behind *n* trusted reverse proxies to use `X-Forwarded-For` instead; clients can't choose their own key.
 - **Unexpected errors** become `internal-error` with an incident id. The details are logged redacted, and the connection and server keep running.
-- **TLS:** the Node process speaks plain HTTP/WebSocket. In production it must sit behind a TLS-terminating proxy or load balancer, so clients use `https://`/`wss://`. Restrict `CLIENT_ORIGIN` to the real client origin.
+- **TLS:** the Node process speaks plain HTTP/WebSocket. In production it must sit behind a TLS-terminating proxy or load balancer, so clients use `https://`/`wss://`. With `NODE_ENV=production` the server refuses to start unless `CLIENT_ORIGIN` is set to https origin(s); wildcards are refused everywhere. API responses carry `nosniff`, `X-Frame-Options: DENY`, `no-referrer`, a same-origin resource policy and `no-store`, and Socket.IO doesn't serve its client script.
 - **Database:** pooled connections set `statement_timeout = 10 s`, so a stuck query can't block a room's action queue.
 
 In 2D, a disconnected current player triggers a pause after a grace period ([sessions.md](sessions.md)).
