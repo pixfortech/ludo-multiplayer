@@ -5,11 +5,11 @@ import pg from "pg";
 import { migrate } from "../migrate.js";
 import { PostgresGameStore } from "../postgresStore.js";
 import { StoreError } from "../types.js";
-import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, type TestDatabase } from "./pgHarness.js";
+import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, unavailableReason, type TestDatabase } from "./pgHarness.js";
 import { advance, expectStoreError, runGameStoreContract, seededRoom } from "./storeContract.js";
 
 const skip = !postgresAvailable && !POSTGRES_REQUIRED;
-if (skip) console.warn("⚠ postgresStore tests SKIPPED: no PostgreSQL available");
+if (skip) console.warn(`⚠ postgresStore tests SKIPPED: ${unavailableReason()}`);
 
 let db: TestDatabase | null = null;
 

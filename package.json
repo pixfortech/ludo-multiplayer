@@ -23,7 +23,7 @@
     "typecheck": "npm run typecheck --workspaces && tsc -p scripts/tsconfig.json",
     "test": "npm run test --workspaces && npm run test:repo",
     "lint": "eslint .",
-    "clean": "rm -rf packages/*/dist apps/*/dist",
+    "clean": "node scripts/clean.mjs",
     "design:generate": "tsx --conditions=source scripts/design-artifacts.ts",
     "test:repo": "vitest run --config scripts/vitest.config.ts",
     "design:png": "node scripts/render-png.mjs",

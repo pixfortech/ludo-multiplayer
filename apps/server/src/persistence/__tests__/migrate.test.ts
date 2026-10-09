@@ -2,9 +2,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import { MIGRATIONS, MigrationError, migrate, migrationStatus } from "../migrate.js";
-import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, type TestDatabase } from "./pgHarness.js";
+import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, unavailableReason, type TestDatabase } from "./pgHarness.js";
 
 const skip = !postgresAvailable && !POSTGRES_REQUIRED;
+if (skip) console.warn(`⚠ migration tests SKIPPED: ${unavailableReason()}`);
 let db: TestDatabase | null = null;
 let pool: pg.Pool;
 

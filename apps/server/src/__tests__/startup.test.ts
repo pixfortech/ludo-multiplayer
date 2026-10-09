@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import { createApp } from "../app.js";
 import { migrate } from "../persistence/migrate.js";
-import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, type TestDatabase } from "../persistence/__tests__/pgHarness.js";
+import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, unavailableReason, type TestDatabase } from "../persistence/__tests__/pgHarness.js";
 import { StartupError, bootstrap, describeStartupFailure, redactSecrets } from "../startup.js";
 
 const SERVER_DIR = fileURLToPath(new URL("../..", import.meta.url));
@@ -28,12 +28,28 @@ async function startupError(env: NodeJS.ProcessEnv): Promise<StartupError> {
   return error as StartupError;
 }
 
+/**
+ * The minimum a child Node process needs: PATH everywhere, plus the Windows
+ * system variables without which Node cannot start networking or find temp
+ * directories. Deliberately excludes DATABASE_URL and everything else.
+ */
+function baseChildEnv(): Record<string, string> {
+  const names = ["PATH", ...(process.platform === "win32" ? ["SystemRoot", "windir", "TEMP", "TMP", "PATHEXT", "ComSpec", "USERPROFILE"] : [])];
+  const env: Record<string, string> = {};
+  for (const name of names) {
+    const key = Object.keys(process.env).find((k) => k.toUpperCase() === name.toUpperCase());
+    if (key && process.env[key] !== undefined) env[name] = process.env[key]!;
+  }
+  return env;
+}
+
 /** Runs the real entry point (src/server.ts) with only the given environment. */
 function runEntryPoint(env: Record<string, string>): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [TSX_CLI, "--conditions=source", "src/server.ts"], {
       cwd: SERVER_DIR,
-      env: { PATH: process.env.PATH ?? "", PORT: "0", ...env },
+      windowsHide: true,
+      env: { ...baseChildEnv(), PORT: "0", ...env },
     });
     let stdout = "";
     let stderr = "";
@@ -103,7 +119,7 @@ describe("startup without a usable database", () => {
 });
 
 const skip = !postgresAvailable && !POSTGRES_REQUIRED;
-if (skip) console.warn("⚠ startup PostgreSQL tests SKIPPED: no PostgreSQL available");
+if (skip) console.warn(`⚠ startup PostgreSQL tests SKIPPED: ${unavailableReason()}`);
 
 describe.skipIf(skip)("startup with PostgreSQL", () => {
   let db: TestDatabase;

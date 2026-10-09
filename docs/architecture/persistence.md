@@ -98,14 +98,26 @@ Tests **never** use `DATABASE_URL`.
 
 | Environment | What the tests do |
 | --- | --- |
-| PostgreSQL binaries available (`PG_BIN`, `/usr/lib/postgresql/*/bin`, or PATH) | Each test file starts a **private cluster** (initdb in a temp directory, random 127.0.0.1 port; run as the `postgres` user when tests run as root), migrates it, and deletes it afterwards. Crash tests use it. |
-| `TEST_DATABASE_URL` set | A uniquely named database is created on that server and dropped afterwards. Crash tests skip, with a warning. |
-| Neither | PostgreSQL tests skip with a warning. Set `REQUIRE_POSTGRES_TESTS=1` in CI to make this a failure. |
+| PostgreSQL server binaries found | Each test file starts a **private cluster**: `initdb` in the system temp directory, a random `127.0.0.1` port, settings written to `postgresql.conf` so paths with spaces are safe. When tests run as root on Unix, the cluster runs as the `postgres` user. The test file migrates it and deletes it afterwards; an exit hook stops it if the run is interrupted. Crash tests use it. |
+| `TEST_DATABASE_URL` set | A uniquely named `ludo_test_*` database is created on that server and dropped afterwards. The tests refuse to run if it names the `DATABASE_URL` database. Crash tests are skipped, with a warning. |
+| Neither | The PostgreSQL suites skip, with a prominent warning and setup instructions. With `REQUIRE_POSTGRES_TESTS=1` the run fails instead. |
+
+**Where the tests look for the binaries** (`pgDiscovery.ts`, Windows, macOS and Linux, no shell):
+
+1. `PG_BIN_DIR` (or the older `PG_BIN`). If it is set but wrong, that is an error, not a fallback.
+2. Every directory on `PATH`.
+3. Common install locations, newest version first:
+   - Windows: `%ProgramFiles%\PostgreSQL\<v>\bin`, Scoop
+   - macOS: Homebrew `postgresql@<v>`, Postgres.app
+   - Linux: `/usr/lib/postgresql/<v>/bin`, `/usr/pgsql-<v>/bin`, `/usr/local/pgsql/bin`
+
+Version 14 or newer is required (checked with `initdb --version`); newer versions are never excluded. Windows setup in PowerShell: [README](../../README.md#running-on-windows-powershell).
 
 Suites:
 
 - **Persistence:**
   - `migrate.test.ts` (7) and `migrationsImmutable.test.ts` (2);
+  - `pgDiscovery.test.ts` (12): binary discovery on simulated Windows, macOS and Linux file systems, plus real-machine checks;
   - `postgresStore.test.ts`: contract 28, recovery 2, integrity 4;
   - `memoryStore.test.ts`: contract 28.
 - **Room service (2B):** see [rooms.md](rooms.md#tests).

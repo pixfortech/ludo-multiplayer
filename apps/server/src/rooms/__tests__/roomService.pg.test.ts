@@ -7,13 +7,13 @@ import pg from "pg";
 import { ROOM_STATUS_TRANSITIONS, canTransitionRoom, type RoomStatus } from "@ludo/shared-types";
 import { migrate } from "../../persistence/migrate.js";
 import { PostgresGameStore } from "../../persistence/postgresStore.js";
-import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, type TestDatabase } from "../../persistence/__tests__/pgHarness.js";
+import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, unavailableReason, type TestDatabase } from "../../persistence/__tests__/pgHarness.js";
 import { RoomError } from "../errors.js";
 import { generateRoomCode } from "../roomCode.js";
 import { ctx, expectRoomError, runRoomServiceSuite, serviceFor } from "./roomServiceSuite.js";
 
 const skip = !postgresAvailable && !POSTGRES_REQUIRED;
-if (skip) console.warn("⚠ room service PostgreSQL tests SKIPPED: no PostgreSQL available");
+if (skip) console.warn(`⚠ room service PostgreSQL tests SKIPPED: ${unavailableReason()}`);
 
 let db: TestDatabase | null = null;
 

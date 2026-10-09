@@ -61,6 +61,81 @@ npm run dev        # server on :3001, client on :5173 (proxied)
 
 Every phase must pass `test`, `typecheck` and `build` before it is committed.
 
+### Database tests
+
+`npm run test` needs PostgreSQL **server binaries** (`initdb`, `pg_ctl`; version 14 or newer, 16 and 17 tested). It never uses `DATABASE_URL` and never touches your development or production database.
+
+- **Private cluster:** each test file starts its own private PostgreSQL in the system temp directory on a random `127.0.0.1` port, and deletes it afterwards.
+- **Where it looks for the binaries:** in this order:
+  1. `PG_BIN_DIR`;
+  2. `PATH`;
+  3. common install locations, newest version first:
+     - Windows: `C:\Program Files\PostgreSQL\<version>\bin`
+     - macOS: Homebrew `postgresql@<version>`, Postgres.app
+     - Linux: `/usr/lib/postgresql/<version>/bin`, `/usr/pgsql-<version>/bin`
+- **Alternative:** set `TEST_DATABASE_URL` to an admin database (e.g. `/postgres`) on a test server. The tests then create a throwaway `ludo_test_*` database there and drop it afterwards. It must not point at the `DATABASE_URL` database.
+- **If PostgreSQL is missing:** the database suites are skipped with a prominent warning and setup instructions. With `REQUIRE_POSTGRES_TESTS=1` (CI, release checks) they fail instead.
+
+### Running on Windows (PowerShell)
+
+No WSL, Git Bash or Docker is needed. Paths with spaces are fine.
+
+1. **Install and verify PostgreSQL** (installer from <https://www.postgresql.org/download/windows/>, version 14 or newer):
+
+   ```powershell
+   & "C:\Program Files\PostgreSQL\17\bin\initdb.exe" --version   # initdb (PostgreSQL) 17.x
+   & "C:\Program Files\PostgreSQL\17\bin\pg_ctl.exe" --version
+   Get-Service postgresql*                                        # the installer's service, used by the dev server only
+   ```
+
+2. **Executable discovery.** The tests find `C:\Program Files\PostgreSQL\<version>\bin` automatically. For a non-standard location, or to pick a version:
+
+   ```powershell
+   $env:PG_BIN_DIR = "C:\Program Files\PostgreSQL\17\bin"                                       # this session
+   [Environment]::SetEnvironmentVariable("PG_BIN_DIR", "C:\Program Files\PostgreSQL\17\bin", "User")  # permanently (new terminals)
+   ```
+
+3. **Environment for the dev server.** Create a development database with the `postgres` superuser password you chose in the installer:
+
+   ```powershell
+   $psql = "C:\Program Files\PostgreSQL\17\bin\psql.exe"
+   & $psql -U postgres -h 127.0.0.1 -c "CREATE ROLE ludo LOGIN PASSWORD 'ludo_dev_only';"
+   & $psql -U postgres -h 127.0.0.1 -c "CREATE DATABASE ludo OWNER ludo;"
+   $env:DATABASE_URL = "postgres://ludo:ludo_dev_only@127.0.0.1:5432/ludo"
+   ```
+
+4. **Apply migrations:**
+
+   ```powershell
+   npm run db:migrate
+   ```
+
+5. **Run all tests:**
+
+   ```powershell
+   $env:REQUIRE_POSTGRES_TESTS = "1"   # fail rather than skip if PostgreSQL cannot be found
+   npm run test
+   npm run typecheck; npm run build; npm run lint
+   ```
+
+   The tests start their own temporary PostgreSQL. They don't use the Windows service or `DATABASE_URL`. To use a running server instead, point `TEST_DATABASE_URL` at its admin database:
+
+   ```powershell
+   $env:TEST_DATABASE_URL = "postgres://postgres:<password>@127.0.0.1:5432/postgres"
+   ```
+
+   It creates and drops `ludo_test_*` databases. Never point it at your development or production database.
+
+6. **Start the development server** (same PowerShell session, so `DATABASE_URL` is set):
+
+   ```powershell
+   npm run dev   # server on :3001, client on :5173
+   ```
+
+   The server refuses to start without a reachable, migrated database.
+
+Variables set with `$env:` last for the current terminal only. `Remove-Item Env:TEST_DATABASE_URL` clears one.
+
 ## Roadmap
 
 | Phase | Scope | Status |

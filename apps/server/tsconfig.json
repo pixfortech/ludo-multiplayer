@@ -1,9 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "customConditions": ["source"],
-    "types": ["node"],
+    "customConditions": [
+      "source"
+    ],
+    "types": [
+      "node"
+    ],
     "noEmit": true
   },
-  "include": ["src"]
+  "include": [
+    "src",
+    "vitest.globalSetup.ts"
+  ]
 }
