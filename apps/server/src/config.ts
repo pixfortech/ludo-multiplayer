@@ -31,10 +31,25 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
     throw new Error(`Invalid PORT: ${env.PORT}`);
   }
+  const production = env.NODE_ENV === "production";
+  if (production && !env.CLIENT_ORIGIN?.trim()) {
+    throw new Error("CLIENT_ORIGIN is required in production: the origin(s) of the game client, e.g. https://ludo.example.com");
+  }
   const clientOrigins = (env.CLIENT_ORIGIN ?? "http://localhost:5173")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+  for (const origin of clientOrigins) {
+    let url: URL | null = null;
+    try {
+      url = new URL(origin);
+    } catch {
+      // reported below
+    }
+    // An origin is scheme://host[:port] only; a wildcard would let any website open game connections.
+    if (!url || url.origin !== origin || origin.includes("*")) throw new Error(`Invalid CLIENT_ORIGIN entry "${origin.slice(0, 80)}": expected an origin such as https://ludo.example.com`);
+    if (production && url.protocol !== "https:") throw new Error(`CLIENT_ORIGIN must use https:// in production (got ${url.origin})`);
+  }
   const databaseUrl = env.DATABASE_URL?.trim() || null;
   if (databaseUrl !== null && !/^postgres(ql)?:\/\//.test(databaseUrl)) {
     throw new Error("Invalid DATABASE_URL: expected a postgres:// or postgresql:// connection string");

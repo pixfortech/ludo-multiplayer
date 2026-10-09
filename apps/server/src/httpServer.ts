@@ -30,6 +30,8 @@ export async function startServer(config: StartServerOptions): Promise<RunningSe
   const httpServer = createServer(createApp({ readiness: config.readiness }));
   const io: LudoServer = new Server(httpServer, {
     cors: { origin: config.clientOrigins },
+    // The client bundles socket.io-client itself; do not serve it from the game server.
+    serveClient: false,
     // Transport-level cap; each event is also checked against MAX_PAYLOAD_BYTES.
     maxHttpBufferSize: MAX_PAYLOAD_BYTES * 4,
   });

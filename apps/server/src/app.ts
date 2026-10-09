@@ -8,6 +8,17 @@ export interface AppOptions {
 export function createApp(options: AppOptions = {}): Express {
   const app = express();
   app.disable("x-powered-by");
+  // The API only serves small JSON status documents: forbid sniffing, framing, caching and referrers.
+  app.use((_req, res, next) => {
+    res.set({
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "no-referrer",
+      "Cross-Origin-Resource-Policy": "same-origin",
+      "Cache-Control": "no-store",
+    });
+    next();
+  });
   app.use(express.json({ limit: "32kb" }));
 
   app.get("/api/health", (_req, res) => {

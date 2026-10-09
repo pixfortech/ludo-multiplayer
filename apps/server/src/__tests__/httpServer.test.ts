@@ -26,7 +26,17 @@ describe("server scaffold", () => {
   it("serves the health endpoint", async () => {
     const res = await fetch(`http://localhost:${server.port}/api/health`);
     expect(res.status).toBe(200);
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("x-powered-by")).toBeNull();
     expect(await res.json()).toEqual({ status: "ok", protocolVersion: PROTOCOL_VERSION });
+  });
+
+  it("does not serve the Socket.IO client script", async () => {
+    const res = await fetch(`http://localhost:${server.port}/socket.io/socket.io.js`);
+    expect(res.status).not.toBe(200);
+    expect(res.headers.get("content-type") ?? "").not.toMatch(/javascript/);
   });
 
   it("greets every socket with the protocol version", async () => {
@@ -71,6 +81,15 @@ describe("loadConfig", () => {
     ).toMatchObject({ reconnectGraceMs: 5000, retention: { lobbyDays: 7, activeDays: 120, endedDays: 60 }, retentionSweepMs: 0 });
     expect(() => loadConfig({ RECONNECT_GRACE_SECONDS: "-1" })).toThrow(/RECONNECT_GRACE_SECONDS/);
     expect(() => loadConfig({ ROOM_RETENTION_LOBBY_DAYS: "0" })).toThrow(/ROOM_RETENTION_LOBBY_DAYS/);
+  });
+
+  it("insists on an explicit https client origin in production and refuses wildcards anywhere", () => {
+    expect(() => loadConfig({ NODE_ENV: "production" })).toThrow(/CLIENT_ORIGIN is required in production/);
+    expect(() => loadConfig({ NODE_ENV: "production", CLIENT_ORIGIN: "http://ludo.example.com" })).toThrow(/https/);
+    expect(loadConfig({ NODE_ENV: "production", CLIENT_ORIGIN: "https://ludo.example.com" }).clientOrigins).toEqual(["https://ludo.example.com"]);
+    for (const bad of ["*", "https://*.example.com", "https://ludo.example.com/play", "ludo.example.com"]) {
+      expect(() => loadConfig({ CLIENT_ORIGIN: bad })).toThrow(/Invalid CLIENT_ORIGIN/);
+    }
   });
 
   it("rejects an invalid port", () => {
