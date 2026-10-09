@@ -63,9 +63,9 @@ Every phase must pass `test`, `typecheck` and `build` before it is committed.
 | Phase | Scope | Status |
 | ----- | ----- | ------ |
 | 0 | Reset and scaffold the monorepo; Higgsfield pipeline preparation | ✅ |
-| 0.5 | Visual design system, 15-player palette, classic reference geometry, 2–15 topology, Higgsfield plan ([docs/design](docs/design/README.md)) | ✅ awaiting approval |
-| 1 | Classic 2–4 player game engine with full rules and tests | Next |
-| 2 | Rooms and sessions backend: create, join, resume, identity, persistence foundation | |
+| 0.5 | Visual design system, 15-player palette, classic reference geometry, 2–15 topology, Higgsfield plan ([docs/design](docs/design/README.md)) | ✅ geometry approved |
+| 1 | Classic 2–4 player game engine with full rules and tests ([engine](docs/architecture/game-engine.md)) | ✅ |
+| 2 | Rooms and sessions backend: create, join, resume, identity, persistence foundation | Next |
 | 3 | Basic 2D client: lobby, room, classic board, dice, movement, reconnect | |
 | 4 | Premium 2D UI: animation, responsive layouts, fullscreen, accessibility | |
 | 5 | Polygon board geometry for 2–15 players, with previews and tests | |

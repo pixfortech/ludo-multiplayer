@@ -1,6 +1,6 @@
 # Phase 1 readiness: server-authoritative game engine
 
-**Status: prepared, not started.** Phase 1 begins only after the classic geometry ([board-classic.md](../design/board-classic.md)) is approved.
+**Status: Phase 1 complete.** The engine is implemented as described in [game-engine.md](game-engine.md). This document is kept as the original plan.
 
 ## Gate checklist
 

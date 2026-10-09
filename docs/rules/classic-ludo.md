@@ -1,6 +1,6 @@
 # Classic Ludo rules (2–4 players)
 
-This is the platform's **traditional** ruleset for the 4-player square (and its 2-player square option), which Phase 1 implements and tests. Rule numbers are referenced from tests. Ludo conventions vary between regions and families, so custom boards have their own document: [custom-modes.md](custom-modes.md).
+This is the platform's **traditional** ruleset for the square board (2–4 players), **implemented in Phase 1** by `@ludo/game-engine` ([engine behaviour](../architecture/game-engine.md)). Rule numbers are referenced from tests. Ludo conventions vary between regions and families, so custom boards have their own document: [custom-modes.md](custom-modes.md).
 
 ## Board and positions
 
@@ -42,6 +42,8 @@ This is the platform's **traditional** ruleset for the 4-player square (and its 
 ## Clarifications
 
 - **Bonus rolls do not stack.** A move that both rolls a 6 and captures still grants one extra roll.
+- **A 6 with no legal move** (for example every active token would overshoot) still grants the extra roll; the three-sixes rule caps the chain.
+- **Opening** uses the 6 and places the token on its start cell (step 0) with no further movement.
 - **Consecutive-six counter** counts sixes within one player's uninterrupted turn. It resets when the turn passes or a non-6 is rolled.
 - **Opening captures:** a token entering its start cell cannot capture there, because start cells are safe.
 - **Turn order** follows seat order, which matches the direction of travel around the board.
@@ -65,6 +67,6 @@ Clockwise by seat (crimson → royal blue → emerald → golden), matching the 
 
 | # | Question | Proposed default |
 | --- | --- | --- |
-| D1 | **Direction of travel** on the 4-player square | **Resolved: traditional clockwise** (approved). Cell-by-cell geometry and diagrams in [docs/design/board-classic.md](../design/board-classic.md), awaiting final geometry sign-off before Phase 1. |
-| D2 | Two opponent tokens on one non-safe cell: capture both, or treat as a protected block? | Capture all of them, with one bonus roll. This matches the approved custom-mode rule C7; confirm for classic too. |
-| D3 | Blocks or barriers (two own tokens stopping passage) | Off in v1, matching custom-mode rule C5; confirm for classic too |
+| D1 | **Direction of travel** on the 4-player square | **Resolved:** traditional clockwise; geometry approved at `fd71ef1` ([board-classic.md](../design/board-classic.md)) |
+| D2 | Two opponent tokens on one non-safe cell: capture both, or treat as a protected block? | **Implemented as proposed:** capture all of them, with one bonus roll (same as custom-mode rule C7). Changeable if you decide otherwise. |
+| D3 | Blocks or barriers (two own tokens stopping passage) | **Implemented as proposed:** off (same as custom-mode rule C5) |
