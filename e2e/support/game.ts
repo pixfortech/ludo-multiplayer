@@ -31,7 +31,9 @@ export interface Player {
 
 export async function openPlayer(browser: Browser, name: string, device: Device, options: { reducedMotion?: boolean } = {}): Promise<Player> {
   const { viewport, touch } = DEVICES[device];
-  const context = await browser.newContext({ viewport, hasTouch: touch, isMobile: device === "phone", reducedMotion: options.reducedMotion ? "reduce" : "no-preference" });
+  // E2E_RECORD_DIR records each player's screen to video (for reviewing animation; off in CI).
+  const record = process.env.E2E_RECORD_DIR ? { recordVideo: { dir: `${process.env.E2E_RECORD_DIR}/${name.toLowerCase()}`, size: viewport } } : {};
+  const context = await browser.newContext({ viewport, hasTouch: touch, isMobile: device === "phone", reducedMotion: options.reducedMotion ? "reduce" : "no-preference", ...record });
   const page = await context.newPage();
   const errors: string[] = [];
   const sent = { roll: 0, move: 0 };

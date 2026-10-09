@@ -1,4 +1,4 @@
-# Browser end-to-end tests (Phase 3C.1)
+# Browser end-to-end tests (Phases 3C.1–3C.2)
 
 Real Chromium players play complete games through the real UI. They connect to the production client build (`vite preview`), the real Socket.IO server and an isolated PostgreSQL.
 
@@ -63,6 +63,26 @@ The driver reads the authoritative state and queues dice so a game ends determin
 | 12 | Refresh and reconnect during a game | `resilience`: refresh on your own turn; refresh during a roll animation; network loss while the other player moves, then reconnect |
 | 13 | No duplicated movements or rolls | every test: action log and WebSocket frames match clicks. `rules`: synchronous double clicks on Roll and on a move. `resilience`: no hop-by-hop replay after reconnect (the token jumps straight to the server's step). |
 
+## Animation (Phase 3C.2)
+
+`e2e/tests/animation.spec.ts` records what each player's page showed. A `MutationObserver` with timestamps (`e2e/support/timeline.ts`) watches the die and every token, and the running Web Animations are inspected directly. Aman's WebSocket goes through a test proxy, which can hold the server's replies or make one move request stale.
+
+| Check | How |
+| ----- | --- |
+| The tumble starts on the click | The die shows "rolling" within 300 ms, and its spin animation is running |
+| The result matches the server | The die's attribute, the server's `lastRoll`, and the face nearest the viewer (hit-tested) all agree. The die shows "rolling" and then the value, never another number. |
+| Consistent styling | Same size while rolling and at rest; always six faces |
+| A six | `data-six`, the gold glow animation plays, and the bonus is explained on both screens |
+| No movement before the server confirms | With the server's reply held for 700 ms, the chosen token stays in base, marked as selected |
+| A refused move never animates | A stale move request is refused by the real server, and the token's position never changes |
+| Auto-move waits for the reveal | On both screens, the first hop comes more than 300 ms after the die shows the value |
+| Cell by cell | Steps 1, 2, 3, 4, drawn on the layout's cell |
+| Capture | The attacker hops 28 → 29 → 30. The captured token goes straight to base, and only after the attacker landed. |
+| Home lane | 47 → 52 is drawn as 48, 49, 50, 51, 52, ending in the seat's own lane cell. An exact roll finishes in the finish wedge, inactive. |
+| No replay | A page reloaded mid-move shows the result with no running animations and no recorded steps |
+| A takeover tab | Starts from the server's board with no running animations; the old tab shows "open elsewhere" |
+| Reduced motion | No tumble at any time, a single straight slide, and still after the reveal |
+
 ## Bugs found and fixed
 
 1. **A double click sent two requests.** Two clicks in the same moment, before React re-rendered, sent two `game:roll` (or `game:move`) requests. The server's state-version check refused the second as stale, so the game state was never wrong. But the client sent a duplicate request and could briefly show a refusal.
@@ -72,6 +92,8 @@ The driver reads the authoritative state and queues dice so a game ends determin
    - **Fix:** create, join and resume return a `controlEpoch`, which the page keeps in memory and sends when it re-attaches. If the seat's epoch is unchanged, nobody else has claimed the seat, so the page's own stale connection is replaced. A takeover by another tab moves the epoch on, so that tab is never displaced silently. See [sessions](../architecture/sessions.md).
    - **Tests:** a new `sessions.pg` test, and the browser network-loss test, which failed before the fix.
 3. **The tray said "1 squares".** Fixed to "1 square".
+4. **Phase 3C.2, caught before commit: on the roller's own screen, the token moved before the die landed.** The die's continuous tumble (kept going from the click until the board starts playing the roll) did not stop until the whole action had played. On the roller's page, the auto-move therefore hopped about 680 ms before the die showed the value; the other player's screen was correct. The tumble now ends as soon as the board starts playing that version.
+   - **Test:** `animation.spec` checks the ordering on both screens.
 
 ## Not covered here
 
