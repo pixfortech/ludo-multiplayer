@@ -52,6 +52,8 @@ const GENEROUS: RateLimitPolicy = { limit: 1_000_000, windowMs: 1000 };
 
 export interface TestServer {
   url: string;
+  /** The underlying PostgreSQL store (unwrapped), e.g. for pool statistics. */
+  pgStore: PostgresGameStore;
   faults: Faults;
   server: RunningServer;
   store: GameStore;
@@ -143,6 +145,7 @@ export async function startTestServer(databaseUrl: string, options: TestServerOp
   });
   return {
     url: `http://127.0.0.1:${server.port}`,
+    pgStore,
     faults,
     server,
     store,

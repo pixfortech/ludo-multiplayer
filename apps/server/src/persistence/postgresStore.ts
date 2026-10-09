@@ -523,6 +523,11 @@ export class PostgresGameStore implements GameStore {
     return rows.map(toEvent);
   }
 
+  /** Connection-pool usage, for diagnostics and stability checks. */
+  poolStats(): { total: number; idle: number; waiting: number } {
+    return { total: this.pool.totalCount, idle: this.pool.idleCount, waiting: this.pool.waitingCount };
+  }
+
   async close() {
     await this.pool.end();
   }
