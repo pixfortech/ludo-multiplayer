@@ -19,15 +19,18 @@ interface DicePanelProps {
   waitingLabel: string;
   onRoll: () => void;
   layout?: "panel" | "thumb";
+  reduced?: boolean;
+  /** It is this player's turn: the die stays at full strength (the 70% "waiting" look is for other players' turns). */
+  active?: boolean;
 }
 
-export function DicePanel({ die, identity, canRoll, rolling, waitingLabel, onRoll, layout = "panel" }: DicePanelProps) {
+export function DicePanel({ die, identity, canRoll, rolling, waitingLabel, onRoll, layout = "panel", reduced = false, active = false }: DicePanelProps) {
   const trayStyle: CSSProperties & Record<"--tray-glow", string> = identity
     ? { borderColor: identity.rim, background: tint(identity.body, 0.82), "--tray-glow": `${identity.body}40` }
     : { borderColor: "#E2DCD1", background: "#f6f3ee", "--tray-glow": "transparent" };
   const label = rolling ? "Rolling…" : canRoll ? "Roll dice" : waitingLabel;
   const tumbling = die.rolling || rolling;
-  const dieView = (size: number) => <Die value={die.value} rolling={tumbling} revealKey={die.revealKey} size={size} dimmed={!canRoll && !tumbling} />;
+  const dieView = (size: number) => <Die value={die.value} rolling={tumbling} revealKey={die.revealKey} size={size} dimmed={!canRoll && !tumbling && !active} reduced={reduced} />;
 
   if (layout === "thumb") {
     return (

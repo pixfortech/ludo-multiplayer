@@ -90,12 +90,15 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   const { room, game } = state;
   const reduced = usePrefersReducedMotion();
   const finePointer = useFinePointer();
-  const playback = useBoardPlayback(game, reduced);
+  const playback = useBoardPlayback(game, reduced, state.room.status === "paused");
   const shown = playback.game ?? game;
   const me = state.seat?.playerId ?? null;
   const fullscreen = useFullscreen();
 
   const [rollPending, setRollPending] = useState(false);
+  // After our roll is acknowledged, the die keeps tumbling until the board starts showing that roll,
+  // so the tumble is one continuous motion from the click to the reveal.
+  const [rollAwaiting, setRollAwaiting] = useState<number | null>(null);
   const [pendingMove, setPendingMove] = useState<number | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
@@ -135,6 +138,12 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   const finished = game.phase === "finished";
   const connected = state.link === "connected";
   const settled = !playback.busy && playback.game?.stateVersion === game.stateVersion;
+  // Our roll is acknowledged but the board has not started playing it yet (it plays its own reveal from then on).
+  const awaitingReveal = rollAwaiting !== null && playback.playing < rollAwaiting;
+  useEffect(() => {
+    if (rollAwaiting !== null && !awaitingReveal) setRollAwaiting(null);
+  }, [rollAwaiting, awaitingReveal]);
+  const dieRolling = rollPending || awaitingReveal;
   const myTurn = me !== null && game.currentPlayerId === me && !paused && !finished;
   const canRoll = myTurn && game.turn.phase === "awaiting-roll" && settled && !rollPending && connected;
   const choosing = myTurn && game.turn.phase === "awaiting-move" && settled && connected;
@@ -151,7 +160,8 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
     inFlight.current = true;
     setRollPending(true);
     try {
-      await client.rollDice();
+      const data = await client.rollDice();
+      setRollAwaiting(data.game.stateVersion);
     } catch (error) {
       say("error", friendlyError(error));
     } finally {
@@ -258,15 +268,19 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       ? "The game is over."
       : paused
         ? pauseText
-        : rollPending || playback.die.rolling
+        : dieRolling || playback.die.rolling
           ? "Rolling…"
           : shown.turn.phase === "awaiting-roll"
             ? current === me
               ? "Roll the dice"
               : `Waiting for ${currentName} to roll`
             : current === me
-              ? `Move ${shown.turn.dice ?? ""}: choose a token`
-              : `${currentName} is choosing a move`,
+              ? shown.turn.dice === 6
+                ? "Six! Move a token, then roll again"
+                : `Move ${shown.turn.dice ?? ""}: choose a token`
+              : shown.turn.dice === 6
+                ? `${currentName} rolled a six and rolls again`
+                : `${currentName} is choosing a move`,
     next: finished ? null : nextName,
     callouts: calloutsFor(playback.callouts, nameOf, me),
     calloutKey: playback.calloutKey,
@@ -318,7 +332,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
     </div>
   ) : null;
 
-  const dice = <DicePanel die={playback.die} identity={trayIdentity} canRoll={canRoll} rolling={rollPending} waitingLabel={waitingLabel} onRoll={() => void roll()} />;
+  const dice = <DicePanel die={playback.die} identity={trayIdentity} canRoll={canRoll} rolling={dieRolling} waitingLabel={waitingLabel} onRoll={() => void roll()} reduced={reduced} active={myTurn} />;
 
   const roomInfo = (
     <div className="flex flex-col gap-2">
@@ -368,7 +382,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
         states={states}
         badges={badges}
         labels={labels}
-        moveMs={playback.moveMs}
+        motion={playback.motion}
         raised={playback.raised}
         preview={preview}
         effects={playback.effects}
@@ -381,7 +395,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   );
 
   return (
-    <div className="game-layout mx-auto w-full max-w-[1800px] px-4 pb-[calc(var(--action-bar-h,0px)+16px)] pt-3 sm:px-6 lg:grid lg:h-[calc(100svh-65px)] lg:grid-cols-[var(--board)_300px] lg:grid-rows-[minmax(0,1fr)] lg:justify-center lg:gap-6 lg:py-5 xl:grid-cols-[240px_var(--board)_280px] 2xl:grid-cols-[280px_var(--board)_320px]" data-testid="game-screen">
+    <div className="game-layout mx-auto w-full max-w-[1800px] px-4 pb-[calc(var(--action-bar-h,0px)+16px)] pt-3 sm:px-6 phone-landscape:grid phone-landscape:h-[calc(100svh-65px)] phone-landscape:grid-cols-[var(--board)_minmax(0,1fr)] phone-landscape:grid-rows-[minmax(0,1fr)] phone-landscape:gap-3 phone-landscape:py-2 lg:grid lg:h-[calc(100svh-65px)] lg:grid-cols-[var(--board)_300px] lg:grid-rows-[minmax(0,1fr)] lg:justify-center lg:gap-6 lg:py-5 xl:grid-cols-[240px_var(--board)_280px] 2xl:grid-cols-[280px_var(--board)_320px]" data-testid="game-screen">
       {/* Left column (desktop): players and room. */}
       <aside className="hidden min-h-0 flex-col gap-4 xl:flex" aria-label="Players and room">
         <PlayerPanel players={rows} />
@@ -389,20 +403,21 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       </aside>
 
       {/* Phones and tablet portrait: compact players strip. */}
-      <div className="mb-3 flex items-center justify-between gap-2 lg:hidden">
+      <div className="mb-3 flex items-center justify-between gap-2 phone-landscape:hidden lg:hidden">
         <PlayerStrip players={rows} />
       </div>
 
-      <div className="min-w-0 lg:self-center">{board}</div>
+      <div className="min-w-0 phone-landscape:self-center lg:self-center">{board}</div>
 
       {/* Right rail (tablet landscape and desktop): turn, die, tray, log. */}
-      <aside className="hidden min-h-0 flex-col gap-4 overflow-y-auto lg:flex" aria-label="Game controls">
+      <aside className="hidden min-h-0 flex-col gap-4 overflow-y-auto phone-landscape:flex phone-landscape:gap-3 lg:flex" aria-label="Game controls">
         <div className="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-surface p-4 shadow-raised">
           <TurnIndicator turn={turn} />
           {results ?? dice}
           {statusLine}
         </div>
-        {railTray ? <div className="rounded-[var(--radius-card)] bg-surface p-3 shadow-raised">{railTray}</div> : null}
+        {/* In a short landscape window the choice comes first, where it is visible without scrolling. */}
+        {railTray ? <div className="rounded-[var(--radius-card)] bg-surface p-3 shadow-raised phone-landscape:order-first">{railTray}</div> : null}
         <div className="xl:hidden">
           <PlayerPanel players={rows} />
         </div>
@@ -413,7 +428,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       </aside>
 
       {/* Below the board on phones and tablet portrait: log and room. */}
-      <div className="mt-4 flex flex-col gap-4 lg:hidden">
+      <div className="mt-4 flex flex-col gap-4 phone-landscape:hidden lg:hidden">
         <div className="rounded-[var(--radius-card)] bg-surface p-3 shadow-raised">
           <GameActionFeed entries={game.recentHistory} revealedSeq={playback.revealedSeq} nameOf={nameOf} limit={8} />
         </div>
@@ -421,7 +436,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       </div>
 
       {/* Thumb zone (phones and tablet portrait). */}
-      <MobileActionBar hideFrom="lg">
+      <MobileActionBar hideFrom="lg" className="phone-landscape:hidden">
         {trayFor("grid")}
         {statusLine}
         {finished ? (
@@ -434,7 +449,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
             <div className="min-w-0 flex-1">
               <TurnIndicator turn={turn} compact />
             </div>
-            <DicePanel die={playback.die} identity={trayIdentity} canRoll={canRoll} rolling={rollPending} waitingLabel={waitingLabel} onRoll={() => void roll()} layout="thumb" />
+            <DicePanel die={playback.die} identity={trayIdentity} canRoll={canRoll} rolling={dieRolling} waitingLabel={waitingLabel} onRoll={() => void roll()} layout="thumb" reduced={reduced} active={myTurn} />
           </div>
         )}
       </MobileActionBar>

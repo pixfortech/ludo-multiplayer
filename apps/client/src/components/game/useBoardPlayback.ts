@@ -7,7 +7,10 @@
 // capture return and the home glide. Anything else (first load, refresh,
 // reconnect, a missed version, a snapshot that jumps) snaps straight to the
 // state, so nothing ever animates twice. A newer state cancels any running
-// animation (fast-forward). Input waits until the reveal has finished.
+// animation (fast-forward), and so does a pause. Input waits until the reveal
+// has finished. Each token change carries a typed motion (hop, land, open,
+// home, capture, slide) that the board token turns into transform-only
+// animation; a change without a motion is a jump.
 
 import { useEffect, useRef, useState } from "react";
 import { MOTION } from "@ludo/design-tokens";
@@ -30,11 +33,23 @@ export interface DieView {
   revealKey: number;
 }
 
+/** How a token travels to its new position (presentation only). */
+export type MotionKind = "hop" | "land" | "open" | "home" | "capture" | "slide";
+
+export interface TokenMotion {
+  kind: MotionKind;
+  ms: number;
+  /** Unique per scheduled change, so the same kind twice in a row still animates. */
+  id: number;
+}
+
 export interface Playback {
   /** The authoritative state the board currently shows (the previous one while an action plays). */
   game: GameStateView | null;
+  /** The version being played or shown: the new one from the moment its action starts playing. */
+  playing: number;
   tokens: BoardTokenInput[];
-  moveMs: Record<string, number>;
+  motion: Record<string, TokenMotion>;
   raised: string[];
   effects: BoardEffect[];
   die: DieView;
@@ -57,8 +72,9 @@ const dieValue = (game: GameStateView): number | null => game.turn.dice ?? game.
 function snapshot(game: GameStateView, previous?: Playback): Playback {
   return {
     game,
+    playing: game.stateVersion,
     tokens: boardTokens(game),
-    moveMs: {},
+    motion: {},
     raised: [],
     effects: previous?.effects ?? [],
     die: { value: dieValue(game), rolling: false, revealKey: previous?.die.revealKey ?? 0 },
@@ -69,16 +85,21 @@ function snapshot(game: GameStateView, previous?: Playback): Playback {
   };
 }
 
-function withStep(view: Playback, key: string, step: number | null, ms: number): Playback {
+let motionId = 0;
+
+function withStep(view: Playback, key: string, step: number | null, kind: MotionKind, ms: number): Playback {
   return {
     ...view,
     tokens: view.tokens.map((t) => (tokenKey(t.playerId, t.tokenId) === key ? { ...t, step } : t)),
-    moveMs: { ...view.moveMs, [key]: ms },
+    motion: { ...view.motion, [key]: { kind, ms, id: ++motionId } },
     raised: [key],
   };
 }
 
-export function useBoardPlayback(game: GameStateView | null, reduced: boolean): Playback {
+/**
+ * @param paused While the room is paused nothing plays: any running action fast-forwards to the server's state.
+ */
+export function useBoardPlayback(game: GameStateView | null, reduced: boolean, paused = false): Playback {
   const [view, setView] = useState<Playback>(() => (game ? snapshot(game) : emptyPlayback()));
   const shown = useRef<GameStateView | null>(game);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -100,7 +121,7 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean): 
     const at = (delay: number, update: (v: Playback) => Playback) => timers.current.push(setTimeout(() => setView(update), delay));
 
     // Start from the previous authoritative position (fast-forwarding anything still running).
-    setView((v) => ({ ...snapshot(previous, v), busy: true, revealedSeq: lastSeq(previous) }));
+    setView((v) => ({ ...snapshot(previous, v), playing: game.stateVersion, busy: true, revealedSeq: lastSeq(previous) }));
 
     const roll = entries.find((e) => e.type === "roll");
     if (roll && roll.type === "roll") {
@@ -118,10 +139,13 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean): 
     for (const entry of entries) {
       if (entry.type === "move" || entry.type === "auto-move") {
         const key = tokenKey(entry.playerId, entry.tokenId);
+        // Cell by cell along the seat's own path (track, then its own lane): never a shortcut.
         const hops = reduced ? [entry.to] : hopSteps(entry.from, entry.to);
         hops.forEach((step, i) => {
-          const ms = reduced ? REDUCED_SLIDE_MS : entry.from === null ? OPEN_MS : step === 56 ? D.homeEntry : hops.length > 8 && i >= 4 ? FAST_HOP_MS : D.hopPerCell;
-          at(t, (v) => withStep(v, key, step, ms));
+          const last = i === hops.length - 1;
+          const kind: MotionKind = reduced ? "slide" : entry.from === null ? "open" : step === 56 ? "home" : last ? "land" : "hop";
+          const ms = reduced ? REDUCED_SLIDE_MS : kind === "open" ? OPEN_MS : kind === "home" ? D.homeEntry : hops.length > 8 && i >= 4 && !last ? FAST_HOP_MS : D.hopPerCell;
+          at(t, (v) => withStep(v, key, step, kind, ms));
           t += ms;
         });
       } else if (entry.type === "capture") {
@@ -131,7 +155,7 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean): 
         const where = piecePosition(attackerSeat, mover && (mover.type === "move" || mover.type === "auto-move") ? mover.to : null);
         const effect: BoardEffect = { id: `capture-${entry.seq}`, kind: "capture", at: where, seat: seatOf.get(entry.victimPlayerId) ?? 0 };
         const ms = reduced ? REDUCED_REVEAL_MS : D.capture;
-        at(t, (v) => ({ ...withStep(v, victim, null, ms), effects: [...v.effects, effect] }));
+        at(t, (v) => ({ ...withStep(v, victim, null, reduced ? "slide" : "capture", ms), effects: [...v.effects, effect] }));
         t += ms;
       } else if (entry.type === "home") {
         const seat = seatOf.get(entry.playerId) ?? 0;
@@ -144,6 +168,14 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean): 
     at(t + 700, (v) => ({ ...v, effects: [] }));
   }, [game, reduced]);
 
+  // A pause (or anything else that stops play) fast-forwards whatever is still playing.
+  useEffect(() => {
+    if (!paused || !game || timers.current.length === 0) return;
+    for (const timer of timers.current) clearTimeout(timer);
+    timers.current = [];
+    setView((v) => (v.busy ? snapshot(game, v) : v));
+  }, [paused, game]);
+
   useEffect(
     () => () => {
       for (const timer of timers.current) clearTimeout(timer);
@@ -155,5 +187,5 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean): 
 }
 
 function emptyPlayback(): Playback {
-  return { game: null, tokens: [], moveMs: {}, raised: [], effects: [], die: { value: null, rolling: false, revealKey: 0 }, busy: false, revealedSeq: 0, callouts: [], calloutKey: 0 };
+  return { game: null, playing: -1, tokens: [], motion: {}, raised: [], effects: [], die: { value: null, rolling: false, revealKey: 0 }, busy: false, revealedSeq: 0, callouts: [], calloutKey: 0 };
 }

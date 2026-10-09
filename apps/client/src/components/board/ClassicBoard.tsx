@@ -6,6 +6,7 @@
 import { memo, useMemo } from "react";
 import type { PlayerIdentity } from "@ludo/design-tokens";
 import { BoardSurface } from "./BoardSurface";
+import type { TokenMotion } from "../game/useBoardPlayback";
 import { BoardToken, type BoardTokenState } from "./BoardToken";
 import { BOARD_PX } from "./geometry";
 import { placeTokens, type BoardTokenInput } from "./placement";
@@ -21,8 +22,8 @@ export interface ClassicBoardProps {
   states?: Readonly<Record<string, BoardTokenState>>;
   badges?: Readonly<Record<string, number>>;
   labels?: Readonly<Record<string, string>>;
-  /** Per token key: the transition for its current position change. */
-  moveMs?: Readonly<Record<string, number>>;
+  /** Per token key: how it travels to its current position (none = jump). */
+  motion?: Readonly<Record<string, TokenMotion>>;
   /** Tokens drawn above the rest (e.g. the one moving). */
   raised?: readonly string[];
   preview?: MovePreview | null;
@@ -33,7 +34,7 @@ export interface ClassicBoardProps {
   dimmed?: boolean;
 }
 
-export const ClassicBoard = memo(function ClassicBoard({ tokens, identityOf, activeSeats, currentSeat, youSeat, states = {}, badges = {}, labels = {}, moveMs = {}, raised = [], preview = null, effects = [], onActivate, onPreview, title, dimmed = false }: ClassicBoardProps) {
+export const ClassicBoard = memo(function ClassicBoard({ tokens, identityOf, activeSeats, currentSeat, youSeat, states = {}, badges = {}, labels = {}, motion = {}, raised = [], preview = null, effects = [], onActivate, onPreview, title, dimmed = false }: ClassicBoardProps) {
   const placements = useMemo(() => placeTokens(tokens), [tokens]);
   // Draw order: plain tokens, then movable ones (so their hit areas win), then raised.
   const ordered = useMemo(() => {
@@ -60,7 +61,7 @@ export const ClassicBoard = memo(function ClassicBoard({ tokens, identityOf, act
               y={p.y}
               size={p.size}
               state={state}
-              moveMs={moveMs[p.key] ?? 0}
+              motion={motion[p.key]}
               badge={badges[p.key] ?? null}
               count={p.stackSize >= 5 && p.stackIndex === p.stackSize - 1 ? p.stackSize : null}
               {...(labels[p.key] ? { label: labels[p.key] } : {})}

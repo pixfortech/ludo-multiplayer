@@ -116,7 +116,7 @@ The movable tokens, their badges, the tray entries and the move previews come on
 
 Reconnect and refresh restore the exact board from the resume snapshot.
 
-## Motion (Phase 3B)
+## Motion (Phases 3B–3C.2)
 
 `useBoardPlayback` follows `docs/design/motion.md`.
 
@@ -132,7 +132,32 @@ Only a single consecutive version (n → n+1) is animated, by playing its histor
 
 ### When it snaps
 
-Everything else snaps straight to the server state: the first load, a refresh, a reconnect or a version jump. Nothing is replayed after a reconnect, and a newer state fast-forwards any animation that is still running.
+Everything else snaps straight to the server state: the first load, a refresh, a reconnect or a version jump. Nothing is replayed after a reconnect. A newer state fast-forwards any animation that is still running, and so does a pause. A replacement tab (takeover) starts from the server's state with no queue of its own.
+
+### The die (Phase 3C.2)
+
+`components/game/Die.tsx` is one ivory-resin die, built as a small CSS-3D cube. It has six identical faces (rounded, bevelled, recessed ink pips, gold rings on the six) around a solid core, so it can tumble without a 3D engine.
+
+- **The tumble:** a fixed spin, the same for every roll and added on top of the resting face. It starts on the click and continues until the board starts playing that roll.
+- **The landing:** when the server's value is revealed, the die settles from its current orientation onto that face (about 420 ms, overshoot ≤ 6%). It never shows another value first, and it never predicts one. Click to rest is about 850 ms.
+- **A six:** the same die, plus one soft gold glow and a small pop. The turn banner says "Six! Move a token, then roll again".
+- **Waiting:** the die is drawn at 70% only on other players' turns.
+- **Under the hood:** the tumble and the landing are Web Animations on transforms. React does not write the cube's transform, so a reveal never moves it before the landing starts.
+
+### Token travel (Phase 3C.2)
+
+`useBoardPlayback` gives each token change a typed motion: `hop`, `land`, `open`, `home`, `capture` or `slide`. `BoardToken` turns it into Web Animations on transforms only, using the keyframes in `components/board/tokenMotion.ts`.
+
+| Motion | What the player sees |
+| ------ | -------------------- |
+| Hop | A straight glide to the next cell of the seat's own path, with the body lifting about a quarter cell. The contact shadow stays on the board and shrinks while the body is up. |
+| Land | The last hop of a move, ending with a short settle |
+| Open | An arc from the base slot onto the start cell |
+| Home | A 600 ms glide into the finish wedge. The token then eases to its finished size and is shown as inactive. |
+| Capture | After the attacker lands, the captured token shrinks, fades and arcs back to its base slot |
+| Slide | Reduced motion: straight to the destination in 180 ms, with no lift |
+
+A change without a motion is a jump. Any animation still running is cancelled first, so motions never overlap.
 
 ### Controls and the log
 

@@ -80,7 +80,7 @@ describe("game screen", () => {
     expect(screen.getAllByTestId("die")[0]!.getAttribute("data-value")).toBe("6");
     expect(screen.getAllByTestId("move-tray").length).toBeGreaterThan(0);
     expect(tokenState("p-host:0")).toBe("movable");
-    expect(screen.getAllByText("Move 6: choose a token").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Six! Move a token, then roll again").length).toBeGreaterThan(0);
   });
 
   it("offers exactly the server's legal tokens and sends the chosen move, moving nothing until the server answers", async () => {
@@ -249,4 +249,22 @@ describe("game screen", () => {
     });
     expect(s.client.calls.filter((c) => c.method === "moveToken")).toEqual([{ method: "moveToken", args: [1] }]);
   });
+
+  it("a pause fast-forwards a move that is still playing", async () => {
+    vi.useFakeTimers();
+    const s = inGame("p-ben", withTokens(gameView({ stateVersion: 3, historyLength: 6 }), [10, null, null, null]));
+    const moved = withTokens(gameView({ stateVersion: 4, recentHistory: [{ seq: 7, type: "move", playerId: host, tokenId: 0, from: 10, to: 15, dice: 5 }], historyLength: 7 }), [15, null, null, null]);
+    act(() => s.client.set({ game: moved }));
+    await act(async () => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(Number(step("p-host:0"))).toBeLessThan(15); // still hopping
+    act(() => s.client.set({ room: roomView({ players: [player(), ben], status: "paused", lifecycle: "paused", roomVersion: 9, pause: { reason: "host", playerId: null, since: "2026-01-01T00:00:00.000Z" } }) }));
+    expect(step("p-host:0")).toBe("15");
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(step("p-host:0")).toBe("15");
+  });
 });
+

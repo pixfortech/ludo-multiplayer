@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 
-export function MobileActionBar({ children, hideFrom = "md" }: { children: ReactNode; /** The breakpoint from which the page shows its own controls instead. */ hideFrom?: "md" | "lg" }) {
+export function MobileActionBar({ children, hideFrom = "md", className = "" }: { children: ReactNode; /** The breakpoint from which the page shows its own controls instead. */ hideFrom?: "md" | "lg"; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const el = ref.current;
@@ -20,7 +20,7 @@ export function MobileActionBar({ children, hideFrom = "md" }: { children: React
     };
   }, []);
   return (
-    <div ref={ref} className={`fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2 border-t border-border bg-surface/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 backdrop-blur ${hideFrom === "lg" ? "lg:hidden" : "md:hidden"}`}>
+    <div ref={ref} className={`fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2 border-t border-border bg-surface/95 px-4 pb-[max(12px,env(safe-area-inset-bottom))] pt-3 backdrop-blur ${hideFrom === "lg" ? "lg:hidden" : "md:hidden"} ${className}`}>
       {children}
     </div>
   );

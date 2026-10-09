@@ -2,6 +2,9 @@
 @import "@fontsource-variable/outfit";
 @import "tailwindcss";
 
+/* Phones held sideways: short and not yet desktop-wide. The game screen has its own layout here. */
+@custom-variant phone-landscape (@media (orientation: landscape) and (max-height: 540px) and (max-width: 1023px));
+
 /*
  * Theme: the approved light "clean studio" theme from @ludo/design-tokens
  * (THEMES.light, RADIUS, FONT, MOTION). styles.test.ts keeps these values in
@@ -194,48 +197,29 @@ body {
   animation: board-ring-out 520ms var(--ease-enter) both;
 }
 
-/* The die: a short tumble toward the server's value (presentation only). */
-@keyframes die-tumble {
-  0% {
-    transform: rotate(0deg) scale(1);
-  }
-  30% {
-    transform: rotate(-14deg) scale(0.92, 1.06);
-  }
-  60% {
-    transform: rotate(10deg) scale(1.05, 0.95);
-  }
-  100% {
-    transform: rotate(0deg) scale(1);
-  }
-}
-.die-tumbling {
-  animation: die-tumble 220ms var(--ease-standard) infinite;
-}
-@keyframes die-settle {
-  0% {
-    transform: scale(0.92);
-  }
-  60% {
-    transform: scale(1.05);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-.die-settled {
-  animation: die-settle 260ms var(--ease-settle) both;
-}
+/* "Your roll": the tray breathes in the player's colour. Opacity only, on its own layer, so the
+   compositor runs it without repainting anything (no box-shadow animation). */
 @keyframes tray-breathe {
   0%,
   100% {
-    box-shadow: 0 0 0 0 var(--tray-glow, transparent);
+    opacity: 0;
   }
   50% {
-    box-shadow: 0 0 0 6px var(--tray-glow, transparent);
+    opacity: 1;
   }
 }
 .tray-ready {
+  position: relative;
+}
+.tray-ready::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 6px var(--tray-glow, transparent);
+  opacity: 0;
+  pointer-events: none;
+  will-change: opacity;
   animation: tray-breathe 1.6s ease-in-out infinite;
 }
 
@@ -266,6 +250,13 @@ body {
   }
 }
 
+/* Phones in landscape: the board takes the full height on the left, the controls a rail on the right. */
+@media (orientation: landscape) and (max-height: 540px) and (max-width: 1023px) {
+  .game-layout {
+    --board: min(calc(100svh - 65px - 16px), calc(100vw - 32px - 12px - 200px));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -275,12 +266,8 @@ body {
     transition-duration: 1ms !important;
     scroll-behavior: auto !important;
   }
-  /* Tokens still slide straight to their destination (180 ms), per the motion spec. */
-  .board-token-moving {
-    transition-duration: 180ms !important;
-  }
   .token-movable-ring,
-  .tray-ready {
+  .tray-ready::after {
     animation: none !important;
   }
 }
