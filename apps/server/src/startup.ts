@@ -10,6 +10,7 @@ import { startServer, type RunningServer } from "./httpServer.js";
 import { migrationStatus } from "./persistence/migrate.js";
 import { PostgresGameStore } from "./persistence/postgresStore.js";
 import { redactSecrets } from "./redact.js";
+import { GameplayService } from "./gameplay/gameplayService.js";
 import { RoomService } from "./rooms/roomService.js";
 
 export class StartupError extends Error {
@@ -67,6 +68,7 @@ export interface Application {
   server: RunningServer;
   store: PostgresGameStore;
   rooms: RoomService;
+  gameplay: GameplayService;
   close(): Promise<void>;
 }
 
@@ -84,9 +86,20 @@ export async function bootstrap(env: NodeJS.ProcessEnv = process.env, options: B
   }
   const databaseUrl = requireDatabaseUrl(config);
 
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 10, connectionTimeoutMillis: options.connectionTimeoutMs ?? 5000 });
+  const pool = new pg.Pool({
+    connectionString: databaseUrl,
+    max: 10,
+    connectionTimeoutMillis: options.connectionTimeoutMs ?? 5000,
+    // A stuck statement must not hold a room's action queue forever.
+    statement_timeout: 10_000,
+  });
   // An idle connection dropping must not crash the process; requests will report storage-unavailable.
   pool.on("error", (error) => console.error(`PostgreSQL connection error: ${describeDatabaseError(error)}`));
+
+  const store = new PostgresGameStore(pool);
+  const rooms = new RoomService({ store });
+  const log = (line: string) => console.error(redactSecrets(line));
+  const gameplay = new GameplayService({ store, rooms, onPublishError: (error) => log(`[gameplay] broadcast failed: ${String(error)}`) });
 
   let server: RunningServer;
   try {
@@ -98,18 +111,18 @@ export async function bootstrap(env: NodeJS.ProcessEnv = process.env, options: B
         () => true,
         () => false,
       ),
+      realtime: { rooms, gameplay, trustProxyHops: config.trustProxyHops, log },
     });
   } catch (error) {
     await pool.end().catch(() => undefined);
     throw error;
   }
 
-  const store = new PostgresGameStore(pool);
-  const rooms = new RoomService({ store });
   return {
     server,
     store,
     rooms,
+    gameplay,
     close: async () => {
       await server.close();
       await store.close();

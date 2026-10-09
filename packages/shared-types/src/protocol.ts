@@ -1,7 +1,19 @@
 // Socket protocol contract. Bump PROTOCOL_VERSION on any breaking change to
 // event names or payloads so stale clients can be told to refresh.
+//
+// Every client → server event carries a client-chosen `requestId` and an
+// acknowledgement callback. The server never trusts identity from payloads:
+// who is acting comes from the connection's verified credential.
 
-export const PROTOCOL_VERSION = 1;
+import type { ErrorDetails, ProtocolErrorCode } from "./errors.js";
+import type { GameActionView, GameStateView } from "./game.js";
+import type { PlayerSessionCredential, RoomPlayerView, RoomPreview, RoomRuleOptions, RoomView, RoomVisibility } from "./rooms.js";
+import type { RankingMode, TurnTimerSeconds } from "./settings.js";
+
+export const PROTOCOL_VERSION = 2;
+
+/** Largest accepted event payload (serialised JSON), in bytes. */
+export const MAX_PAYLOAD_BYTES = 4096;
 
 /** Sent by the server to every socket immediately after it connects. */
 export interface ServerHello {
@@ -9,11 +21,156 @@ export interface ServerHello {
   serverTime: number;
 }
 
-export interface ServerToClientEvents {
-  "server:hello": (payload: ServerHello) => void;
+/**
+ * Credential presented when opening a connection
+ * (`io(url, { auth: { credential } })`). It is checked before the connection
+ * is accepted; a wrong one is refused with connect_error "unauthenticated".
+ * Never put it in the URL or query string.
+ */
+export interface SocketAuth {
+  credential?: PlayerSessionCredential;
 }
 
-// Client → server actions (create/join/resume room, roll, move, …) are added
-// in Phase 2. The server validates every one; clients only request.
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface ClientToServerEvents {}
+// ── Requests ───────────────────────────────────────────────────────────────
+
+export interface RequestBase {
+  /** 1–64 characters [A-Za-z0-9_-], unique per player and action; reused for retries. */
+  requestId: string;
+}
+
+export interface CreateRoomRequest extends RequestBase {
+  hostName: string;
+  maxPlayers: number;
+  roomName?: string | null;
+  /** A colour id, or "auto". */
+  colour?: string;
+  autoMove?: boolean;
+  rankingMode?: RankingMode;
+  rules?: Partial<RoomRuleOptions>;
+  turnTimerSeconds?: TurnTimerSeconds;
+  visibility?: RoomVisibility;
+}
+
+export interface PreviewRoomRequest extends RequestBase {
+  code: string;
+}
+
+export interface JoinRoomRequest extends RequestBase {
+  code: string;
+  displayName: string;
+  colour?: string;
+  /** Lets the server recognise a player who is already a member (they get already-member). */
+  credential?: PlayerSessionCredential;
+}
+
+export interface LeaveRoomRequest extends RequestBase {
+  expectedRoomVersion?: number;
+}
+
+export type GetStateRequest = RequestBase;
+
+export interface StartGameRequest extends RequestBase {
+  expectedRoomVersion?: number;
+}
+
+export interface RollRequest extends RequestBase {
+  /** The state version the player is looking at; stale requests are refused. */
+  expectedStateVersion: number;
+}
+
+export interface MoveRequest extends RequestBase {
+  expectedStateVersion: number;
+  /** One of the player's own tokens (0–3). */
+  tokenId: number;
+}
+
+export interface HistoryRequest extends RequestBase {
+  /** Return actions after this sequence number (default 0 = from the start). */
+  afterSeq?: number;
+  /** 1–100, default 50. */
+  limit?: number;
+}
+
+// ── Acknowledgements ───────────────────────────────────────────────────────
+
+interface AckBase {
+  /** Echo of the request's requestId (null if the request had none). */
+  requestId: string | null;
+  /** The room version after the request, when a room is involved. */
+  roomVersion: number | null;
+  /** The game state version after the request, when a game exists. */
+  stateVersion: number | null;
+}
+
+export interface AckSuccess<T> extends AckBase {
+  ok: true;
+  data: T;
+}
+
+export interface AckFailure extends AckBase {
+  ok: false;
+  error: { code: ProtocolErrorCode; message: string; details: ErrorDetails };
+}
+
+export type Ack<T> = AckSuccess<T> | AckFailure;
+export type AckCallback<T> = (response: Ack<T>) => void;
+
+export interface MembershipData {
+  room: RoomView;
+  player: RoomPlayerView;
+  /** Returned only to the connection that created or joined; store it securely, it is never shown again. */
+  credential: PlayerSessionCredential;
+}
+
+export interface RoomStateData {
+  room: RoomView;
+  game: GameStateView | null;
+}
+
+export interface ActionData {
+  /** The committed action. On a retry of a committed request, the original one. */
+  action: GameActionView;
+  /** True when this request had already been committed and nothing new happened. */
+  replayed: boolean;
+  /** The latest committed game state. */
+  game: GameStateView;
+}
+
+export interface HistoryData {
+  actions: GameActionView[];
+  /** Pass as afterSeq to fetch the next page. */
+  nextAfterSeq: number;
+  hasMore: boolean;
+}
+
+// ── Events ─────────────────────────────────────────────────────────────────
+
+export interface ClientToServerEvents {
+  "room:create": (request: CreateRoomRequest, ack: AckCallback<MembershipData>) => void;
+  "room:preview": (request: PreviewRoomRequest, ack: AckCallback<{ preview: RoomPreview }>) => void;
+  "room:join": (request: JoinRoomRequest, ack: AckCallback<MembershipData>) => void;
+  "room:leave": (request: LeaveRoomRequest, ack: AckCallback<{ left: true }>) => void;
+  "room:getState": (request: GetStateRequest, ack: AckCallback<RoomStateData>) => void;
+  "game:start": (request: StartGameRequest, ack: AckCallback<RoomStateData>) => void;
+  "game:roll": (request: RollRequest, ack: AckCallback<ActionData>) => void;
+  "game:move": (request: MoveRequest, ack: AckCallback<ActionData>) => void;
+  "game:getHistory": (request: HistoryRequest, ack: AckCallback<HistoryData>) => void;
+}
+
+export interface PresencePayload {
+  roomId: string;
+  playerId: string;
+}
+
+export interface ServerToClientEvents {
+  "server:hello": (payload: ServerHello) => void;
+  /** The room changed (membership, host, settings, status). Ignore versions older than the one held. */
+  "room:updated": (payload: { room: RoomView }) => void;
+  /** Authoritative game snapshot after a committed change (or on request). */
+  "game:state": (payload: { roomId: string; game: GameStateView }) => void;
+  /** A committed action, in order. A gap in stateVersion means one was missed: call room:getState. */
+  "game:event": (payload: { roomId: string; action: GameActionView }) => void;
+  "game:finished": (payload: { roomId: string; stateVersion: number; winnerId: string | null; ranking: string[] }) => void;
+  "player:connected": (payload: PresencePayload) => void;
+  "player:disconnected": (payload: PresencePayload) => void;
+}

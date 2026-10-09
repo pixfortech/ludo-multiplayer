@@ -13,7 +13,7 @@
 
 import { randomUUID } from "node:crypto";
 import { createGame, drawIndex, type GameState } from "@ludo/game-engine";
-import { MIN_PLAYERS, type PlayerSessionCredential, type RoomPlayerView, type RoomPreview, type RoomView } from "@ludo/shared-types";
+import { CLASSIC_BOARD_SEATS, MIN_PLAYERS, coloursForRoom, type PlayerSessionCredential, type RoomPlayerView, type RoomPreview, type RoomView } from "@ludo/shared-types";
 import { hashCredential, issueCredential, verifyCredential } from "../auth-lite/credentials.js";
 import { StoreError, type GameStore, type PlayerRecord, type RoomPatch, type RoomRecord, type StoreErrorCode } from "../persistence/types.js";
 import { RoomError } from "./errors.js";
@@ -93,7 +93,7 @@ function isStorageUnavailable(error: unknown): boolean {
 }
 
 /** Converts store and driver failures into client-safe RoomErrors; anything else is a bug and propagates. */
-function translate(error: unknown): unknown {
+export function translate(error: unknown): unknown {
   if (error instanceof RoomError) return error;
   if (error instanceof StoreError) {
     const mapped = STORE_TO_ROOM[error.code];
@@ -233,6 +233,16 @@ export class RoomService {
     }
   }
 
+  /** Records presence for a member's live connections. Does not change the room version. */
+  async setPresence(actor: AuthenticatedPlayer, status: "connected" | "disconnected"): Promise<void> {
+    if (!this.actors.has(actor)) throw new RoomError("unauthenticated", "Not signed in to this room");
+    try {
+      await this.store.setConnectionStatus(actor.playerId, status);
+    } catch (error) {
+      throw translate(error);
+    }
+  }
+
   // ── Member and host operations ───────────────────────────────────────────
 
   async getRoomView(actor: AuthenticatedPlayer): Promise<RoomView> {
@@ -332,7 +342,15 @@ export class RoomService {
       if (players.length < MIN_PLAYERS) {
         throw new RoomError("not-enough-players", `At least ${MIN_PLAYERS} players are needed to start`, { joinedCount: players.length });
       }
+      if (players.length > CLASSIC_BOARD_SEATS) {
+        throw new RoomError("unsupported-player-count", "Only classic 2–4 player games are available so far", { joinedCount: players.length });
+      }
       const seated = [...players].sort((a, b) => a.seat - b.seat);
+      const colours = coloursForRoom(room.maxPlayers);
+      for (const p of seated) {
+        // Guaranteed by allocation and the database; checked again because a mismatch would mis-seat a token set.
+        if (colours[p.seat]?.id !== p.colour) throw new Error(`Player seat ${p.seat} does not match colour ${p.colour}`);
+      }
       const firstPlayerIndex = this.drawFirstPlayer(seated.length);
       const state = createGame({
         players: seated.map((p) => ({ id: p.id, seat: p.seat })),
@@ -414,6 +432,19 @@ export class RoomService {
     if (!member || member.roomId !== roomId) return false;
     const credential = await this.store.getCredential(member.id);
     return credential !== null && credential.revokedAt === null && verifyCredential(secret, credential.hash);
+  }
+
+  /**
+   * The actor's room and its active members, re-read from storage. For other
+   * server services (gameplay); refuses identities this service did not issue
+   * and players who are no longer members.
+   */
+  async resolveMember(actor: AuthenticatedPlayer): Promise<{ room: RoomRecord; players: PlayerRecord[] }> {
+    try {
+      return await this.loadMember(actor);
+    } catch (error) {
+      throw translate(error);
+    }
   }
 
   private async loadMember(actor: AuthenticatedPlayer, expectedRoomVersion?: number) {

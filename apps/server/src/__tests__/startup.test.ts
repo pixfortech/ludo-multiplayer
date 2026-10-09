@@ -1,17 +1,14 @@
 // Startup safety: no database, no server. Uses a disposable PostgreSQL for the
 // positive and schema checks, and the real entry point for the exit behaviour.
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import { createApp } from "../app.js";
+import { SERVER_DIR, TSX_CLI, baseChildEnv } from "./childProcess.js";
 import { migrate } from "../persistence/migrate.js";
 import { POSTGRES_REQUIRED, postgresAvailable, startTestDatabase, unavailableReason, type TestDatabase } from "../persistence/__tests__/pgHarness.js";
 import { StartupError, bootstrap, describeStartupFailure, redactSecrets } from "../startup.js";
 
-const SERVER_DIR = fileURLToPath(new URL("../..", import.meta.url));
-const TSX_CLI = createRequire(import.meta.url).resolve("tsx/cli");
 const SECRET = "Sup3r-Secret-Pw";
 /** Nothing listens on port 1, so connecting fails fast with ECONNREFUSED. */
 const UNREACHABLE = `postgres://ludo:${SECRET}@127.0.0.1:1/ludo`;
@@ -26,21 +23,6 @@ async function startupError(env: NodeJS.ProcessEnv): Promise<StartupError> {
   );
   expect(error).toBeInstanceOf(StartupError);
   return error as StartupError;
-}
-
-/**
- * The minimum a child Node process needs: PATH everywhere, plus the Windows
- * system variables without which Node cannot start networking or find temp
- * directories. Deliberately excludes DATABASE_URL and everything else.
- */
-function baseChildEnv(): Record<string, string> {
-  const names = ["PATH", ...(process.platform === "win32" ? ["SystemRoot", "windir", "TEMP", "TMP", "PATHEXT", "ComSpec", "USERPROFILE"] : [])];
-  const env: Record<string, string> = {};
-  for (const name of names) {
-    const key = Object.keys(process.env).find((k) => k.toUpperCase() === name.toUpperCase());
-    if (key && process.env[key] !== undefined) env[name] = process.env[key]!;
-  }
-  return env;
 }
 
 /** Runs the real entry point (src/server.ts) with only the given environment. */

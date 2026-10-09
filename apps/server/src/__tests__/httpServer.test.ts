@@ -39,7 +39,7 @@ describe("server scaffold", () => {
 
 describe("loadConfig", () => {
   it("uses sensible defaults", () => {
-    expect(loadConfig({})).toEqual({ port: 3001, clientOrigins: ["http://localhost:5173"], databaseUrl: null });
+    expect(loadConfig({})).toEqual({ port: 3001, clientOrigins: ["http://localhost:5173"], databaseUrl: null, trustProxyHops: 0 });
   });
 
   it("parses a comma-separated origin list", () => {
@@ -47,7 +47,14 @@ describe("loadConfig", () => {
       port: 4000,
       clientOrigins: ["https://a.test", "https://b.test"],
       databaseUrl: null,
+      trustProxyHops: 0,
     });
+  });
+
+  it("reads the trusted proxy count and rejects nonsense", () => {
+    expect(loadConfig({ TRUST_PROXY_HOPS: "1" }).trustProxyHops).toBe(1);
+    expect(() => loadConfig({ TRUST_PROXY_HOPS: "-1" })).toThrow(/TRUST_PROXY_HOPS/);
+    expect(() => loadConfig({ TRUST_PROXY_HOPS: "yes" })).toThrow(/TRUST_PROXY_HOPS/);
   });
 
   it("rejects an invalid port", () => {

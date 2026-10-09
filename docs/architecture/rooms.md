@@ -2,7 +2,7 @@
 
 Private rooms are created, previewed and joined by code. Players get seats and colours, and the host manages the room until the game starts. Everything is stored in PostgreSQL through the `GameStore` ([persistence.md](persistence.md)). Nothing about a room lives only in server memory.
 
-This batch is transport-agnostic. `RoomService` (`apps/server/src/rooms/roomService.ts`) is called directly; the Socket.IO events that expose it, and the broadcasts, are Batch 2C.
+`RoomService` (`apps/server/src/rooms/roomService.ts`) is transport-agnostic. Socket.IO exposes it, with broadcasts, as described in [realtime.md](realtime.md) (Phase 2C).
 
 ## Layers
 
@@ -122,7 +122,7 @@ Anyone else gets `not-host`, or `not-a-member` if they've left.
 - **Players:** everyone currently in the room plays, in seat order. A secure draw picks the first player. The host may start before the room is full, as in common Ludo apps.
 - **One transaction:** the engine game, the session snapshot, event #1 (`game:start`, with an optional `requestId`) and the move to `playing`.
 - **Exactly once:** a double-click starts once; the second call gets `game-already-started`.
-- **No broadcast yet:** that's Batch 2C.
+- **Broadcasting:** the Socket.IO layer announces the start to the room ([realtime.md](realtime.md)).
 
 ### Host departure
 
