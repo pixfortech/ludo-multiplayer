@@ -1,25 +1,160 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/outfit";
 @import "tailwindcss";
 
-/* Design tokens. Phase 4 expands these into the full dark/light theme. */
+/*
+ * Theme: the approved light "clean studio" theme from @ludo/design-tokens
+ * (THEMES.light, RADIUS, FONT, MOTION). styles.test.ts keeps these values in
+ * sync with the token package. Seat colours are never used as decoration.
+ */
 @theme {
-  --color-surface: #0b0d14;
-  --color-surface-raised: #151926;
-  --color-ink: #eef1f8;
-  --color-ink-muted: #9aa3b8;
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-canvas: #f3f0ea;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-border: #e2dcd1;
+  --color-ink: #141821;
+  --color-ink-muted: #5c6370;
+  --color-accent: #1f5fd6;
+  --color-focus: #1f5fd6;
+  --color-danger: #c8102e;
+  --color-success: #0e8c4a;
+  --color-board-cell: #f7f4ee;
+  --color-board-base: #ece6dc;
+  --color-board-line: #d8d0c2;
+
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Outfit Variable", "Outfit", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-chip: 8px;
+  --radius-control: 12px;
+  --radius-card: 16px;
+  --radius-panel: 24px;
+
+  --shadow-raised: 0 1px 2px rgba(20, 24, 33, 0.08);
+  --shadow-overlay: 0 12px 32px rgba(20, 24, 33, 0.18);
+  --shadow-panel: 0 8px 24px rgba(20, 24, 33, 0.12);
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0, 0, 0, 1);
+  --ease-settle: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  --animate-slot-in: slot-in 420ms var(--ease-settle) both;
+  --animate-fade-up: fade-up 360ms var(--ease-enter) both;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-pulse-dot: pulse-dot 2.4s ease-in-out infinite;
+}
+
+@keyframes slot-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(14, 140, 74, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(14, 140, 74, 0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
   margin: 0;
-  background: var(--color-surface);
+  background-color: var(--color-canvas);
+  /* Restrained studio light: a soft warm wash, no seat colours. */
+  background-image:
+    radial-gradient(1200px 600px at 85% -10%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(31, 95, 214, 0.06), transparent 60%);
+  background-attachment: fixed;
   color: var(--color-ink);
   font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+}
+
+/* Keyboard focus only (2 px ring, 2 px offset). */
+:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pressed state for any tactile control. */
+.press {
+  transition:
+    transform 80ms var(--ease-standard),
+    background-color 140ms var(--ease-standard),
+    box-shadow 140ms var(--ease-standard),
+    border-color 140ms var(--ease-standard),
+    color 140ms var(--ease-standard);
+}
+.press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }

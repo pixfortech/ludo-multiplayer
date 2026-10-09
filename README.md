@@ -153,8 +153,8 @@ Variables set with `$env:` last for the current terminal only. `Remove-Item Env:
 | 0 | Reset and scaffold the monorepo; Higgsfield pipeline preparation | ✅ |
 | 0.5 | Visual design system, 15-player palette, classic reference geometry, 2–15 topology, Higgsfield plan ([docs/design](docs/design/README.md)) | ✅ geometry approved |
 | 1 | Classic 2–4 player game engine with full rules and tests ([engine](docs/architecture/game-engine.md)) | ✅ |
-| 2 | Rooms and sessions backend: create, join, resume, identity, persistence foundation | In progress: 2A persistence ✅, 2B rooms and players ✅ ([rooms](docs/architecture/rooms.md)), 2C real-time gameplay ✅ ([realtime](docs/architecture/realtime.md)), 2D resume and recovery ✅ ([sessions](docs/architecture/sessions.md)) |
-| 3 | Basic 2D client: lobby, room, classic board, dice, movement, reconnect | |
+| 2 | Rooms and sessions backend: create, join, resume, identity, persistence foundation | In progress: 2A persistence ✅, 2B rooms and players ✅ ([rooms](docs/architecture/rooms.md)), 2C real-time gameplay ✅ ([realtime](docs/architecture/realtime.md)), 2D resume and recovery ✅ ([sessions](docs/architecture/sessions.md)), 2E CI and QA ✅ ([QA](docs/qa/phase-2e.md)) |
+| 3 | Basic 2D client: lobby, room, classic board, dice, movement, reconnect | In progress: 3A app shell, home, create and join, live lobby, sessions ✅ ([client](docs/architecture/client.md)); 3B board, dice and moves next |
 | 4 | Premium 2D UI: animation, responsive layouts, fullscreen, accessibility | |
 | 5 | Polygon board geometry for 2–15 players, with previews and tests | |
 | 6 | Expanded 5–15 player gameplay: fair paths, fast mode, power system foundation | |

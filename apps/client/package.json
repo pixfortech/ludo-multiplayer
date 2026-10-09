@@ -12,10 +12,14 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@fontsource-variable/inter": "5.2.8",
+    "@fontsource-variable/outfit": "5.2.8",
     "@ludo/board-layouts": "0.0.0",
+    "@ludo/design-tokens": "0.0.0",
     "@ludo/shared-types": "0.0.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "socket.io-client": "^4.8.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.0",

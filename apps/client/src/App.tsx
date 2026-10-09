@@ -1,38 +1,66 @@
-import { PLAYER_COUNTS } from "@ludo/shared-types";
-import { boardShapeFor } from "@ludo/board-layouts";
+import { useEffect, useState } from "react";
+import { io } from "socket.io-client";
+import { AppShell } from "./components/layout/AppShell";
+import { ToastProvider } from "./components/ui/Toasts";
+import { GameConnection, type ClientSocket } from "./lib/connection";
+import { RouterProvider, useRouter } from "./lib/router";
+import { SeatStore, TabSeat, browserStorage } from "./lib/session";
+import { CreateRoomPage } from "./pages/CreateRoomPage";
+import { HomePage } from "./pages/HomePage";
+import { JoinRoomPage } from "./pages/JoinRoomPage";
+import { LobbyPage } from "./pages/LobbyPage";
+import { NotFoundPage } from "./pages/NotFoundPage";
+import { ResumePage } from "./pages/ResumePage";
+import { GameProvider, type GameServices } from "./state/gameClient";
 
-// Phase 0 placeholder shell. The lobby, rooms and board renderers replace this
-// screen from Phase 3 onwards.
-export default function App() {
+const TITLES: Record<string, string> = {
+  home: "Ludo · play together online",
+  create: "Create a game · Ludo",
+  join: "Join a game · Ludo",
+  lobby: "Lobby · Ludo",
+  resume: "Resume a game · Ludo",
+  "not-found": "Not found · Ludo",
+};
+
+function Routes() {
+  const { route } = useRouter();
+  useEffect(() => {
+    document.title = TITLES[route.name] ?? "Ludo";
+  }, [route]);
+  switch (route.name) {
+    case "home":
+      return <HomePage />;
+    case "create":
+      return <CreateRoomPage />;
+    case "join":
+      return <JoinRoomPage key={route.code ?? "none"} initialCode={route.code} />;
+    case "lobby":
+      return <LobbyPage key={route.code} code={route.code} />;
+    case "resume":
+      return <ResumePage />;
+    case "not-found":
+      return <NotFoundPage />;
+  }
+}
+
+/** One Socket.IO connection per tab (same origin; the dev server proxies to the game server). */
+export function createBrowserServices(): GameServices {
+  const url = (import.meta.env.VITE_SERVER_URL as string | undefined) || undefined;
+  const socket: ClientSocket = url ? io(url, { transports: ["websocket"] }) : io({ transports: ["websocket"] });
+  return { client: new GameConnection(socket), seats: new SeatStore(browserStorage("local")), tab: new TabSeat(browserStorage("session")) };
+}
+
+export default function App({ services, initialPath }: { services?: GameServices; initialPath?: string }) {
+  const [resolved] = useState(() => services ?? createBrowserServices());
   return (
-    <main className="mx-auto flex min-h-full max-w-3xl flex-col justify-center gap-10 px-4 py-16 sm:px-8">
-      <header className="flex flex-col gap-3">
-        <span className="text-sm font-medium uppercase tracking-[0.2em] text-ink-muted">
-          Rebuilding from the ground up
-        </span>
-        <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Ludo</h1>
-        <p className="max-w-xl text-lg text-ink-muted">
-          Classic Ludo for 2–4 players, and expanded polygon boards for up to 15 — on one screen or
-          across devices.
-        </p>
-      </header>
-
-      <section aria-labelledby="boards-heading" className="flex flex-col gap-4">
-        <h2 id="boards-heading" className="text-sm font-medium text-ink-muted">
-          Board shapes
-        </h2>
-        <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {PLAYER_COUNTS.map((count) => (
-            <li
-              key={count}
-              className="flex items-baseline justify-between rounded-lg bg-surface-raised px-3 py-2"
-            >
-              <span className="text-lg font-semibold tabular-nums">{count}</span>
-              <span className="text-sm capitalize text-ink-muted">{boardShapeFor(count)}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </main>
+    <GameProvider services={resolved}>
+      <ToastProvider>
+        <RouterProvider {...(initialPath ? { initialPath } : {})}>
+          <AppShell>
+            <Routes />
+          </AppShell>
+        </RouterProvider>
+      </ToastProvider>
+    </GameProvider>
   );
 }

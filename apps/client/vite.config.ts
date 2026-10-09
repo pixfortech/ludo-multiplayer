@@ -18,5 +18,8 @@ export default defineConfig({
   test: {
     include: ["src/**/*.test.{ts,tsx}"],
     environment: "jsdom",
+    setupFiles: ["./src/test/setup.ts"],
+    // CSS is stubbed in tests, except the raw stylesheet read by the design-token drift test.
+    css: { include: [/index\.css\?raw$/] },
   },
 });
