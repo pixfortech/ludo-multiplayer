@@ -15,12 +15,14 @@ if (command.length === 0) {
 }
 
 /** Output patterns that fail the step even when the command itself exits 0. */
+// Anchored to the exact report formats, so a passing test whose *name* mentions these words cannot trigger them.
 const FORBIDDEN = [
-  { pattern: /\b\d+ skipped\b/, reason: "tests were skipped" },
-  { pattern: /\bSKIPPED\b/, reason: "a test suite reported that it was skipped" },
-  { pattern: /\b\d+ todo\b/, reason: "tests are marked todo" },
-  { pattern: /Unhandled (Error|Rejection)s?\b/i, reason: "an unhandled error or rejection occurred" },
-  { pattern: /\bTest timed out\b|\bTimed out after\b/, reason: "a test timed out" },
+  { pattern: /\bTests\b.*\b\d+ skipped\b|\bTest Files\b.*\b\d+ skipped\b/, reason: "tests were skipped" },
+  { pattern: /^\s*⚠.*\bSKIPPED\b/m, reason: "a test suite reported that it was skipped" },
+  { pattern: /\bTests\b.*\b\d+ todo\b/, reason: "tests are marked todo" },
+  { pattern: /Vitest caught \d+ unhandled (error|rejection)s?/i, reason: "an unhandled error or rejection occurred" },
+  { pattern: /⎯\s*Unhandled (Errors?|Rejections?)\s*⎯/, reason: "an unhandled error or rejection occurred" },
+  { pattern: /Error: Test timed out in \d+ms/, reason: "a test timed out" },
 ];
 
 /** Quotes one argument for the platform shell, so paths with spaces (C:\Web Apps\…) stay one argument. */

@@ -25,12 +25,19 @@ describe("CI test runner", () => {
     expect(runChecked(" Test Files  13 passed (13)\n      Tests  204 passed (204)\n")).toBe(0);
   });
 
-  it("fails on skipped tests, skip warnings, unhandled errors and timeouts even when the command succeeded", () => {
+  it("fails on skips, harness skip warnings, uncaught errors and time-outs even when the command succeeded", () => {
     expect(runChecked("      Tests  203 passed | 1 skipped (204)\n")).toBe(1);
+    expect(runChecked(" Test Files  2 passed | 1 skipped (3)\n")).toBe(1);
     expect(runChecked("⚠ PostgreSQL integration tests will be SKIPPED.\n")).toBe(1);
     expect(runChecked("⎯⎯⎯ Unhandled Errors ⎯⎯⎯\n")).toBe(1);
+    expect(runChecked("Vitest caught 1 unhandled error during the test run.\n")).toBe(1);
     expect(runChecked("Error: Test timed out in 5000ms.\n")).toBe(1);
     expect(runChecked("      Tests  3 todo (3)\n")).toBe(1);
+  });
+
+  it("is not fooled by test names that mention those words (regression: a slow test's name failed Windows CI)", () => {
+    expect(runChecked("   ✓ fails on skipped tests, skip warnings, unhandled errors and timeouts even when the command succeeded 551ms\n")).toBe(0);
+    expect(runChecked("   ✓ a test called 'Test timed out' and '2 skipped' 12ms\n      Tests  1 passed (1)\n")).toBe(0);
   });
 
   it("fails when the command fails", () => {
