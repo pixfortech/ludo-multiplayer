@@ -2,7 +2,7 @@
 // tests prove rendering and interaction, NOT live multiplayer (that is proven
 // by the real Socket.IO + PostgreSQL tests in apps/server).
 
-import type { MembershipData, PlayerSessionCredential, ResumeData, RoomPlayerView, RoomPreview, RoomStateData, RoomView } from "@ludo/shared-types";
+import type { ActionData, GameStateView, MembershipData, PlayerSessionCredential, ResumeData, RoomPlayerView, RoomPreview, RoomStateData, RoomView } from "@ludo/shared-types";
 import { ProtocolRequestError, type ConnectionState, type CreateRoomInput, type JoinRoomInput, type Notice } from "../lib/connection";
 import { SeatStore, TabSeat, type KeyValueStorage } from "../lib/session";
 import type { GameClient, GameServices } from "../state/gameClient";
@@ -54,6 +54,10 @@ export class FakeClient implements GameClient {
   previewResult: RoomPreview | Error = new ProtocolRequestError("room-not-found", "Room not found");
   resumeResults: (ResumeData | Error)[] = [];
   startResult: RoomStateData | Error | null = null;
+  rollResults: (ActionData | Error)[] = [];
+  moveResults: (ActionData | Error)[] = [];
+  /** When set, roll/move requests wait until the test resolves them. */
+  hold: { release: () => void } | null = null;
 
   getState = () => this.state;
   subscribe = (l: () => void) => {
@@ -100,6 +104,23 @@ export class FakeClient implements GameClient {
     this.set({ room: data.room, game: data.game });
     return data;
   }
+  private async gameAction(method: string, args: unknown[], result: ActionData | Error | undefined) {
+    this.calls.push({ method, args });
+    if (this.hold) await new Promise<void>((release) => (this.hold = { release }));
+    if (result instanceof Error) throw result;
+    if (!result) throw new Error(`no result scripted for ${method}`);
+    this.set({ game: result.game });
+    return result;
+  }
+  rollDice() {
+    return this.gameAction("rollDice", [], this.rollResults.shift());
+  }
+  moveToken(tokenId: number) {
+    return this.gameAction("moveToken", [tokenId], this.moveResults.shift());
+  }
+  async resumeGame() {
+    this.calls.push({ method: "resumeGame", args: [] });
+  }
   async leaveRoom() {
     this.calls.push({ method: "leaveRoom", args: [] });
     this.set({ seat: null, room: null });
@@ -114,4 +135,36 @@ export function services(client = new FakeClient()): GameServices & { client: Fa
 
 export function membership(room: RoomView, playerId: string, secret = "s3cret-value"): MembershipData {
   return { room, player: room.players.find((p) => p.playerId === playerId)!, credential: { playerId, secret } };
+}
+
+/** A started classic game for two players (host seat 0, guest seat 2), all tokens in base. */
+export function gameView(over: Partial<GameStateView> = {}): GameStateView {
+  return {
+    stateVersion: 0,
+    phase: "playing",
+    settings: { autoMove: true, rankingMode: "winner-only" },
+    players: [
+      { id: "p-host", seat: 0, tokens: [0, 1, 2, 3].map((id) => ({ id, step: null })), finished: false },
+      { id: "p-ben", seat: 2, tokens: [0, 1, 2, 3].map((id) => ({ id, step: null })), finished: false },
+    ],
+    currentPlayerIndex: 0,
+    currentPlayerId: "p-host",
+    turn: { phase: "awaiting-roll", dice: null, consecutiveSixes: 0, legalMoves: [] },
+    lastRoll: null,
+    lastAutoMove: null,
+    ranking: [],
+    winnerId: null,
+    recentHistory: [],
+    historyLength: 1,
+    ...over,
+  };
+}
+
+/** The acknowledgement data for a committed roll or move. */
+export function actionData(game: GameStateView, type: "game:roll" | "game:move" = "game:roll"): ActionData {
+  return {
+    action: { seq: game.historyLength, type, playerId: game.currentPlayerId, stateVersion: game.stateVersion, at: "2026-01-01T00:00:00.000Z", dice: game.lastRoll?.value ?? null, tokenId: null, entries: [] },
+    replayed: false,
+    game,
+  };
 }

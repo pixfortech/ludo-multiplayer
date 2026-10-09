@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RoomPlayerView, RoomView } from "@ludo/shared-types";
 import { ClassicBoardArt } from "../components/brand/ClassicBoardArt";
+import { GameScreen } from "../components/game/GameScreen";
 import { PlayerToken } from "../components/game/PlayerToken";
 import { RoomCodeCard } from "../components/game/RoomCodeCard";
 import { MobileActionBar } from "../components/layout/MobileActionBar";
@@ -197,9 +198,10 @@ export function LobbyPage({ code }: { code: string }) {
     };
   }, [code, client, seats, tab, attempt]);
 
-  // Lobby notifications.
+  // Lobby notifications. During a game the game screen shows them in its own status line.
   useEffect(() => client.onNotice((notice) => {
-    const toast = noticeToast(notice);
+    const inGame = Boolean(client.getState().game) && client.getState().room?.status !== "lobby";
+    const toast = inGame && notice.kind !== "room-closed" && notice.kind !== "session-ended" ? null : noticeToast(notice);
     if (toast) toasts.push(toast);
   }), [client, toasts]);
 
@@ -266,6 +268,10 @@ export function LobbyPage({ code }: { code: string }) {
       setConfirmLeave(false);
     }
   };
+
+  if (!inLobby && state.game) {
+    return <GameScreen state={{ ...state, room, game: state.game }} onLeave={leave} leaving={leaving} confirmLeave={confirmLeave} />;
+  }
 
   const currentTurn = state.game?.currentPlayerId ? room.players.find((p) => p.playerId === state.game!.currentPlayerId) : null;
 

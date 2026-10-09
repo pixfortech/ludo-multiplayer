@@ -263,3 +263,117 @@ describe.skipIf(skip)("browser connection layer against the real server", () => 
     expect(host.notices).toContainEqual({ kind: "player-left", name: "Ben" });
   });
 });
+
+/** Host and guest seated, game started; the server draws the host (seat 0) first in tests. */
+async function startedGame(autoMove: boolean) {
+  const host = openTab();
+  const created = await host.conn.createRoom({ hostName: "Aman", maxPlayers: 2, colour: "crimson", autoMove });
+  const guest = openTab();
+  const joined = await guest.conn.joinRoom({ code: created.room.code, displayName: "Ben", colour: "auto" });
+  await waitUntil(() => host.state().room?.players.length === 2, "the host sees the guest");
+  await host.conn.startGame();
+  await waitUntil(() => guest.state().game?.stateVersion === 0, "the guest receives the started game");
+  return { host, guest, hostId: created.player.playerId, guestId: joined.player.playerId, guestCredential: joined.credential, code: created.room.code };
+}
+
+const stepsOf = (tab: Tab, playerId: string) => tab.state().game?.players.find((p) => p.id === playerId)?.tokens.map((t) => t.step);
+
+describe.skipIf(skip)("browser connection layer: playing against the real server", () => {
+  afterEach(() => expect(t.dice.remaining, "every queued die was used").toBe(0));
+
+  it("rolls through the server, moves a legal token, and both players see the same board", async () => {
+    const { host, guest, hostId, guestId } = await startedGame(false);
+    expect(host.state().game!.currentPlayerId).toBe(hostId);
+    expect(await refusal(guest.conn.rollDice())).toBe("not-your-turn");
+
+    t.dice.push(6);
+    const rolled = await host.conn.rollDice();
+    expect(rolled.game.lastRoll).toEqual({ playerId: hostId, value: 6 });
+    expect(rolled.game.turn.phase).toBe("awaiting-move");
+    // The client offers exactly the server's list: four tokens can open on a six.
+    expect(rolled.game.turn.legalMoves.map((m) => [m.tokenId, m.from, m.to, m.opens])).toEqual([0, 1, 2, 3].map((id) => [id, null, 0, true]));
+    await waitUntil(() => guest.state().game?.stateVersion === rolled.game.stateVersion, "the guest sees the roll");
+    expect(guest.state().game!.lastRoll).toEqual({ playerId: hostId, value: 6 });
+    expect(await refusal(guest.conn.moveToken(0))).toBe("not-your-turn");
+
+    await host.conn.moveToken(1);
+    expect(stepsOf(host, hostId)).toEqual([null, 0, null, null]);
+    await waitUntil(() => guest.state().game?.stateVersion === host.state().game!.stateVersion, "the guest has the same version");
+    expect(stepsOf(guest, hostId)).toEqual([null, 0, null, null]);
+    // Six: a bonus roll for the same player.
+    expect(host.state().game!.currentPlayerId).toBe(hostId);
+    expect(host.state().game!.recentHistory.some((e) => e.type === "bonus-roll")).toBe(true);
+
+    t.dice.push(4);
+    await host.conn.rollDice();
+    await host.conn.moveToken(1);
+    expect(stepsOf(host, hostId)).toEqual([null, 4, null, null]);
+    // No bonus: the turn passes to Ben on both screens.
+    await waitUntil(() => guest.state().game?.currentPlayerId === guestId, "the turn passes to the guest");
+    expect(host.state().game!.currentPlayerId).toBe(guestId);
+    expect(host.state().game!.turn.phase).toBe("awaiting-roll");
+  });
+
+  it("moves automatically when only one token can move, and the guest receives it as one action", async () => {
+    const { host, guest, hostId } = await startedGame(true);
+    t.dice.push(6);
+    await host.conn.rollDice();
+    await host.conn.moveToken(0);
+    const before = host.state().game!.stateVersion;
+    t.dice.push(3);
+    const rolled = await host.conn.rollDice();
+    // The roll and the automatic move are one committed action (one version), decided by the server.
+    expect(rolled.game.stateVersion).toBe(before + 1);
+    expect(rolled.game.lastAutoMove).toMatchObject({ playerId: hostId, tokenId: 0, from: 0, to: 3, dice: 3 });
+    expect(rolled.action.entries.map((e) => e.type)).toEqual(expect.arrayContaining(["roll", "auto-move"]));
+    await waitUntil(() => guest.state().game?.stateVersion === before + 1, "the guest receives the auto-move");
+    expect(stepsOf(guest, hostId)).toEqual([3, null, null, null]);
+  });
+
+  it("refuses a move computed from an old position, and the client recovers the latest state", async () => {
+    const { host, guest, hostId } = await startedGame(false);
+    t.dice.push(6);
+    await host.conn.rollDice();
+    // A second tab for the same seat is not possible, so simulate a stale request with the raw protocol.
+    const stale = await new Promise<{ ok: boolean; error?: { code: string } }>((resolve) =>
+      (host.socket.timeout(5000) as unknown as { emit: (e: string, p: unknown, cb: (err: unknown, ack: { ok: boolean; error?: { code: string } }) => void) => void }).emit(
+        "game:move",
+        { requestId: `stale-${Date.now()}`, expectedStateVersion: 0, tokenId: 0 },
+        (_err, ack) => resolve(ack),
+      ),
+    );
+    expect(stale.ok).toBe(false);
+    expect(stale.error?.code).toBe("stale-state");
+    // The connection's own request uses the version it holds and succeeds.
+    await host.conn.moveToken(0);
+    await waitUntil(() => stepsOf(guest, hostId)?.[0] === 0, "the guest sees the move");
+  });
+
+  it("restores the exact board after a refresh, and a reconnecting tab keeps playing", async () => {
+    const { host, guest, hostId, guestId, guestCredential } = await startedGame(false);
+    t.dice.push(6, 5);
+    await host.conn.rollDice();
+    await host.conn.moveToken(2);
+    await host.conn.rollDice();
+    await host.conn.moveToken(2);
+    await waitUntil(() => guest.state().game?.currentPlayerId === guestId, "the guest's turn");
+    const expected = host.state().game!;
+
+    // Ben refreshes: a new page resumes with the stored credential.
+    guest.conn.dispose();
+    await waitUntil(() => host.state().room?.players.find((p) => p.playerId === guestId)?.connectionStatus === "disconnected", "the old page is gone");
+    const reloaded = openTab();
+    const resumed = await reloaded.conn.resume(guestCredential);
+    expect(resumed.game!.stateVersion).toBe(expected.stateVersion);
+    expect(stepsOf(reloaded, hostId)).toEqual([null, null, 5, null]);
+    expect(reloaded.state().game!.currentPlayerId).toBe(guestId);
+    expect(reloaded.state().game!.turn.phase).toBe("awaiting-roll");
+
+    // And it can act: Ben rolls a 2 with nothing to move; the turn passes back.
+    t.dice.push(2);
+    const rolled = await reloaded.conn.rollDice();
+    expect(rolled.game.recentHistory.some((e) => e.type === "auto-pass")).toBe(true);
+    await waitUntil(() => host.state().game?.currentPlayerId === hostId, "the host's turn again");
+  });
+});
+

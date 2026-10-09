@@ -148,6 +148,124 @@ body {
   transform: scale(0.97);
 }
 
+/* ── Game board ─────────────────────────────────────────────────────── */
+
+/* Movable tokens breathe (1.6 s, opacity .55 → .95); static under reduced motion. */
+@keyframes token-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+.token-movable-ring {
+  animation: token-breathe 1.6s ease-in-out infinite;
+}
+
+/* SVG tokens show their focus ring only for keyboard focus. */
+.board-token-focus {
+  opacity: 0;
+}
+.board-token-button:focus-visible .board-token-focus {
+  opacity: 1;
+}
+
+/* Short-lived marks after a committed capture or home entry. */
+@keyframes board-ring-out {
+  from {
+    opacity: 0.95;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+.board-effect-home {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: board-ring-out 600ms var(--ease-enter) both;
+}
+.board-effect-capture {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: board-ring-out 520ms var(--ease-enter) both;
+}
+
+/* The die: a short tumble toward the server's value (presentation only). */
+@keyframes die-tumble {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  30% {
+    transform: rotate(-14deg) scale(0.92, 1.06);
+  }
+  60% {
+    transform: rotate(10deg) scale(1.05, 0.95);
+  }
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+.die-tumbling {
+  animation: die-tumble 220ms var(--ease-standard) infinite;
+}
+@keyframes die-settle {
+  0% {
+    transform: scale(0.92);
+  }
+  60% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.die-settled {
+  animation: die-settle 260ms var(--ease-settle) both;
+}
+@keyframes tray-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--tray-glow, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px var(--tray-glow, transparent);
+  }
+}
+.tray-ready {
+  animation: tray-breathe 1.6s ease-in-out infinite;
+}
+
+/* The game screen sizes the board to the space left by its bars and columns
+   (docs/design/ui-desktop.md, ui-tablet.md, ui-mobile.md): never clipped,
+   never scrolled separately. */
+.game-layout {
+  --board: min(calc(100vw - 32px), calc(100svh - 269px));
+}
+@media (min-width: 640px) {
+  .game-layout {
+    --board: min(calc(100vw - 48px), calc(100svh - 269px));
+  }
+}
+@media (min-width: 1024px) {
+  .game-layout {
+    --board: min(calc(100svh - 105px), calc(100vw - 300px - 72px));
+  }
+}
+@media (min-width: 1280px) {
+  .game-layout {
+    --board: min(calc(100svh - 105px), calc(100vw - 240px - 280px - 96px));
+  }
+}
+@media (min-width: 1536px) {
+  .game-layout {
+    --board: min(calc(100svh - 105px), calc(100vw - 280px - 320px - 96px));
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -156,5 +274,13 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
     scroll-behavior: auto !important;
+  }
+  /* Tokens still slide straight to their destination (180 ms), per the motion spec. */
+  .board-token-moving {
+    transition-duration: 180ms !important;
+  }
+  .token-movable-ring,
+  .tray-ready {
+    animation: none !important;
   }
 }

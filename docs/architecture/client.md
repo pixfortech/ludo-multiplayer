@@ -1,6 +1,6 @@
-# Web client (Phase 3A)
+# Web client (Phases 3A–3B)
 
-The browser client in `apps/client` is React 19, Vite and TypeScript, styled with Tailwind 4. Phase 3A built the app shell, the home page, the create and join workflows, the live multiplayer lobby and session handling. The game board, dice and moves follow in 3B.
+The browser client in `apps/client` is React 19, Vite and TypeScript, styled with Tailwind 4. Phase 3A built the app shell, the home page, the create and join workflows, the live multiplayer lobby and session handling. Phase 3B added the playable 2D game: the classic board, dice, moves and the game screen.
 
 The client holds **no game rules**. Everything it shows comes from the server: rooms, seats, colours, presence and game state. It sends requests and renders the answers.
 
@@ -15,7 +15,9 @@ The client holds **no game rules**. Everything it shows comes from the server: r
 | `src/pages/` | Home, Create, Join, Lobby, Resume, Not found |
 | `src/components/ui/` | Buttons, fields, segmented controls, switch, badges, cards, toasts, connection pill, icons |
 | `src/components/game/` | Player tokens, the colour picker, the room code card |
-| `src/components/brand/` | The wordmark, the hero board, board and renderer previews. They are drawn from the real classic layout data in `@ludo/board-layouts`; the geometry is not changed. |
+| `src/components/board/` | The 2D classic board (3B): `geometry.ts` (layout cells → SVG points), `placement.ts` (token positions and stacking), `BoardSurface` with `PlayerBase`, `BoardCell`, `SafeCell`, `HomeLane`, `FinishArea`; `BoardToken` (token states); `TokenOverlay` (move preview, destination, capture/home marks); `ClassicBoard` (the interactive board) |
+| `src/components/game/` (game screen) | `GameScreen`, `DicePanel` and `Die`, `TurnIndicator`, `PlayerPanel` / `PlayerStrip`, `MoveTray`, `GameActionFeed`, and `useBoardPlayback` (the motion timeline) |
+| `src/components/brand/` | The wordmark, the hero board, board and renderer previews. They use the same board surface and tokens as the game; the geometry is not changed. |
 | `src/components/layout/` | The app shell (header, mobile menu, footer) and the mobile action bar |
 | `src/index.css` | Tailwind theme mapped from `@ludo/design-tokens`; `styles.test.ts` keeps the two in step |
 
@@ -40,6 +42,107 @@ Lobby-worthy changes are derived from authoritative updates and become toasts: a
 ### Reconnects
 
 After a transport reconnect (a new server-side socket), the connection re-attaches its seat with `room:resume`, using the credential it holds in memory. If the seat is now controlled elsewhere, it does **not** take over.
+
+## The 2D board (Phase 3B)
+
+### Geometry has one source
+
+Every position comes from `@ludo/board-layouts`:
+
+- `classicSeatPath(seat)` gives steps 0–50 on the track, 51–55 in the lane and 56 at the finish;
+- `classicBaseSlots` gives the four base slots;
+- the track, start, safe and lane tables give the cells.
+
+`components/board/geometry.ts` only converts grid cells to SVG coordinates. There is no second movement map, and the frozen geometry is unchanged.
+
+### Stacking
+
+Placement follows `docs/design/token-design.md`:
+
+| Tokens on a cell | Layout |
+| ---------------- | ------ |
+| 1 | 0.82 × cell |
+| 2 | offset ±18% diagonally, at 0.72 |
+| 3–4 | a 2 × 2 cluster at 0.6 |
+| more | a 3 × 3 grid with a count badge |
+
+Mixed colours are ordered by seat. Finished tokens sit in the seat's finish wedge.
+
+### Token states
+
+Token states are the approved ones:
+
+- **movable:** a ring that breathes (static under reduced motion), with a numbered badge matching the move tray;
+- **selected:** an ink ring, lifted;
+- **unmovable:** 60% opacity;
+- **finished:** 72% size with a gold check.
+
+The current player's base glows.
+
+### Renderer independence
+
+`ClassicBoard` renders whatever positions it is given and reports which token was picked. A Canvas or 3D renderer can take the same inputs: placements, states and preview.
+
+## Gameplay (Phase 3B)
+
+### Requests
+
+`GameConnection.rollDice()` and `moveToken(tokenId)` send `game:roll` and `game:move` with a request id and the `expectedStateVersion` the board is showing. The server's acknowledgement carries the committed state, which is applied as authoritative.
+
+### Legal moves
+
+The movable tokens, their badges, the tray entries and the move previews come only from `turn.legalMoves`. The client never decides legality and never moves a token before the server confirms. A selected token stays put, marked "selected", until the new state arrives.
+
+### Choosing a move
+
+- **Mouse:** hovering a token or tray entry previews its exact path and destination; one click moves.
+- **Touch:** the first tap previews and the second moves.
+- **Keyboard:** R rolls, Tab reaches the movable tokens, Enter moves, Escape clears a preview.
+
+### Wrong player, pause and finish
+
+- When it is not your turn, the controls are visibly disabled and the board has no buttons.
+- A paused game shows why. A host pause offers the host "Resume game".
+- A finished game shows the ranking and offers no actions.
+
+### Reconciliation
+
+| Situation | What the client does |
+| --------- | -------------------- |
+| A `game:event` whose version skips ahead | Fetches the authoritative state once (`room:getState`) |
+| An announced action whose snapshot doesn't arrive within 2 s | Fetches the authoritative state |
+| A `stale-state`, `timeout` or turn refusal | Fetches the authoritative state |
+| An older or duplicate snapshot | Ignored |
+
+Reconnect and refresh restore the exact board from the resume snapshot.
+
+## Motion (Phase 3B)
+
+`useBoardPlayback` follows `docs/design/motion.md`.
+
+### When an action animates
+
+Only a single consecutive version (n → n+1) is animated, by playing its history entries in order:
+
+1. **Roll:** the die tumbles for 650 ms, then the server's value is revealed for 260 ms.
+2. **Auto-move:** a 350 ms pause before the token moves.
+3. **Move:** the token hops cell by cell, 170 ms per hop, along the layout path. Opening takes 320 ms, and the hops speed up on long moves.
+4. **Capture:** the attacker lands, then the captured token returns to its base over 520 ms.
+5. **Home entry:** a 600 ms glide, with a mark at the finish.
+
+### When it snaps
+
+Everything else snaps straight to the server state: the first load, a refresh, a reconnect or a version jump. Nothing is replayed after a reconnect, and a newer state fast-forwards any animation that is still running.
+
+### Controls and the log
+
+- The board, the turn banner and the player counters all show the same state, and change together.
+- Controls are enabled only after the reveal has finished.
+- The move log never runs ahead of the board.
+
+### Reduced motion
+
+The die shows its value at once, and tokens slide straight to their destination in 180 ms. The auto-move pause is kept.
 
 ## Sessions
 
@@ -68,6 +171,23 @@ The **Resume** page lists stored seats, with Resume and Forget.
 
 ## Responsive layout
 
+### Game screen
+
+The game screen follows `docs/design/ui-desktop.md`, `ui-tablet.md` and `ui-mobile.md`. The board side is `min(available width, available height)` after the fixed bars and columns. The board is never clipped and never scrolls separately.
+
+| Width | Layout |
+| ----- | ------ |
+| ≥ 1280 px | Three columns: players and room (240–280 px), the board, then the turn, die, move tray and log (280–320 px) |
+| 1024–1279 px | The board, plus a 300 px rail |
+| Below 1024 px | A players strip, a full-width board, and a fixed thumb bar with the turn banner and a 76 px die button. The move tray (two-column tiles of at least 56 px) slides up inside the bar. |
+
+During play:
+
+- the footer is hidden;
+- lobby toasts are cleared, and notices appear in an inline status line, so nothing floats over the board or the controls.
+
+### Other pages
+
 The app has distinct layouts rather than one stretched column:
 
 - **Desktop (`lg` and up):** multi-column grids (hero with board; form with a sticky summary; lobby with players, code and actions side by side). These are capped at 1280–1440 px.
@@ -80,7 +200,25 @@ These sizes were checked with headless Chromium for no horizontal overflow and n
 
 ## Tests
 
-### UI tests
+### Phase 3B
+
+- **Board tests:** geometry and placement against `@ludo/board-layouts`, and board rendering. These cover start, safe, lane and finish cells, token-to-cell mapping, stacks, and the interactive tokens.
+- **Game-screen tests** with a scripted client, covering:
+  - wrong-player rejection;
+  - roll, reveal, then move offering;
+  - legal-token highlighting;
+  - manual moves with no movement before the server answers;
+  - a refused move;
+  - auto-move timing;
+  - capture return;
+  - snapping after a refresh or a version jump;
+  - pause and finish.
+- **Connection tests:** the versions sent with roll and move, and reconciliation after a stale refusal, a version gap or a missing snapshot.
+- **Real Socket.IO + PostgreSQL tests** (`clientConnection.pg.test.ts`). The client's own `GameConnection` plays real turns against the real server, with dice queued at the server's dice source (its only test seam). They cover rolls, legal moves, wrong-player refusals, a manual move both players see, bonus and turn passing, an auto-move as one action, a stale refusal and recovery, and the exact board after a refresh.
+
+### Phase 3A
+
+#### UI tests
 
 UI tests (`apps/client/src/**/__tests__`, Vitest + jsdom) render the real app against a scripted `FakeClient`. They cover:
 
@@ -95,7 +233,7 @@ UI tests (`apps/client/src/**/__tests__`, Vitest + jsdom) render the real app ag
 
 These prove UI behaviour, **not** live multiplayer.
 
-### Live multiplayer
+#### Live multiplayer
 
 Live multiplayer is covered by `apps/server/src/__tests__/clientConnection.pg.test.ts`. It runs the client's own `GameConnection` and `SeatStore` over real WebSockets against the real server and PostgreSQL. It covers:
 

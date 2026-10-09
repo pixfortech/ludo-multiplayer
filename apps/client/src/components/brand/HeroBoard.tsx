@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PLAYER_IDENTITIES } from "@ludo/design-tokens";
 import { SEAT_CORNERS } from "../../lib/format";
+import { usePrefersReducedMotion } from "../../lib/media";
 import { BOARD_GEOMETRY, ClassicBoardArt, type BoardPiece } from "./ClassicBoardArt";
 
 const { CELL, PAD, baseOrigin } = BOARD_GEOMETRY;
@@ -32,18 +33,6 @@ const STATIC: BoardPiece[] = [
     [3, 2],
   ].map(([seat, slot]) => ({ key: `b${seat}${slot}`, seat: seat!, step: null, slot: slot! })),
 ];
-
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(() => globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
-  useEffect(() => {
-    const query = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)");
-    if (!query) return;
-    const onChange = () => setReduced(query.matches);
-    query.addEventListener?.("change", onChange);
-    return () => query.removeEventListener?.("change", onChange);
-  }, []);
-  return reduced;
-}
 
 export function HeroBoard() {
   const reduced = usePrefersReducedMotion();

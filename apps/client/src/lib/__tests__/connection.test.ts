@@ -1,8 +1,8 @@
 // GameConnection's state rules with a scripted socket. Live behaviour against
 // the real server is covered in apps/server/src/__tests__/clientConnection.pg.test.ts.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Ack, RoomView } from "@ludo/shared-types";
-import { player, roomView } from "../../test/fakes";
+import { actionData, gameView, player, roomView } from "../../test/fakes";
 import { GameConnection, ProtocolRequestError, type ClientSocket, type Notice } from "../connection";
 
 function fakeSocket(answer: (event: string, payload: Record<string, unknown>) => Ack<unknown>) {
@@ -85,5 +85,62 @@ describe("GameConnection", () => {
     expect(conn.getState().link).toBe("connected");
     fire("disconnect");
     expect(conn.getState().link).toBe("reconnecting");
+  });
+
+  describe("gameplay", () => {
+    afterEach(() => vi.useRealTimers());
+
+    /** A connection holding a started game at `version`, answering requests with `answer`. */
+    async function playing(version: number, answer: (event: string, payload: Record<string, unknown>) => Ack<unknown>) {
+      const room = roomView({ status: "playing", lifecycle: "playing", players: [player(), player({ playerId: "p-ben", displayName: "Ben", seat: 2, colour: "emerald", isHost: false })] });
+      const fake = fakeSocket((event, payload) => (event === "room:create" ? ok({ room, player: room.players[0], credential: { playerId: "p-host", secret: "s" } }) : answer(event, payload)));
+      const conn = new GameConnection(fake.socket);
+      await conn.createRoom({ hostName: "Aman", maxPlayers: 2 });
+      fake.fire("game:state", { roomId: "room-1", game: gameView({ stateVersion: version }) });
+      return { conn, ...fake };
+    }
+
+    it("rolls and moves with the version it is showing, and applies the server's answer", async () => {
+      const { conn, sent } = await playing(4, (event) => ok(actionData(gameView({ stateVersion: event === "game:roll" ? 5 : 6 }))));
+      await conn.rollDice();
+      expect(sent.at(-1)).toMatchObject({ event: "game:roll", payload: { expectedStateVersion: 4 } });
+      expect(conn.getState().game!.stateVersion).toBe(5);
+      await conn.moveToken(2);
+      expect(sent.at(-1)).toMatchObject({ event: "game:move", payload: { expectedStateVersion: 5, tokenId: 2 } });
+      expect(typeof sent.at(-1)!.payload.requestId).toBe("string");
+      expect(conn.getState().game!.stateVersion).toBe(6);
+    });
+
+    it("fetches the authoritative state after a stale-state refusal", async () => {
+      const room = roomView({ status: "playing", lifecycle: "playing" });
+      const { conn, sent } = await playing(4, (event) =>
+        event === "game:roll" ? { ok: false, requestId: "x", roomVersion: null, stateVersion: 7, error: { code: "stale-state", message: "stale", details: {} } } : ok({ room, game: gameView({ stateVersion: 7 }) }),
+      );
+      const error = await conn.rollDice().catch((e: unknown) => e);
+      expect((error as ProtocolRequestError).code).toBe("stale-state");
+      await vi.waitFor(() => expect(conn.getState().game!.stateVersion).toBe(7));
+      expect(sent.map((s) => s.event)).toContain("room:getState");
+    });
+
+    it("reconciles when an announced action skips a version, and ignores old or duplicate snapshots", async () => {
+      const room = roomView({ status: "playing", lifecycle: "playing" });
+      const { conn, sent, fire } = await playing(4, () => ok({ room, game: gameView({ stateVersion: 9 }) }));
+      fire("game:state", { roomId: "room-1", game: gameView({ stateVersion: 3 }) });
+      expect(conn.getState().game!.stateVersion).toBe(4);
+      fire("game:event", { roomId: "room-1", action: { ...actionData(gameView({ stateVersion: 7 })).action } });
+      await vi.waitFor(() => expect(conn.getState().game!.stateVersion).toBe(9));
+      expect(sent.filter((s) => s.event === "room:getState")).toHaveLength(1);
+    });
+
+    it("reconciles when an announced action's snapshot never arrives", async () => {
+      vi.useFakeTimers();
+      const room = roomView({ status: "playing", lifecycle: "playing" });
+      const { conn, sent, fire } = await playing(4, () => ok({ room, game: gameView({ stateVersion: 5 }) }));
+      fire("game:event", { roomId: "room-1", action: actionData(gameView({ stateVersion: 5 })).action });
+      expect(sent.some((s) => s.event === "room:getState")).toBe(false);
+      await vi.advanceTimersByTimeAsync(2100);
+      expect(sent.some((s) => s.event === "room:getState")).toBe(true);
+      expect(conn.getState().game!.stateVersion).toBe(5);
+    });
   });
 });

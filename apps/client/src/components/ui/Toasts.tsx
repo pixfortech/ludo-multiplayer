@@ -1,4 +1,4 @@
-// Toasts: top-right on desktop, bottom-centre on phones; at most two at a time;
+// Toasts: top-right below the header on desktop (never over navigation or its actions), bottom-centre on phones; at most two at a time;
 // 4 s each; announced politely to screen readers.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -15,6 +15,8 @@ interface Toast {
 
 interface ToastApi {
   push(toast: Omit<Toast, "id">): void;
+  /** Dismisses every toast (e.g. when the game screen takes over the viewport). */
+  clear(): void;
 }
 
 const ToastContext = createContext<ToastApi | null>(null);
@@ -53,11 +55,17 @@ export function ToastProvider({ children, durationMs = 4000 }: { children: React
     return () => map.forEach((timer) => clearTimeout(timer));
   }, []);
 
-  const api = useMemo(() => ({ push }), [push]);
+  const clear = useCallback(() => {
+    timers.current.forEach((timer) => clearTimeout(timer));
+    timers.current.clear();
+    setToasts([]);
+  }, []);
+
+  const api = useMemo(() => ({ push, clear }), [push, clear]);
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div aria-live="polite" aria-relevant="additions" className="pointer-events-none fixed inset-x-0 bottom-[var(--action-bar-h,0px)] z-50 flex flex-col items-center gap-2 px-4 pb-[max(12px,env(safe-area-inset-bottom))] md:inset-x-auto md:right-0 md:top-0 md:bottom-auto md:items-end md:p-5">
+      <div aria-live="polite" aria-relevant="additions" className="pointer-events-none fixed inset-x-0 bottom-[var(--action-bar-h,0px)] z-50 flex flex-col items-center gap-2 px-4 pb-[max(12px,env(safe-area-inset-bottom))] md:inset-x-auto md:right-0 md:top-16 md:bottom-auto md:items-end md:p-5">
         {toasts.map((toast) => (
           <div key={toast.id} role={toast.tone === "error" ? "alert" : "status"} className="pointer-events-auto flex w-full max-w-sm animate-fade-up items-start gap-3 rounded-[var(--radius-card)] border border-border bg-surface p-3.5 pr-2 shadow-overlay">
             <span className="mt-0.5 shrink-0">{ICONS[toast.tone]}</span>

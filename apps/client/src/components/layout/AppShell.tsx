@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Link, paths, useRouter } from "../../lib/router";
 import { useGame } from "../../state/gameClient";
 import { Wordmark } from "../brand/Wordmark";
@@ -8,6 +8,17 @@ const SECTION_LINKS = [
   { href: "/#how-to-play", label: "How to play" },
   { href: "/#modes", label: "Game modes" },
 ];
+
+/** Lets a page (the game screen) take the full viewport height: no footer. */
+const ImmersiveContext = createContext<(on: boolean) => void>(() => undefined);
+
+export function useImmersiveShell(): void {
+  const setImmersive = useContext(ImmersiveContext);
+  useEffect(() => {
+    setImmersive(true);
+    return () => setImmersive(false);
+  }, [setImmersive]);
+}
 
 function NavAnchor({ href, label, onNavigate }: { href: string; label: string; onNavigate?: () => void }) {
   const { navigate, route } = useRouter();
@@ -36,6 +47,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { route } = useRouter();
   const { seats } = useGame();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [immersive, setImmersive] = useState(false);
   const saved = seats.list().length;
 
   useEffect(() => setMenuOpen(false), [route]);
@@ -102,9 +114,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         ) : null}
       </header>
       <main id="main" className="flex-1">
-        {children}
+        <ImmersiveContext.Provider value={setImmersive}>{children}</ImmersiveContext.Provider>
       </main>
-      <footer className="border-t border-border/70">
+      <footer className={`border-t border-border/70 ${immersive ? "hidden" : ""}`}>
         <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-2 px-4 py-6 text-[13px] text-ink-muted sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-10">
           <span>Classic Ludo for 2–4 players · online rooms that wait for you</span>
           <span>Server-authoritative: dice and moves are decided by the game server.</span>

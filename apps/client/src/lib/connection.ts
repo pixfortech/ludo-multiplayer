@@ -9,6 +9,7 @@
 
 import type {
   Ack,
+  ActionData,
   ClientToServerEvents,
   ErrorDetails,
   GameStateView,
@@ -98,6 +99,8 @@ export class GameConnection {
   /** Kept in memory only, to re-attach the seat after the transport reconnects. */
   private credential: PlayerSessionCredential | null = null;
   private everConnected = false;
+  private reconciling: Promise<void> | null = null;
+  private stateWatch: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly socket: ClientSocket,
@@ -116,6 +119,14 @@ export class GameConnection {
     socket.on("room:updated", ({ room }) => this.applyRoom(room));
     socket.on("game:state", ({ roomId, game }) => {
       if (this.state.room?.roomId === roomId) this.applyGame(game);
+    });
+    // Each committed action is announced, then its snapshot follows. A gap in
+    // versions means something was missed: fetch the authoritative state.
+    socket.on("game:event", ({ roomId, action }) => {
+      if (this.state.room?.roomId !== roomId) return;
+      const held = this.state.game?.stateVersion ?? -1;
+      if (action.stateVersion > held + 1) this.reconcile();
+      else this.expectState(action.stateVersion);
     });
     socket.on("player:connected", ({ roomId, playerId }) => this.applyPresence(roomId, playerId, "connected"));
     socket.on("player:disconnected", ({ roomId, playerId }) => this.applyPresence(roomId, playerId, "disconnected"));
@@ -203,6 +214,22 @@ export class GameConnection {
     return data;
   }
 
+  /** Asks the server to roll for this seat; the result arrives as authoritative state. */
+  rollDice(): Promise<ActionData> {
+    return this.act("game:roll", {});
+  }
+
+  /** Asks the server to move one of this seat's tokens (one the server listed as legal). */
+  moveToken(tokenId: number): Promise<ActionData> {
+    return this.act("game:move", { tokenId });
+  }
+
+  /** Host only: resumes a game the host paused. */
+  async resumeGame(): Promise<void> {
+    const data = await this.request("game:resume", this.state.room ? { expectedRoomVersion: this.state.room.roomVersion } : {});
+    this.applyRoom(data.room);
+  }
+
   async leaveRoom(): Promise<void> {
     await this.request("room:leave", {});
     this.credential = null;
@@ -217,6 +244,7 @@ export class GameConnection {
   }
 
   dispose(): void {
+    if (this.stateWatch) clearTimeout(this.stateWatch);
     this.listeners.clear();
     this.noticeListeners.clear();
     this.socket.removeAllListeners();
@@ -224,6 +252,45 @@ export class GameConnection {
   }
 
   // ── Internals ────────────────────────────────────────────────────────────
+
+  private async act(event: "game:roll" | "game:move", payload: { tokenId?: number }): Promise<ActionData> {
+    const game = this.state.game;
+    if (!game) throw new ProtocolRequestError("game-not-started", "The game has not started");
+    const expectedStateVersion = game.stateVersion;
+    try {
+      const data =
+        event === "game:roll"
+          ? await this.request("game:roll", { expectedStateVersion })
+          : await this.request("game:move", { expectedStateVersion, tokenId: payload.tokenId! });
+      this.applyGame(data.game);
+      return data;
+    } catch (error) {
+      // The board was behind, or the answer was lost: show what the server holds.
+      const code = (error as ProtocolRequestError).code;
+      if (code === "stale-state" || code === "timeout" || code === "not-your-turn" || code === "not-awaiting-roll" || code === "not-awaiting-move") this.reconcile();
+      throw error;
+    }
+  }
+
+  /** Fetches the authoritative room and game state once (concurrent calls share it). */
+  private reconcile(): void {
+    if (this.reconciling || !this.state.seat) return;
+    this.reconciling = this.refresh()
+      .then(() => undefined)
+      .catch(() => undefined)
+      .finally(() => {
+        this.reconciling = null;
+      });
+  }
+
+  /** An action was announced: its snapshot should follow; if it doesn't arrive, reconcile. */
+  private expectState(version: number): void {
+    if (this.stateWatch) clearTimeout(this.stateWatch);
+    this.stateWatch = setTimeout(() => {
+      this.stateWatch = null;
+      if ((this.state.game?.stateVersion ?? -1) < version) this.reconcile();
+    }, 2000);
+  }
 
   private async reattach(): Promise<void> {
     try {

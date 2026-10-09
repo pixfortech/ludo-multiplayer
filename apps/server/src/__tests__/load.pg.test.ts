@@ -124,7 +124,9 @@ describe.skipIf(skip)("load and stability", () => {
     const perCycle = (performance.now() - started) / 100;
     await waitUntil(async () => (await t.store.getPlayer(table.guest.id))!.connectionStatus === "disconnected", "presence settles");
     expect(await t.store.listPlayers(table.roomId)).toHaveLength(2);
-    expect(t.server.io.engine.clientsCount).toBeLessThanOrEqual(2 + 1); // the host, plus at most a closing socket
+    // Closing is asynchronous on the server: wait for closed sockets to be released (a leak never settles and fails here).
+    await waitUntil(() => t.server.io.engine.clientsCount <= 2 + 1, "closed sockets are released by the server"); // the host, plus at most a closing socket
+    expect(t.server.io.engine.clientsCount).toBeLessThanOrEqual(2 + 1);
     const stats = t.pgStore.poolStats();
     expect(stats.waiting).toBe(0);
     console.log(`churn: 100 resume/close cycles, ${perCycle.toFixed(1)} ms per cycle, pool=${JSON.stringify(stats)}`);

@@ -40,3 +40,6 @@ export const DiceIcon = (p: IconProps) => (
     <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
   </Icon>
 );
+export const ExpandIcon = (p: IconProps) => <Icon {...p}><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></Icon>;
+export const CollapseIcon = (p: IconProps) => <Icon {...p}><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" /></Icon>;
+export const PauseIcon = (p: IconProps) => <Icon {...p}><path d="M9 5v14M15 5v14" /></Icon>;
