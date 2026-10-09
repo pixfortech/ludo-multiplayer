@@ -22,7 +22,7 @@ import { RoomError } from "../rooms/errors.js";
 import type { AuthenticatedPlayer, RoomService } from "../rooms/roomService.js";
 import type { SocketPublisher } from "./broadcaster.js";
 import type { ConnectionRegistry } from "./presence.js";
-import { toProtocolError, type Logger } from "./socketErrors.js";
+import { TransportError, toProtocolError, type Logger } from "./socketErrors.js";
 import { roomChannel, type LudoServer, type LudoSocket } from "./socketEvents.js";
 
 /** Schedules the reconnect-grace callback. Injectable so tests can control time instead of waiting for it. */
@@ -79,8 +79,12 @@ export class SessionManager {
       if (current && !takeover) {
         throw new RoomError("session-in-use", "This seat is open in another tab or device; resume with takeover to continue here");
       }
+      if (!socket.connected) throw new TransportError("not-in-room", "The connection closed before the seat was claimed");
       // The database hand-over comes first: from here on, the previous connection's actions are refused.
       const controlled = await rooms.takeControl(actor);
+      // The connection may have dropped while the hand-over was committed. Binding a dead socket would
+      // leave the seat looking controlled forever (no pause, reconnects refused), so stop here.
+      if (!socket.connected) throw new TransportError("not-in-room", "The connection closed before the seat was claimed");
       if (current) await this.detach(current, "replaced");
       else if (currentId) registry.release(actor.playerId, currentId);
 
@@ -115,18 +119,31 @@ export class SessionManager {
     await socket.leave(roomChannel(actor.roomId));
   }
 
-  /** A connection dropped. Seat, tokens and turn stay; the room is told, and the grace timer may start. */
+  /**
+   * A connection dropped. Seat, tokens and turn stay; the room is told, and the
+   * grace timer may start. Serialised with claims for the same player, so a
+   * drop during a claim is processed after the claim has bound the socket.
+   */
   async release(socket: LudoSocket): Promise<void> {
     const actor = socket.data.actor;
-    socket.data.actor = null;
-    if (!actor || !this.o.registry.release(actor.playerId, socket.id)) return;
-    try {
-      await this.o.rooms.setPresence(actor, "disconnected");
-    } catch (error) {
-      toProtocolError(error, "disconnect", this.o.log); // logged; presence is best-effort
-    }
-    this.o.io.to(roomChannel(actor.roomId)).emit("player:disconnected", { roomId: actor.roomId, playerId: actor.playerId });
+    if (!actor) return;
+    await this.claims.run(`player:${actor.playerId}`, async () => {
+      if (socket.data.actor?.playerId === actor.playerId) socket.data.actor = null;
+      if (!this.o.registry.release(actor.playerId, socket.id)) return; // already replaced or released
+      try {
+        await this.o.rooms.setPresence(actor, "disconnected");
+      } catch (error) {
+        toProtocolError(error, "disconnect", this.o.log); // logged; presence is best-effort
+      }
+      this.o.io.to(roomChannel(actor.roomId)).emit("player:disconnected", { roomId: actor.roomId, playerId: actor.playerId });
+    });
     await this.evaluate(actor.roomId);
+  }
+
+  /** Whether a live connection controls the seat (a registry entry for a closed socket does not count). */
+  isControlled(playerId: string): boolean {
+    const socketId = this.o.registry.controllerOf(playerId);
+    return socketId !== null && this.o.io.sockets.sockets.get(socketId)?.connected === true;
   }
 
   /** After a restart: nobody is connected yet, so every running game gets a fresh grace period. */
@@ -161,7 +178,7 @@ export class SessionManager {
   private watch(roomId: string, status: string, currentPlayerId: string | null): void {
     if (this.disposed) return;
     const existing = this.timers.get(roomId);
-    if (status !== "playing" || !currentPlayerId || this.o.registry.isControlled(currentPlayerId)) {
+    if (status !== "playing" || !currentPlayerId || this.isControlled(currentPlayerId)) {
       this.clearTimer(roomId);
       return;
     }
@@ -171,7 +188,7 @@ export class SessionManager {
       if (this.timers.get(roomId)?.timer !== timer) return; // cancelled or superseded
       this.timers.delete(roomId);
       this.o.gameplay
-        .pauseIfAway(roomId, currentPlayerId, () => !this.o.registry.isControlled(currentPlayerId))
+        .pauseIfAway(roomId, currentPlayerId, () => !this.isControlled(currentPlayerId))
         .catch((error: unknown) => toProtocolError(error, "auto-pause", this.o.log));
     }, this.o.graceMs);
     this.timers.set(roomId, { playerId: currentPlayerId, timer });

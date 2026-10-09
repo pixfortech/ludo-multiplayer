@@ -205,6 +205,29 @@ describe.skipIf(skip)("Phase 2D sessions over Socket.IO + PostgreSQL", () => {
       expect(expectOk(await ask(tabB.client, "room:getState", { requestId: rid() })).room.players.map((p) => p.connectionStatus)).toEqual(["connected", "connected"]);
     });
 
+    it("does not leave a seat held by a connection that closed while it was being claimed (regression)", async () => {
+      const table = await seatTwo(t);
+      track(table.host);
+      await passTurnToGuest(table.host.client);
+      await drop(table.guest, table.guest.id);
+      // The guest's page starts to resume, then its network drops before the claim completes.
+      const stale = track(await open(t.url));
+      const serverSide = t.server.io.sockets.sockets.get(stale.client.id!)!;
+      stale.client.close();
+      await waitUntil(() => !serverSide.connected, "the server has seen the connection close");
+      const actor = await t.rooms.authenticate(table.guest.credential);
+      await expect(t.server.realtime!.sessions.claim(serverSide, actor, false)).rejects.toMatchObject({ code: "not-in-room" });
+      expect(t.server.realtime!.sessions.isControlled(table.guest.id)).toBe(false);
+      // A registry entry for a closed socket never counts as control.
+      t.server.realtime!.registry.set(table.guest.id, serverSide.id);
+      expect(t.server.realtime!.sessions.isControlled(table.guest.id)).toBe(false);
+      t.server.realtime!.registry.release(table.guest.id, serverSide.id);
+      // The game still treats the guest as away (it can pause), and a real reconnect is not refused as "in use".
+      await graceArmedFor(table.roomId, table.guest.id);
+      const back = track(await open(t.url, table.guest.credential));
+      expect((await back.rec.waitFor<{ game: GameStateView }>("game:state")).game.currentPlayerId).toBe(table.guest.id);
+    });
+
     it("never moves twice when a retried request arrives through the new connection", async () => {
       const table = await seatTwo(t);
       track(table.guest);

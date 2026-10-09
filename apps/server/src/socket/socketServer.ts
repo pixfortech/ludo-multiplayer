@@ -74,7 +74,7 @@ export function attachRealtime(io: LudoServer, options: RealtimeOptions): Realti
     handshakeAuth({
       rooms: options.rooms,
       trustProxyHops: options.trustProxyHops ?? 0,
-      isControlled: (playerId) => registry.isControlled(playerId),
+      isControlled: (playerId) => sessions.isControlled(playerId),
       ...(options.limits?.failedAuth ? { failedAuthLimiter: new SlidingWindowLimiter(options.limits.failedAuth) } : {}),
     }),
   );
