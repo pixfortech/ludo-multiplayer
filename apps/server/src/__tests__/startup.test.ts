@@ -1,6 +1,7 @@
 // Startup safety: no database, no server. Uses a disposable PostgreSQL for the
 // positive and schema checks, and the real entry point for the exit behaviour.
 import { spawn } from "node:child_process";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import pg from "pg";
 import { createApp } from "../app.js";
@@ -25,10 +26,11 @@ async function startupError(env: NodeJS.ProcessEnv): Promise<StartupError> {
   return error as StartupError;
 }
 
-/** Runs the real entry point (src/server.ts) with only the given environment. */
+/** Runs the real entry point (src/server.ts, or dist/server.js with LUDO_E2E_COMPILED=1) with only the given environment. */
 function runEntryPoint(env: Record<string, string>): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [TSX_CLI, "--conditions=source", "src/server.ts"], {
+    const entry = process.env.LUDO_E2E_COMPILED === "1" ? [join(SERVER_DIR, "dist", "server.js")] : [TSX_CLI, "--conditions=source", "src/server.ts"];
+    const child = spawn(process.execPath, entry, {
       cwd: SERVER_DIR,
       windowsHide: true,
       env: { ...baseChildEnv(), PORT: "0", ...env },

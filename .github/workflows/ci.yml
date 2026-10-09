@@ -1,0 +1,98 @@
+# Continuous integration: Linux and Windows, Node.js 24, PostgreSQL 17.
+#
+# Every database test runs against a private, throwaway PostgreSQL cluster
+# that the test harness creates from the installed binaries (initdb in the
+# runner's temp directory, random 127.0.0.1 port, deleted afterwards). No
+# database credentials, secrets or external databases are used, and nothing
+# here can write to the repository.
+
+name: CI
+
+on:
+  push:
+    branches: [fresh/ludo-rebuild]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: ${{ matrix.os }} · Node 24 · PostgreSQL 17
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      # Missing PostgreSQL fails the run instead of skipping database tests.
+      REQUIRE_POSTGRES_TESTS: "1"
+      # Tests never read DATABASE_URL; make sure nothing is inherited.
+      DATABASE_URL: ""
+      TEST_DATABASE_URL: ""
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install PostgreSQL 17 (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y --no-install-recommends postgresql-17
+          echo "PG_BIN_DIR=/usr/lib/postgresql/17/bin" >> "$GITHUB_ENV"
+
+      - name: Install PostgreSQL 17 (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bin = $null
+          # Use the image's PostgreSQL if it is already 17 …
+          if ($env:PGBIN -and (Test-Path (Join-Path $env:PGBIN 'initdb.exe'))) {
+            $version = & (Join-Path $env:PGBIN 'initdb.exe') --version
+            if ($version -match '\(PostgreSQL\) 17\.') { $bin = $env:PGBIN }
+          }
+          # … otherwise install it. Only the binaries are used; the service it registers is not.
+          if (-not $bin) {
+            choco install postgresql17 --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "PostgreSQL 17 installation failed" }
+            $bin = 'C:\Program Files\PostgreSQL\17\bin'
+          }
+          "PG_BIN_DIR=$bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify PostgreSQL binaries
+        run: node scripts/ci/check-postgres.mjs 17
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test (real PostgreSQL; source-mode server, two-client and session recovery included)
+        run: node scripts/ci/run-checked.mjs npm run test
+
+      - name: Compiled server — startup, two-client multiplayer, restart and session recovery
+        working-directory: apps/server
+        env:
+          LUDO_E2E_COMPILED: "1"
+        run: node ../../scripts/ci/run-checked.mjs npx vitest run src/__tests__/startup.test.ts src/__tests__/twoClient.e2e.pg.test.ts src/__tests__/restart.e2e.pg.test.ts
