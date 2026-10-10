@@ -12,9 +12,10 @@ export interface Detail {
   radial: number;
 }
 
+
 export const DETAIL: Record<"low" | "medium" | "high", Detail> = {
   low: { curve: 2, radial: 20 },
-  medium: { curve: 3, radial: 32 },
+  medium: { curve: 3, radial: 28 },
   high: { curve: 4, radial: 48 },
 };
 
@@ -52,9 +53,16 @@ export function extrudeUp(shape: Shape, height: number, bevel: number, detail: D
   return g;
 }
 
+/**
+ * Small pieces (cells, inlays) are a few dozen pixels across: two segments per
+ * rounded corner and per bevel are indistinguishable from more, and keep the
+ * board's 72 cells to ~10k triangles.
+ */
+const small = (detail: Detail): Detail => ({ curve: Math.min(detail.curve, 2), radial: detail.radial });
+
 /** A tile: a softly bevelled square block. */
 export function tileGeometry(size: number, height: number, detail: Detail): BufferGeometry {
-  return extrudeUp(roundedRect(size, size, size * 0.12), height, Math.min(0.045, height * 0.4), detail);
+  return extrudeUp(roundedRect(size, size, size * 0.12), height, Math.min(0.045, height * 0.4), small(detail));
 }
 
 /** The board frame: a rounded square ring (outer edge to the grid edge). */
@@ -100,7 +108,7 @@ export function polygonFromPath(d: string): Vector2[] {
 export function starGeometry(size: number, height: number, detail: Detail): BufferGeometry {
   // SVG y grows down (toward +z); shape y is −z.
   const pts = polygonFromPath(SAFE_STAR_PATH).map((p) => new Vector2(((p.x - 12) / 24) * size, (-(p.y - 12) / 24) * size));
-  return extrudeUp(new Shape(pts), height, height * 0.4, detail);
+  return extrudeUp(new Shape(pts), height, height * 0.4, small(detail));
 }
 
 /** A chevron ">" pointing along +X, `size` long, as a thin raised inlay (the 2D stroke, mitred). */
@@ -119,7 +127,7 @@ export function chevronGeometry(size: number, width: number, height: number, det
   const miterLength = h / miter.dot(n1);
   const outer = [line[0]!.clone().addScaledVector(n1, h), line[1]!.clone().addScaledVector(miter, miterLength), line[2]!.clone().addScaledVector(n2, h)];
   const inner = [line[2]!.clone().addScaledVector(n2, -h), line[1]!.clone().addScaledVector(miter, -miterLength), line[0]!.clone().addScaledVector(n1, -h)];
-  return extrudeUp(new Shape([...outer, ...inner]), height, height * 0.4, detail);
+  return extrudeUp(new Shape([...outer, ...inner]), height, height * 0.4, small(detail));
 }
 
 /** A triangle on the board plane (world x, z corners), raised. */

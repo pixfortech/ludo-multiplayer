@@ -43,9 +43,11 @@ export interface Board3DProps extends ClassicBoardProps {
   onFrameStats?: (ms: number) => void;
 }
 
+/** Graphics presets (performance-budgets.md § Rendering): gameplay accuracy never changes, only cost. */
 const QUALITY = {
   low: { dpr: 1, antialias: false, shadows: false as const, shadowMap: 0, detail: DETAIL.low, physical: false },
-  medium: { dpr: 1.5, antialias: true, shadows: "percentage" as const, shadowMap: 1024, detail: DETAIL.medium, physical: true },
+  // Medium: soft contact shadows under the tokens (no shadow map pass); High adds real-time shadow maps.
+  medium: { dpr: 1.5, antialias: true, shadows: false as const, shadowMap: 0, detail: DETAIL.medium, physical: true },
   high: { dpr: 2, antialias: true, shadows: "soft" as const, shadowMap: 2048, detail: DETAIL.high, physical: true },
 };
 
