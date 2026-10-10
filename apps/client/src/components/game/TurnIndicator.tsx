@@ -65,17 +65,32 @@ export function TurnBanner({ event, identity, eventKey }: { event: TurnEvent; id
   );
 }
 
+/** The banner as one line (icon and title), the same height as the detail line it replaces. */
+function InlineBanner({ event, identity, eventKey }: { event: TurnEvent; identity: PlayerIdentity | null; eventKey: number }) {
+  const style = bannerStyle(event, identity);
+  return (
+    <p key={eventKey} className="flex h-[18px] min-w-0 animate-fade-up items-center gap-1 truncate text-[13px] font-bold" style={{ color: style.color === "#141821" ? "#141821" : style.color }} data-testid="turn-callouts" data-kind={event.kind}>
+      <span className="shrink-0" aria-hidden="true">
+        {ICONS[event.kind]}
+      </span>
+      <span className="truncate">{event.title}</span>
+    </p>
+  );
+}
+
 export function TurnIndicator({ turn, compact = false }: { turn: TurnInfo; compact?: boolean }) {
+  // Nothing here changes height when a banner comes or goes, so nothing around it shifts:
+  // compact (the phone bar) swaps the detail line for a one-line banner; the full panel reserves a slot.
   return (
     <div className="flex min-w-0 flex-col gap-1.5" data-testid="turn-indicator">
       <div className="flex min-w-0 items-center gap-2.5">
         {turn.identity ? <PlayerToken identity={turn.identity} size={compact ? 28 : 34} shadow={false} /> : null}
-        <div className="min-w-0" aria-live="polite">
+        <div className="min-w-0 flex-1" aria-live="polite">
           <p className={`truncate font-display font-semibold tracking-[-0.01em] text-ink ${compact ? "text-[17px]" : "text-[20px]"}`}>{turn.title}</p>
-          <p className="truncate text-[13px] text-ink-muted">{turn.detail}</p>
+          {compact && turn.event ? <InlineBanner event={turn.event} identity={turn.eventIdentity} eventKey={turn.eventKey} /> : <p className="h-[18px] truncate text-[13px] text-ink-muted">{turn.detail}</p>}
         </div>
       </div>
-      {turn.event ? <TurnBanner event={turn.event} identity={turn.eventIdentity} eventKey={turn.eventKey} /> : null}
+      {!compact ? <div className="min-h-[50px]">{turn.event ? <TurnBanner event={turn.event} identity={turn.eventIdentity} eventKey={turn.eventKey} /> : null}</div> : null}
       {/* One announcement per event, as a full sentence. */}
       <p className="sr-only" aria-live="polite">
         {turn.event ? turn.event.spoken : ""}

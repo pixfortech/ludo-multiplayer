@@ -350,11 +350,11 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
           </li>
         ))}
       </ol>
-      <div className="flex gap-2">
-        <button data-show-results="" type="button" onClick={() => setVictory("open")} className="press inline-flex min-h-11 flex-1 items-center justify-center rounded-[var(--radius-control)] bg-ink px-4 text-[15px] font-semibold text-white">
-          Show results
+      <div className="flex flex-col gap-2">
+        <button data-show-results="" type="button" onClick={() => setVictory("open")} className="press inline-flex min-h-11 items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-control)] bg-ink px-4 text-[15px] font-semibold text-white">
+          <CrownIcon size={16} /> Show results
         </button>
-        <Link to={paths.home()} className="press inline-flex min-h-11 flex-1 items-center justify-center rounded-[var(--radius-control)] border border-border bg-surface px-4 text-[15px] font-semibold text-ink">
+        <Link to={paths.home()} className="press inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-[var(--radius-control)] border border-border bg-surface px-4 text-[15px] font-semibold text-ink">
           Back to home
         </Link>
       </div>
@@ -474,10 +474,16 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
         {trayFor("grid")}
         {statusLine}
         {over ? (
-          <>
-            <TurnIndicator turn={turn} compact />
-            {results}
-          </>
+          // The same row as during play (the die's square becomes Results), so nothing shifts at the end.
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <TurnIndicator turn={turn} compact />
+            </div>
+            <button type="button" data-show-results="" aria-label="Show results" onClick={() => setVictory("open")} className="press flex h-[76px] w-[76px] shrink-0 flex-col items-center justify-center gap-1 rounded-[22px] border-2 border-[#E3B341] bg-[#FFF6DC] text-[12px] font-bold text-[#5B4300]">
+              <CrownIcon size={22} />
+              Results
+            </button>
+          </div>
         ) : (
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1">

@@ -1,4 +1,4 @@
-# Browser end-to-end tests (Phases 3C.1–3C.2)
+# Browser end-to-end tests (Phases 3C.1–3C.3)
 
 Real Chromium players play complete games through the real UI. They connect to the production client build (`vite preview`), the real Socket.IO server and an isolated PostgreSQL.
 
@@ -83,6 +83,26 @@ The driver reads the authoritative state and queues dice so a game ends determin
 | A takeover tab | Starts from the server's board with no running animations; the old tab shows "open elsewhere" |
 | Reduced motion | No tumble at any time, a single straight slide, and still after the reveal |
 
+## Captures, home and victory (Phase 3C.3)
+
+`e2e/tests/effects.spec.ts` covers these, together with the full-game checks.
+
+| # | Requirement | How |
+| - | ----------- | --- |
+| 1, 2 | The capture plays only after the attacker lands, and the token returns to base | A double capture, checked on both screens: each captured token goes straight to base, later than the attacker's landing |
+| 3 | Capture bonus feedback | "Double capture: roll again" for the capturer and "Double capture: Aman rolls again" for the other player. The banner kind is `capture`, and Roll is offered again. |
+| 4 | Several tokens captured together | Both tokens leave within 200 ms of each other, and each token is drawn exactly once |
+| 5 | Home entry follows the approved route | Steps 52, 53, 54, 55, 56, cell by cell up the seat's own lane, with the gold accent |
+| 6 | The home counter changes at the right moment | On both screens, it changes more than 450 ms after the token reaches the finish, once the glide is done |
+| 7 | Completed tokens can't be selected | Drawn as finished and not a button. Every move choice also checks that no finished token is offered. |
+| 8 | The fourth token home triggers victory | The last entries are home, player-finished, win and game-over, with no bonus. The win banner shows, then the victory screen. |
+| 9, 10 | The first-winner and full-ranking screens | All three full games check the dialog: winner, "Game complete", standings in the server's order (unranked "–" last), the summary, and actions in the viewport |
+| 11 | The victory actions work | Escape and View board return to the board, and focus goes to Show results, which reopens the dialog. New game opens Create; Return home opens Home. |
+| 12 | A refresh doesn't replay celebrations | After a refresh: no confetti, no running animations, and nothing recorded on the timeline, for both the capture and the victory |
+| 13 | Reconnect snaps to the server | `resilience.spec`: after a network loss the page jumps straight to the server's step |
+| 14 | Reduced motion avoids elaborate effects | A capture is one straight move home with no effect animation, and the banner still explains it. A reduced-motion victory has no confetti. |
+| 15 | Phone effects don't cover the board or controls | On the phone during a capture, the board's centre and corners are not covered and the die is fully in view. On the victory screen, every action is fully in the viewport. |
+
 ## Bugs found and fixed
 
 1. **A double click sent two requests.** Two clicks in the same moment, before React re-rendered, sent two `game:roll` (or `game:move`) requests. The server's state-version check refused the second as stale, so the game state was never wrong. But the client sent a duplicate request and could briefly show a refusal.
@@ -94,6 +114,12 @@ The driver reads the authoritative state and queues dice so a game ends determin
 3. **The tray said "1 squares".** Fixed to "1 square".
 4. **Phase 3C.2, caught before commit: on the roller's own screen, the token moved before the die landed.** The die's continuous tumble (kept going from the click until the board starts playing the roll) did not stop until the whole action had played. On the roller's page, the auto-move therefore hopped about 680 ms before the die showed the value; the other player's screen was correct. The tumble now ends as soon as the board starts playing that version.
    - **Test:** `animation.spec` checks the ordering on both screens.
+5. **Phase 3C.3, caught before commit: "You win!" appeared before the final move had played.** The title followed the server's state instead of the board. It now follows the board.
+6. **Phase 3C.3, caught before commit: layout shift when a banner appeared.**
+   - **Cause:** the turn indicator grew, so the phone's thumb bar pushed the turn title and die up (0.109 at the finish).
+   - **Fix:** the banner now has reserved space, and the end-of-game row keeps its height.
+   - **Measured after the fix:** 0.009–0.018 during captures, about 0.03 across the finish.
+7. **Phase 3C.3, caught before commit: focus did not return to "Show results" after closing the victory screen.** The button exists twice (rail and phone bar), and the ref pointed at the hidden copy. Focus now goes to the visible one.
 
 ## Not covered here
 

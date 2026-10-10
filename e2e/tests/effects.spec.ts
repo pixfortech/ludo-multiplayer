@@ -64,11 +64,20 @@ test("a double capture: both tokens react and go home together, after the attack
   await expect(visible(ben.page.getByText("Double capture: Aman rolls again"))).toBeVisible();
   await expect(visible(ben.page.getByText("Aman captured your 2 tokens"))).toBeVisible();
   for (const p of [aman, ben]) await expect(visible(p.page.getByTestId("turn-callouts"))).toHaveAttribute("data-kind", "capture");
+  // On the phone, the banner and effects never cover the board, and the controls stay in view.
+  const uncovered = await ben.page.evaluate(() => {
+    const board = [...document.querySelectorAll('[data-testid="game-board"]')].find((b) => b.getBoundingClientRect().width > 0)!;
+    const r = board.getBoundingClientRect();
+    const points = [[0.5, 0.5], [0.12, 0.12], [0.88, 0.12], [0.12, 0.88], [0.88, 0.88]] as const;
+    return points.map(([fx, fy]) => board.contains(document.elementFromPoint(r.left + r.width * fx, r.top + r.height * fy)));
+  });
+  expect(uncovered, "board centre and corners are not covered").toEqual([true, true, true, true, true]);
+  await expect(visible(ben.page.getByTestId("dice-tray"))).toBeInViewport({ ratio: 1 });
   await expect(visible(aman.page.getByRole("button", { name: "Roll dice" }))).toBeVisible();
   // A refresh shows the result without replaying the capture.
   await ben.page.reload();
-  await startTimeline(ben.page);
   await table.expectInSync();
+  await startTimeline(ben.page); // from the moment the reloaded page shows the server's state
   expect((await readBoard(ben.page))[`token-${B(0)}`]).toBe("base");
   await ben.page.waitForTimeout(800);
   expect(await readTimeline(ben.page)).toEqual([]);
@@ -166,6 +175,29 @@ test("victory: the fourth token home leads into the victory screen once; actions
   await expect(aman.page.getByRole("heading", { level: 1, name: "Create a game" })).toBeVisible();
   await ben.page.getByRole("dialog").getByRole("link", { name: /Return home/ }).tap();
   await expect(ben.page.getByRole("heading", { level: 1, name: /Ludo, beautifully/ })).toBeVisible();
+  noErrors([aman, ben]);
+});
+
+test("reduced motion: a capture is one straight move home, with no effect animation, and still explained", async ({ browser }) => {
+  const { aman, ben, table, B } = await twoPlayers(browser, { reducedMotion: true });
+  await table.act(6, () => 0); // Aman opens
+  await table.act(1); // 1
+  await table.act(6, () => 0); // Ben opens (absolute 26)
+  await table.act(1); // Ben 1 (absolute 27)
+  await table.act(6, () => 0); // Aman 7
+  await table.act(6, () => 0); // 13
+  await table.act(5); // 18
+  await table.act(1); // Ben 2 (absolute 28)
+  await table.act(6, () => 0); // Aman 24
+  for (const p of [aman, ben]) await startTimeline(p.page);
+  const snap = await table.act(4); // 28: capture
+  expect(snap.history.some((e) => e.type === "capture")).toBe(true);
+  for (const p of [aman, ben]) {
+    expect(stepsOf(await readTimeline(p.page), B(0)), `${p.name}: one straight move home`).toEqual(["base"]);
+    const effectAnimations = await p.page.evaluate(() => [...document.querySelectorAll("[data-effect] *")].flatMap((el) => el.getAnimations()).filter((a) => a.playState === "running").length);
+    expect(effectAnimations, `${p.name}: no effect animation`).toBe(0);
+    await expect(visible(p.page.getByTestId("turn-callouts"))).toHaveAttribute("data-kind", "capture");
+  }
   noErrors([aman, ben]);
 });
 

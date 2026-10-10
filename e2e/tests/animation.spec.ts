@@ -203,9 +203,10 @@ test("auto-move waits for the reveal; tokens hop cell by cell; captures wait for
   await expect(visible(aman.page.getByTestId("move-tray"))).toBeVisible();
   await table.move(1);
   await ben.page.reload();
-  await startTimeline(ben.page);
   await table.expectInSync();
+  await startTimeline(ben.page); // from the moment the reloaded page shows the server's state
   expect(await runningAnimations(ben.page)).toEqual({ tokens: 0, die: 0 });
+  await ben.page.waitForTimeout(800);
   expect(await readTimeline(ben.page)).toEqual([]);
 
   // A replacement tab (takeover) starts from the server's state, with no animation queue of its own.

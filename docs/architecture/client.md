@@ -116,7 +116,7 @@ The movable tokens, their badges, the tray entries and the move previews come on
 
 Reconnect and refresh restore the exact board from the resume snapshot.
 
-## Motion (Phases 3B–3C.2)
+## Motion (Phases 3B–3C.3)
 
 `useBoardPlayback` follows `docs/design/motion.md`.
 
@@ -159,6 +159,74 @@ Everything else snaps straight to the server state: the first load, a refresh, a
 
 A change without a motion is a jump. Any animation still running is cancelled first, so motions never overlap.
 
+### Captures (Phase 3C.3)
+
+Every token captured by one move plays as one group, right after the attacker has settled on the cell:
+
+1. Each captured token reacts where it stood: a 140 ms jolt and settle.
+2. It then shrinks, fades and arcs back to its base slot (520 ms). Tokens captured together start 60 ms apart.
+3. The capturing player's panel gets a brief sweep of their colour.
+
+A safe cell never shows a capture, because the client only plays the server's `capture` entries. Placement draws every token exactly once.
+
+### Home (Phase 3C.3)
+
+1. A token runs up its own lane cell by cell and glides into the finish wedge.
+2. When it arrives, a short gold accent plays: a soft glow, an expanding ring and eight sparks, about 700 ms.
+3. The player's panel gets a gold sweep, and the n/4 counter pops.
+
+The counter is driven by the playback, so it advances on arrival, never ahead of the board. Finished tokens are drawn inactive and are never offered as moves.
+
+### The turn banner (Phase 3C.3)
+
+`turnEventFor` picks the single most important outcome of the action just shown. Each kind has its own icon, colour and words:
+
+| Kind | Look | Example |
+| ---- | ---- | ------- |
+| Win | Gold | "You win!" |
+| Finished | Gold | "Ben finished 2nd" |
+| Three sixes | Soft red | "Three sixes: turn forfeited" |
+| Capture | The capturer's colour | "Double capture: roll again" |
+| Home | Gold | "Home: roll again" |
+| Six | Gold | "Six: roll again" |
+| No move | Neutral | "No moves: passing turn" |
+| Auto-move | Neutral | "Auto-moved: only one legal move" |
+
+- **Meaning never relies on colour alone:** every kind has an icon and words.
+- **Detail line:** at most one quieter line ("You captured Ben's 2 tokens").
+- **Screen readers:** one live region announces a full sentence.
+- **No layout shift:**
+  - on phones, the banner is a single line that replaces the detail line;
+  - the desktop panel keeps a fixed slot for it;
+  - at the end of the game, the phone's die button becomes a Results button of the same size.
+- **Fourth token:** a fourth token home is a win, never another bonus. In full-ranking games, the first finisher's banner says play continues.
+
+### Victory (Phase 3C.3)
+
+The finish follows the board, not the server's arrival:
+
+1. The last token glides home and the gold accent plays.
+2. The counter reaches 4/4.
+3. About 700 ms later, `VictoryScreen` opens.
+
+What the screen shows:
+
+- **Trophy:** a gold cup with the winner's colour as a ribbon and their symbol on a medallion.
+- **Winner:** the winner's name and token, and "Game complete".
+- **Standings:** the server's ranking. In first-winner games, players without a place are listed last with "–".
+- **Summary:** taken only from the complete action log (`game:getHistory`, paged) and the final state: duration, turns, captures, tokens home. If the log can't be loaded, the summary is left out.
+
+Actions and accessibility:
+
+- **Actions:** New game, Return home, and View board (Escape does the same). Show results reopens the dialog. There is no rematch backend, so there is no "Play again".
+- **Focus:** the dialog's title is focused on open, Tab stays inside, and focus returns to Show results. The actions sit in a footer that is never clipped.
+
+Confetti:
+
+- One burst: at most 80 particles, about 1.3 s, in a lazily loaded 1.3 kB chunk.
+- It plays only when the end is seen live and motion is allowed.
+- A refresh or reconnect shows the same screen without it.
+
 ### Controls and the log
 
 - The board, the turn banner and the player counters all show the same state, and change together.
@@ -168,6 +236,8 @@ A change without a motion is a jump. Any animation still running is cancelled fi
 ### Reduced motion
 
 The die shows its value at once, and tokens slide straight to their destination in 180 ms. The auto-move pause is kept.
+
+Captured tokens slide straight home. There are no capture or home effects and no confetti. The banners, counters and victory screen are unchanged.
 
 ## Sessions
 
