@@ -1,0 +1,28 @@
+{
+  "name": "@ludo/city-themes",
+  "version": "0.0.0",
+  "private": true,
+  "description": "City themes as data: Indian metro worlds (Kolkata, Delhi, Chennai, Mumbai, Bengaluru) that dress the same classic board for 2D and 3D. Presentation only.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ludo/shared-types": "0.0.0"
+  },
+  "devDependencies": {
+    "@ludo/design-tokens": "0.0.0"
+  }
+}
