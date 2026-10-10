@@ -1,7 +1,7 @@
 // Every asset the themes refer to, with its status. Nothing in this project
-// is third-party art: "procedural" assets are drawn in code (the city cards),
-// "placeholder" assets are briefs that renderers stand in for with simple
-// shapes, and "planned" ones are not drawn at all yet.
+// is third-party art: "procedural" assets are original artwork drawn in code
+// (the city cards and the 2D city scenes), "placeholder" assets would be
+// simple stand-in shapes, and "planned" ones are not drawn (or shown) yet.
 
 import type { AssetRef, AssetStatus, CityThemeId } from "./cityThemeTypes.js";
 import { CITY_THEMES } from "./cityThemes.js";

@@ -10,7 +10,11 @@ export type { CityThemeId };
 /** Board seat 0–3: 0 crimson (top left), 1 royal blue (top right), 2 emerald (bottom right), 3 golden (bottom left). */
 export type SeatIndex = 0 | 1 | 2 | 3;
 
-/** Where an asset stands today. Nothing is shipped as "final" until it has been made and approved. */
+/**
+ * Where an asset stands today (in 2D). "procedural": original artwork drawn in
+ * code; "placeholder": a simple stand-in shape; "planned": not drawn yet (not
+ * shown). 3D models are tracked separately (docs/architecture/3d-readiness.md).
+ */
 export type AssetStatus = "procedural" | "placeholder" | "planned";
 
 export interface AssetRef {

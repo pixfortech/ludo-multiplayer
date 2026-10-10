@@ -1,4 +1,4 @@
-import { contrastRatio, luminance } from "@ludo/design-tokens";
+import { PLAYER_IDENTITIES, contrastRatio, deltaE, luminance, mixLab } from "@ludo/design-tokens";
 import { CITY_THEME_IDS } from "@ludo/shared-types";
 import { describe, expect, it } from "vitest";
 import {
@@ -10,7 +10,9 @@ import {
   EMOTION_STATES,
   GAME_MOMENTS,
   MIN_OVERVIEW_PITCH,
+  CLASSIC_BOARD_MATERIAL,
   assetCounts,
+  boardMaterial2d,
   cityAssetManifest,
   dialogueFor,
   getCityTheme,
@@ -187,8 +189,42 @@ describe("asset manifest", () => {
     const ids = manifest.map((a) => a.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const a of manifest) expect(a.brief.length).toBeGreaterThan(0);
-    // Only the procedural city cards are drawn today; everything else is a placeholder brief.
-    expect(manifest.filter((a) => a.status === "procedural").every((a) => a.kind === "preview")).toBe(true);
-    expect(assetCounts().procedural).toBe(CITY_THEME_IDS.length);
+    // Every city card and every hero landmark is drawn; nothing is shown as a placeholder.
+    expect(manifest.filter((a) => a.kind === "preview").every((a) => a.status === "procedural")).toBe(true);
+    for (const city of cities) expect(city.landmarks.find((l) => l.role === "hero")!.asset.status, city.id).toBe("procedural");
+    expect(assetCounts().placeholder).toBe(0);
+    // Not drawn yet, and so never shown: listed honestly as planned.
+    expect(manifest.filter((a) => a.status === "planned").map((a) => a.id).sort()).toEqual(
+      ["bengaluru.cycles", "bengaluru.metro", "chennai.bell", "chennai.coffee", "delhi.arches", "delhi.metro", "kolkata.tea-stall", "mumbai.puddles", "mumbai.terminus"].sort(),
+    );
+  });
+});
+
+describe("board materials", () => {
+  it("leaves the classic table exactly as approved", () => {
+    expect(boardMaterial2d(CITY_THEMES.classic)).toEqual({ body: "#FFFFFF", cell: "#F7F4EE", separator: "#ECE7DE", safeMark: "#8E8676", plinth: null });
+    expect(CLASSIC_BOARD_MATERIAL.plinth).toBeNull();
+  });
+
+  it.each(cities.map((t) => [t.id, t] as const))("%s: lanes, start cells and safe stars stay as distinct as on the classic table", (_, theme) => {
+    const m = boardMaterial2d(theme);
+    expect(m.plinth).not.toBeNull();
+    expect(luminance(m.cell)).toBeGreaterThan(0.8);
+    expect(luminance(m.body)).toBeGreaterThanOrEqual(luminance(m.cell));
+    // The faintest home-lane cell (body tinted 80% to white, as HomeLane draws it) against a track cell.
+    for (const identity of PLAYER_IDENTITIES.slice(0, 4)) {
+      const lane = mixLab(identity.body, "#FFFFFF", 0.8);
+      const classic = deltaE(lane, CLASSIC_BOARD_MATERIAL.cell);
+      expect(deltaE(lane, m.cell), identity.id).toBeGreaterThanOrEqual(Math.min(classic, 8) - 1.5);
+      // Start cells are drawn in the seat colour: readable against the track.
+      expect(contrastRatio(identity.body, m.cell), identity.id).toBeGreaterThanOrEqual(contrastRatio(identity.body, CLASSIC_BOARD_MATERIAL.cell) - 0.3);
+    }
+    // The safe star (drawn at 45% opacity) is at least as visible as on the classic table.
+    const star = (mark: string, cell: string) => mixLab(cell, mark, 0.45);
+    expect(deltaE(star(m.safeMark, m.cell), m.cell)).toBeGreaterThanOrEqual(deltaE(star(CLASSIC_BOARD_MATERIAL.safeMark, CLASSIC_BOARD_MATERIAL.cell), CLASSIC_BOARD_MATERIAL.cell) - 1);
+    // Cell outlines stay quiet but present.
+    const outline = deltaE(m.separator, m.cell);
+    expect(outline).toBeGreaterThan(1.5);
+    expect(outline).toBeLessThan(12);
   });
 });

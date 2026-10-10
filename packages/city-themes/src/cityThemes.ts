@@ -11,7 +11,8 @@
 
 import type { AssetRef, AssetStatus, CityTheme, CityThemeId } from "./cityThemeTypes.js";
 
-const asset = (id: string, brief: string, status: AssetStatus = "placeholder"): AssetRef => ({ id, status, brief });
+/** Landmarks and props are drawn in code as original 2D artwork (Batch B) unless marked "planned". */
+const asset = (id: string, brief: string, status: AssetStatus = "procedural"): AssetRef => ({ id, status, brief });
 
 const KOLKATA: CityTheme = {
   id: "kolkata",
@@ -27,7 +28,7 @@ const KOLKATA: CityTheme = {
     groundAccent: "#8C5A3C",
     water: "#6F9C9E",
     boardFrame: "#6B3E26",
-    boardCell: "#F8EFE0",
+    boardCell: "#F7F2EC",
     boardLine: "#DCC9AB",
     accent: "#A8392A",
     accentInk: "#FFFFFF",
@@ -51,7 +52,7 @@ const KOLKATA: CityTheme = {
     { id: "ferry", name: "River ferry", kind: "water", density: "low", asset: asset("kolkata.ferry", "Small ferry boats on the river") },
     { id: "gas-lamp", name: "Heritage lamp posts", kind: "street", density: "medium", asset: asset("kolkata.lamp", "Cast-iron lamp posts with warm light") },
     { id: "book-stall", name: "Book stalls", kind: "street", density: "low", asset: asset("kolkata.book-stall", "Wooden stalls stacked with books") },
-    { id: "tea-stall", name: "Tea stall", kind: "street", density: "low", asset: asset("kolkata.tea-stall", "Tea stall with clay cups and a kettle") },
+    { id: "tea-stall", name: "Tea stall", kind: "street", density: "low", asset: asset("kolkata.tea-stall", "Tea stall with clay cups and a kettle", "planned") },
   ],
   groundPattern: { id: "laterite-tram-inlay", brief: "Warm laterite paving with brass tram-track inlays curving around the board" },
   signage: {
@@ -86,7 +87,7 @@ const DELHI: CityTheme = {
     groundAccent: "#E8D3B0",
     water: null,
     boardFrame: "#7A3B24",
-    boardCell: "#FBF2E6",
+    boardCell: "#F8F3EE",
     boardLine: "#DEC7AA",
     accent: "#8E2F1F",
     accentInk: "#FFFFFF",
@@ -106,10 +107,11 @@ const DELHI: CityTheme = {
   ],
   props: [
     { id: "auto", name: "Auto-rickshaw", kind: "vehicle", density: "low", asset: asset("delhi.auto", "Green-and-yellow auto-rickshaw") },
-    { id: "metro", name: "Metro viaduct", kind: "architecture", density: "low", asset: asset("delhi.metro", "Elevated metro line in the distance") },
-    { id: "arches", name: "Sandstone arches", kind: "architecture", density: "medium", asset: asset("delhi.arches", "Low sandstone arches lining the plaza") },
+    { id: "metro", name: "Metro viaduct", kind: "architecture", density: "low", asset: asset("delhi.metro", "Elevated metro line in the distance", "planned") },
+    { id: "arches", name: "Sandstone arches", kind: "architecture", density: "medium", asset: asset("delhi.arches", "Low sandstone arches lining the plaza", "planned") },
     { id: "kites", name: "Kites", kind: "nature", density: "low", asset: asset("delhi.kites", "A few kites high in the sky") },
     { id: "avenue-lamps", name: "Avenue lamps", kind: "street", density: "medium", asset: asset("delhi.lamps", "Ceremonial lamp posts") },
+    { id: "canopy", name: "Canopy pavilion", kind: "architecture", density: "low", asset: asset("delhi.canopy", "Sandstone canopy pavilion on the avenue lawns") },
   ],
   groundPattern: { id: "sandstone-avenue", brief: "Red and buff sandstone paving with ceremonial avenue lines" },
   signage: {
@@ -144,7 +146,7 @@ const CHENNAI: CityTheme = {
     groundAccent: "#C4572E",
     water: "#2E8BA0",
     boardFrame: "#7B4A2A",
-    boardCell: "#FFF8EC",
+    boardCell: "#F6F3EE",
     boardLine: "#E3D3B6",
     accent: "#0F6873",
     accentInk: "#FFFFFF",
@@ -165,9 +167,9 @@ const CHENNAI: CityTheme = {
   props: [
     { id: "catamaran", name: "Fishing boats", kind: "water", density: "low", asset: asset("chennai.catamaran", "Wooden fishing boats on the sand") },
     { id: "kolam", name: "Kolam", kind: "street", density: "medium", asset: asset("chennai.kolam", "White rice-flour kolam patterns on the paving") },
-    { id: "coffee-stall", name: "Filter coffee stall", kind: "street", density: "low", asset: asset("chennai.coffee", "Stall with brass tumblers") },
+    { id: "coffee-stall", name: "Filter coffee stall", kind: "street", density: "low", asset: asset("chennai.coffee", "Stall with brass tumblers", "planned") },
     { id: "coconut-palms", name: "Coconut palms", kind: "nature", density: "medium", asset: asset("chennai.palms", "Palms swaying in the sea breeze") },
-    { id: "bell", name: "Temple bell", kind: "architecture", density: "low", asset: asset("chennai.bell", "Bronze bell in a small mandapam") },
+    { id: "bell", name: "Temple bell", kind: "architecture", density: "low", asset: asset("chennai.bell", "Bronze bell in a small mandapam", "planned") },
   ],
   groundPattern: { id: "kolam-granite", brief: "Pale granite with kolam-inspired chalk patterns between the corners" },
   signage: {
@@ -218,14 +220,14 @@ const MUMBAI: CityTheme = {
   landmarks: [
     { id: "gateway", name: "Gateway of India", role: "hero", placement: "horizon", asset: asset("mumbai.gateway", "Basalt arch with turrets facing the harbour") },
     { id: "sea-link", name: "Sea link", role: "supporting", placement: "edge", asset: asset("mumbai.sea-link", "Cable-stayed bridge over the bay") },
-    { id: "terminus", name: "Heritage terminus", role: "supporting", placement: "corner", seat: 0, asset: asset("mumbai.terminus", "Gothic railway terminus with a central dome") },
+    { id: "terminus", name: "Heritage terminus", role: "supporting", placement: "corner", seat: 0, asset: asset("mumbai.terminus", "Gothic railway terminus with a central dome", "planned") },
   ],
   props: [
     { id: "local-train", name: "Local train", kind: "vehicle", density: "low", asset: asset("mumbai.local-train", "Suburban train passing behind the board") },
     { id: "taxi", name: "Black-and-yellow taxi", kind: "vehicle", density: "low", asset: asset("mumbai.taxi", "Classic black-and-yellow taxi") },
     { id: "deco-facades", name: "Art deco facades", kind: "architecture", density: "medium", asset: asset("mumbai.deco", "Pastel art deco buildings along the seafront") },
     { id: "promenade-lights", name: "Promenade lights", kind: "street", density: "medium", asset: asset("mumbai.lights", "A string of seafront lights") },
-    { id: "monsoon-puddles", name: "Monsoon puddles", kind: "nature", density: "low", asset: asset("mumbai.puddles", "Reflective puddles on the promenade") },
+    { id: "monsoon-puddles", name: "Monsoon puddles", kind: "nature", density: "low", asset: asset("mumbai.puddles", "Reflective puddles on the promenade", "planned") },
   ],
   groundPattern: { id: "deco-promenade", brief: "Wet-stone promenade with art deco tile borders" },
   signage: {
@@ -279,10 +281,10 @@ const BENGALURU: CityTheme = {
     { id: "tech-campus", name: "Tech campus", role: "supporting", placement: "edge", asset: asset("bengaluru.campus", "Low glass offices with soft lights") },
   ],
   props: [
-    { id: "metro", name: "Metro", kind: "vehicle", density: "low", asset: asset("bengaluru.metro", "Purple metro on a viaduct") },
+    { id: "metro", name: "Metro", kind: "vehicle", density: "low", asset: asset("bengaluru.metro", "Purple metro on a viaduct", "planned") },
     { id: "rain-trees", name: "Rain trees", kind: "nature", density: "medium", asset: asset("bengaluru.trees", "Wide-canopied trees and flowering gulmohar") },
     { id: "darshini", name: "Darshini café", kind: "street", density: "low", asset: asset("bengaluru.darshini", "Standing café with steel tumblers") },
-    { id: "cycles", name: "Cycles", kind: "vehicle", density: "low", asset: asset("bengaluru.cycles", "A few parked cycles") },
+    { id: "cycles", name: "Cycles", kind: "vehicle", density: "low", asset: asset("bengaluru.cycles", "A few parked cycles", "planned") },
     { id: "led-paths", name: "Lit paths", kind: "street", density: "low", asset: asset("bengaluru.led-paths", "Subtle tech-blue path lights in the park") },
   ],
   groundPattern: { id: "granite-park", brief: "Grey granite pavers bordered by lawn and park paths" },
