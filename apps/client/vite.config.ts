@@ -8,6 +8,10 @@ const SERVER_URL = process.env.LUDO_SERVER_URL ?? "http://localhost:3001";
 export default defineConfig({
   ...workspaceSourceResolution,
   plugins: [react(), tailwindcss()],
+  // The 3D board's chunk (three.js, React Three Fiber, the renderer) is about 950 kB minified,
+  // 260 kB gzipped: lazy-loaded only for the 3D views and within its 650 kB gzip budget
+  // (docs/design/performance-budgets.md). The main bundle stays far below this limit.
+  build: { chunkSizeWarningLimit: 1000 },
   server: {
     port: 5173,
     proxy: {
