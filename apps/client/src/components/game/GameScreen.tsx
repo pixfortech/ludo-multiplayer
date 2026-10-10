@@ -35,6 +35,7 @@ import { PlayerPanel, PlayerStrip, type GamePlayerRow } from "./PlayerPanel";
 import { PlayerToken } from "./PlayerToken";
 import { TurnIndicator, type TurnInfo } from "./TurnIndicator";
 import { useBoardPlayback } from "./useBoardPlayback";
+import { VictoryScreen } from "./VictoryScreen";
 
 interface GameScreenProps {
   state: ConnectionState & { room: RoomView; game: GameStateView };
@@ -135,7 +136,10 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   }, [status]);
 
   const paused = room.status === "paused";
+  // Controls stop as soon as the server says the game is over; the presentation (banner, results,
+  // victory) follows the board, so it comes after the final move has played.
   const finished = game.phase === "finished";
+  const over = shown.phase === "finished";
   const connected = state.link === "connected";
   const settled = !playback.busy && playback.game?.stateVersion === game.stateVersion;
   // Our roll is acknowledged but the board has not started playing it yet (it plays its own reveal from then on).
@@ -246,7 +250,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       connected: rp?.connectionStatus === "connected",
       // The counter shown advances when a token arrives home, never ahead of the board.
       home: playback.home[p.id] ?? p.tokens.filter((t) => t.step === 56).length,
-      current: !finished && p.id === shown.currentPlayerId,
+      current: !over && p.id === shown.currentPlayerId,
       place: place >= 0 ? place + 1 : null,
       flash: playback.flash?.playerId === p.id ? { kind: playback.flash.kind, key: playback.flash.key } : null,
     };
@@ -263,12 +267,12 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
     return next.id === me ? "You" : nameOf(next.id);
   })();
   const event = useMemo(() => turnEventFor(playback.callouts, nameOf, me), [playback.callouts, nameOf, me]);
-  const winnerName = game.winnerId ? (game.winnerId === me ? "You" : nameOf(game.winnerId)) : null;
+  const winnerName = shown.winnerId ? (shown.winnerId === me ? "You" : nameOf(shown.winnerId)) : null;
   const turn: TurnInfo = {
-    identity: finished ? (game.winnerId ? identityOf(game.winnerId) : null) : current ? identityOf(current) : null,
-    title: finished ? (winnerName ? `${winnerName} ${winnerName === "You" ? "win" : "wins"}!` : "Game over") : current === me ? "Your turn" : `${currentName}'s turn`,
-    detail: finished
-      ? "The game is over."
+    identity: over ? (shown.winnerId ? identityOf(shown.winnerId) : null) : current ? identityOf(current) : null,
+    title: over ? (winnerName ? `${winnerName} ${winnerName === "You" ? "win" : "wins"}!` : "Game over") : current === me ? "Your turn" : `${currentName}'s turn`,
+    detail: over
+      ? "Game complete: no further turns."
       : paused
         ? pauseText
         : dieRolling || playback.die.rolling
@@ -284,15 +288,15 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
               : shown.turn.dice === 6
                 ? `${currentName} rolled a six and rolls again`
                 : `${currentName} is choosing a move`,
-    next: finished ? null : nextName,
+    next: over ? null : nextName,
     event,
     eventIdentity: event ? identityOf(event.playerId) : null,
     eventKey: playback.calloutKey,
     mine: current === me,
   };
 
-  const trayIdentity = !finished && current ? identityOf(current) : null;
-  const waitingLabel = finished ? "Game over" : paused ? "Paused" : !connected ? "Reconnecting…" : current === me ? (shown.turn.phase === "awaiting-move" ? "Choose a token" : "Roll dice") : "Waiting";
+  const trayIdentity = !over && current ? identityOf(current) : null;
+  const waitingLabel = over || finished ? "Game over" : paused ? "Paused" : !connected ? "Reconnecting…" : current === me ? (shown.turn.phase === "awaiting-move" ? "Choose a token" : "Roll dice") : "Waiting";
 
   const statusLine = status ? (
     <p key={status.key} role={status.tone === "error" ? "alert" : "status"} className={`animate-fade-up rounded-[var(--radius-control)] px-3 py-2 text-[13px] font-medium ${status.tone === "error" ? "border border-[#f5c6cd] bg-[#fff5f6] text-danger" : "bg-[#f1eee8] text-ink"}`} data-testid="game-status">
@@ -318,10 +322,26 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
     ) : null;
   const railTray = trayFor("list");
 
-  const results = finished ? (
+  // The victory screen: opens after a live finish (once its accent has played) or at once after a refresh.
+  const celebrateKey = playback.celebrate?.key ?? 0;
+  const [victory, setVictory] = useState<"hidden" | "open" | "closed">(over ? "open" : "hidden");
+  const [celebrated, setCelebrated] = useState(false);
+  useEffect(() => {
+    if (!over || victory !== "hidden") return;
+    const timer = setTimeout(() => setVictory("open"), celebrateKey ? 700 : 0);
+    return () => clearTimeout(timer);
+  }, [over, victory, celebrateKey]);
+  const closeVictory = useCallback(() => {
+    setVictory("closed");
+    setCelebrated(true);
+    // Focus returns to the visible "Show results" (it exists in both the rail and the phone bar).
+    requestAnimationFrame(() => [...document.querySelectorAll<HTMLButtonElement>("[data-show-results]")].find((b) => b.getBoundingClientRect().width > 0)?.focus());
+  }, []);
+
+  const results = over ? (
     <div className="flex flex-col gap-3" data-testid="game-results">
       <ol className="flex flex-col gap-1.5">
-        {(game.ranking.length ? game.ranking : game.winnerId ? [game.winnerId] : []).map((id, i) => (
+        {(shown.ranking.length ? shown.ranking : shown.winnerId ? [shown.winnerId] : []).map((id, i) => (
           <li key={id} className="flex items-center gap-2.5 rounded-[var(--radius-control)] bg-[#f6f3ee] px-3 py-2">
             <span className="tabular w-8 text-[13px] font-bold text-ink-muted">{ordinal(i + 1)}</span>
             <PlayerToken identity={identityOf(id)} size={26} shadow={false} />
@@ -330,11 +350,21 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
           </li>
         ))}
       </ol>
-      <Link to={paths.home()} className="press inline-flex min-h-11 items-center justify-center rounded-[var(--radius-control)] bg-ink px-4 text-[15px] font-semibold text-white">
-        Back to home
-      </Link>
+      <div className="flex gap-2">
+        <button data-show-results="" type="button" onClick={() => setVictory("open")} className="press inline-flex min-h-11 flex-1 items-center justify-center rounded-[var(--radius-control)] bg-ink px-4 text-[15px] font-semibold text-white">
+          Show results
+        </button>
+        <Link to={paths.home()} className="press inline-flex min-h-11 flex-1 items-center justify-center rounded-[var(--radius-control)] border border-border bg-surface px-4 text-[15px] font-semibold text-ink">
+          Back to home
+        </Link>
+      </div>
     </div>
   ) : null;
+
+  const victoryScreen =
+    over && victory === "open" ? (
+      <VictoryScreen game={shown} me={me} nameOf={nameOf} identityOf={identityOf} celebrate={celebrateKey > 0 && !celebrated} reduced={reduced} onViewBoard={closeVictory} />
+    ) : null;
 
   const dice = <DicePanel die={playback.die} identity={trayIdentity} canRoll={canRoll} rolling={dieRolling} waitingLabel={waitingLabel} onRoll={() => void roll()} reduced={reduced} active={myTurn} />;
 
@@ -381,7 +411,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
         tokens={playback.tokens}
         identityOf={identityOf}
         activeSeats={game.players.map((p) => p.seat)}
-        currentSeat={finished ? null : (shown.players.find((p) => p.id === shown.currentPlayerId)?.seat ?? null)}
+        currentSeat={over ? null : (shown.players.find((p) => p.id === shown.currentPlayerId)?.seat ?? null)}
         youSeat={mySeat}
         states={states}
         badges={badges}
@@ -443,7 +473,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       <MobileActionBar hideFrom="lg" className="phone-landscape:hidden">
         {trayFor("grid")}
         {statusLine}
-        {finished ? (
+        {over ? (
           <>
             <TurnIndicator turn={turn} compact />
             {results}
@@ -457,6 +487,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
           </div>
         )}
       </MobileActionBar>
+      {victoryScreen}
     </div>
   );
 }

@@ -2,8 +2,8 @@
 // What each page showed is recorded in the page (timeline.ts); dice are queued
 // only through the test server's control port.
 import { expect, test, type Browser } from "@playwright/test";
-import { createRoom, joinRoom, openPlayer, readBoard, seatTable, startGame, visible, type Player } from "../support/game";
-import { readTimeline, startTimeline, type TimelineEvent } from "../support/timeline";
+import { createRoom, expectNoDuplicates, expectResults, joinRoom, openPlayer, playToEnd, playUntil, readBoard, seatTable, startGame, visible, type Player } from "../support/game";
+import { readTimeline, runningAnimations, startTimeline, type TimelineEvent } from "../support/timeline";
 
 const stepsOf = (timeline: TimelineEvent[], key: string) => timeline.filter((e) => e.target === key).map((e) => e.value);
 
@@ -108,6 +108,64 @@ test("home: the token runs up its own lane, the gold accent plays, and the count
   await expect(visible(aman.page.getByText("Home: roll again"))).toBeVisible();
   await expect(visible(ben.page.getByText("Home: Aman rolls again"))).toBeVisible();
   await expect(visible(ben.page.locator(`[data-testid="home-count"][data-player="${aman.id}"]`))).toHaveText("1/4");
+  noErrors([aman, ben]);
+});
+
+test("victory: the fourth token home leads into the victory screen once; actions work; a refresh replays nothing", async ({ browser }) => {
+  test.setTimeout(8 * 60_000);
+  const { aman, ben, table, A } = await twoPlayers(browser, { reducedMotion: true });
+  // Most of the game quickly, until Aman's last token is on its way home.
+  const nearEnd = await playUntil(table, [aman.id], (snap) => {
+    const tokens = snap.game!.players.find((p) => p.id === aman.id)!.tokens;
+    return tokens.filter((t) => t.step === 56).length === 3 && tokens.some((t) => t.step !== null && t.step >= 45 && t.step < 56);
+  });
+  const last = nearEnd.game!.players.find((p) => p.id === aman.id)!.tokens.find((t) => t.step !== 56)!.id;
+  // Then the finish with full motion, as most players see it.
+  for (const p of [aman, ben]) {
+    await p.page.emulateMedia({ reducedMotion: "no-preference" });
+    await startTimeline(p.page);
+    await expect(p.page.getByRole("dialog")).toHaveCount(0);
+  }
+  const end = await playToEnd(table, [aman.id]);
+  const finalEntries = end.history.slice(-4).map((e) => e.type);
+  expect(finalEntries, "home, finished, win, game over: no bonus roll").toEqual(["home", "player-finished", "win", "game-over"]);
+
+  for (const p of [aman, ben]) {
+    const dialog = p.page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(p.page.getByTestId("confetti"), `${p.name}: one confetti burst`).toHaveCount(1);
+    const tl = await readTimeline(p.page);
+    expect(tl.some((e) => e.target === A(last) && e.value === "56"), `${p.name} saw the last token arrive`).toBe(true);
+    expect(tl.some((e) => e.target === `home:${aman.id}` && e.value === "4"), `${p.name}'s counter reached 4/4`).toBe(true);
+    await expect(visible(p.page.getByTestId("turn-callouts"))).toHaveAttribute("data-kind", "win");
+  }
+  await expectResults(table, end);
+  expectNoDuplicates(table, end);
+  await expect(aman.page.getByRole("dialog").getByRole("heading", { name: "You win!" })).toBeFocused();
+
+  // A refresh shows the result at once: no confetti, nothing animating, nothing replayed.
+  await ben.page.reload();
+  await expect(ben.page.getByRole("dialog", { name: "Aman wins!" })).toBeVisible();
+  await startTimeline(ben.page); // from the moment the reloaded page is showing the result
+  await ben.page.waitForTimeout(1500);
+  await expect(ben.page.getByTestId("confetti")).toHaveCount(0);
+  expect(await runningAnimations(ben.page)).toEqual({ tokens: 0, die: 0 });
+  expect(await readTimeline(ben.page)).toEqual([]);
+
+  // The actions are real. Escape and View board return to the board; Show results reopens it.
+  await aman.page.keyboard.press("Escape");
+  await expect(aman.page.getByRole("dialog")).toHaveCount(0);
+  await expect(aman.page.getByTestId("game-board")).toBeVisible();
+  const showResults = visible(aman.page.getByRole("button", { name: "Show results" }));
+  await expect(showResults).toBeFocused();
+  await showResults.click();
+  await aman.page.getByRole("dialog").getByRole("button", { name: "View board" }).click();
+  await expect(aman.page.getByRole("dialog")).toHaveCount(0);
+  await showResults.click();
+  await aman.page.getByRole("dialog").getByRole("link", { name: /New game/ }).click();
+  await expect(aman.page.getByRole("heading", { level: 1, name: "Create a game" })).toBeVisible();
+  await ben.page.getByRole("dialog").getByRole("link", { name: /Return home/ }).tap();
+  await expect(ben.page.getByRole("heading", { level: 1, name: /Ludo, beautifully/ })).toBeVisible();
   noErrors([aman, ben]);
 });
 

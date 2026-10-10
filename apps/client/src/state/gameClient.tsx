@@ -1,7 +1,7 @@
 // React access to the game connection and the browser's saved seats.
 
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from "react";
-import type { ActionData, MembershipData, PlayerSessionCredential, ResumeData, RoomPreview, RoomStateData } from "@ludo/shared-types";
+import type { ActionData, GameActionView, MembershipData, PlayerSessionCredential, ResumeData, RoomPreview, RoomStateData } from "@ludo/shared-types";
 import type { ConnectionState, CreateRoomInput, JoinRoomInput, Notice } from "../lib/connection";
 import type { SeatStore, TabSeat } from "../lib/session";
 
@@ -18,6 +18,7 @@ export interface GameClient {
   rollDice(): Promise<ActionData>;
   moveToken(tokenId: number): Promise<ActionData>;
   resumeGame(): Promise<void>;
+  fullHistory(): Promise<GameActionView[]>;
   leaveRoom(): Promise<void>;
 }
 

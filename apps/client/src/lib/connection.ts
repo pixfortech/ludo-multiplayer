@@ -10,6 +10,7 @@
 import type {
   Ack,
   ActionData,
+  GameActionView,
   ClientToServerEvents,
   ErrorDetails,
   GameStateView,
@@ -229,6 +230,19 @@ export class GameConnection {
   /** Asks the server to move one of this seat's tokens (one the server listed as legal). */
   moveToken(tokenId: number): Promise<ActionData> {
     return this.act("game:move", { tokenId });
+  }
+
+  /** The room's complete action log, oldest first (authoritative; used for the end-of-game summary). */
+  async fullHistory(maxPages = 50): Promise<GameActionView[]> {
+    const actions: GameActionView[] = [];
+    let afterSeq = 0;
+    for (let page = 0; page < maxPages; page++) {
+      const data = await this.request("game:getHistory", { afterSeq, limit: 100 });
+      actions.push(...data.actions);
+      if (!data.hasMore) return actions;
+      afterSeq = data.nextAfterSeq;
+    }
+    return actions;
   }
 
   /** Host only: resumes a game the host paused. */

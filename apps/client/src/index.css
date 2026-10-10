@@ -45,6 +45,18 @@
   --animate-fade-up: fade-up 360ms var(--ease-enter) both;
   --animate-float: float 7s ease-in-out infinite;
   --animate-pulse-dot: pulse-dot 2.4s ease-in-out infinite;
+  --animate-victory-in: victory-in 380ms var(--ease-settle) both;
+}
+
+@keyframes victory-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @keyframes slot-in {

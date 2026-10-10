@@ -2,7 +2,7 @@
 // tests prove rendering and interaction, NOT live multiplayer (that is proven
 // by the real Socket.IO + PostgreSQL tests in apps/server).
 
-import type { ActionData, GameStateView, MembershipData, PlayerSessionCredential, ResumeData, RoomPlayerView, RoomPreview, RoomStateData, RoomView } from "@ludo/shared-types";
+import type { ActionData, GameActionView, GameStateView, MembershipData, PlayerSessionCredential, ResumeData, RoomPlayerView, RoomPreview, RoomStateData, RoomView } from "@ludo/shared-types";
 import { ProtocolRequestError, type ConnectionState, type CreateRoomInput, type JoinRoomInput, type Notice } from "../lib/connection";
 import { SeatStore, TabSeat, type KeyValueStorage } from "../lib/session";
 import type { GameClient, GameServices } from "../state/gameClient";
@@ -120,6 +120,12 @@ export class FakeClient implements GameClient {
   }
   async resumeGame() {
     this.calls.push({ method: "resumeGame", args: [] });
+  }
+  historyResult: GameActionView[] | Error = [];
+  async fullHistory() {
+    this.calls.push({ method: "fullHistory", args: [] });
+    if (this.historyResult instanceof Error) throw this.historyResult;
+    return this.historyResult;
   }
   async leaveRoom() {
     this.calls.push({ method: "leaveRoom", args: [] });

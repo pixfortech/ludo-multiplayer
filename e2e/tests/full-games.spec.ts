@@ -24,6 +24,8 @@ test("two players: room creation to victory", async ({ browser }) => {
   expect(end.history.filter((e) => e.type === "home")).toHaveLength(4);
   expectNoDuplicates(table, end);
   await expectResults(table, end);
+  // Reduced motion: the result without a confetti burst.
+  for (const p of [aman, ben]) await expect(p.page.getByTestId("confetti")).toHaveCount(0);
 });
 
 test("three players, full ranking: every place decided, second place on a phone", async ({ browser }) => {

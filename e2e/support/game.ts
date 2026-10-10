@@ -220,6 +220,16 @@ export function plan(game: GameStateView, racers: readonly string[]): { value: n
   return { value, token: (legal) => (legal.some((m) => m.tokenId === active.id) ? active.id : legal[0]!.tokenId) };
 }
 
+/** Plays with the driver until `until` holds for the server's state (or the game ends). */
+export async function playUntil(table: Table, racers: readonly string[], until: (snap: ServerSnapshot) => boolean, maxActions = 600): Promise<ServerSnapshot> {
+  let snap = await table.state();
+  for (let i = 0; i < maxActions && snap.game!.phase === "playing" && !until(snap); i++) {
+    const next = plan(snap.game!, racers);
+    snap = await table.act(next.value, next.token ? (legal) => next.token!(legal) : undefined);
+  }
+  return snap;
+}
+
 /** Plays until the server reports the game finished; returns the final snapshot. */
 export async function playToEnd(table: Table, racers: readonly string[], maxActions = 600): Promise<ServerSnapshot> {
   let snap = await table.state();
@@ -243,26 +253,36 @@ export function expectNoDuplicates(table: Table, snap: ServerSnapshot): void {
   expect(versions, "versions advance by one per action").toEqual(versions.map((_, i) => versions[0]! + i));
 }
 
-/** The results screen on every page: winner banner, ranking in the server's order, no game actions left. */
+/**
+ * The victory screen on every page: the winner, "Game complete", the standings
+ * in the server's order (unranked players last in first-winner games), real
+ * actions, and no game actions left. Its actions must sit inside the viewport.
+ */
 export async function expectResults(table: Table, snap: ServerSnapshot): Promise<void> {
   const game = snap.game!;
   const names = new Map(snap.players.map((p) => [p.id, p.displayName]));
   const ranking = game.ranking.length ? game.ranking : [game.winnerId!];
   for (const p of table.players) {
     const winnerText = game.winnerId === p.id ? "You win!" : `${names.get(game.winnerId!)} wins!`;
-    await expect(visible(p.page.getByText(winnerText, { exact: true }))).toBeVisible();
-    const results = visible(p.page.getByTestId("game-results"));
-    await expect(results).toBeVisible();
-    const rows = results.getByRole("listitem");
-    await expect(rows).toHaveCount(ranking.length);
+    const dialog = p.page.getByRole("dialog", { name: winnerText });
+    await expect(dialog, `${p.name} sees the victory screen`).toBeVisible({ timeout: 20_000 });
+    await expect(dialog.getByTestId("game-complete")).toBeVisible();
+    const rows = dialog.getByTestId("victory-ranking").getByRole("listitem");
+    await expect(rows).toHaveCount(game.players.length);
     for (let i = 0; i < ranking.length; i++) {
       const name = ranking[i] === p.id ? "You" : names.get(ranking[i]!)!;
       await expect(rows.nth(i)).toContainText(name);
       await expect(rows.nth(i)).toContainText(["1st", "2nd", "3rd", "4th"][i]!);
     }
+    for (let i = ranking.length; i < game.players.length; i++) await expect(rows.nth(i)).toContainText("–");
+    await expect(dialog.getByTestId("game-summary"), "the summary from the server's log").toBeVisible();
+    for (const name of [/New game/, /Return home/]) {
+      const action = dialog.getByRole("link", { name });
+      await expect(action).toBeInViewport({ ratio: 1 });
+    }
+    await expect(dialog.getByRole("button", { name: "View board" })).toBeInViewport({ ratio: 1 });
     await expect(p.page.getByRole("button", { name: "Roll dice" })).toHaveCount(0);
     await expect(p.page.getByTestId("game-board").getByRole("button")).toHaveCount(0);
-    await expect(visible(p.page.getByRole("link", { name: /Back to home|Home/ }))).toBeVisible();
     expect(p.errors, `${p.name}: no page errors`).toEqual([]);
   }
 }
