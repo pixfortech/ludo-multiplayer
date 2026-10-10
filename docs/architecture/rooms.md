@@ -21,12 +21,13 @@ The engine is used only to create the initial game state at start. Rules are unt
 
 ## Creating a room
 
-`createRoom({ hostName, maxPlayers, roomName?, colour?, autoMove?, rankingMode?, rules?, turnTimerSeconds?, visibility? }, { clientKey })`
+`createRoom({ hostName, maxPlayers, roomName?, colour?, autoMove?, rankingMode?, rules?, turnTimerSeconds?, visibility?, cityTheme? }, { clientKey })`
 
 1. **Validate.** Unknown fields are rejected, so typos never pass silently.
    - **Players:** 2–4 → OK; 5–15 → `unsupported-player-count` (in the data model, not playable yet); anything else → `invalid-player-count`.
    - **Rules:** only the implemented defaults are accepted. Anything else → `unsupported-rule`.
    - **Visibility and timers:** `visibility` must be `private`; turn timers must be 0 (both `unsupported-setting` otherwise).
+   - **City theme:** one of `classic`, `kolkata`, `delhi`, `chennai`, `mumbai`, `bengaluru` (default `classic`; anything else → `invalid-settings`). Presentation only; see [city themes](city-themes.md).
    - **Names:** room name 0–40 characters, host name 1–24, after normalisation.
 2. **Seat the host.** The host takes the preferred colour, or seat 0 (Crimson) for automatic allocation.
 3. **Issue a credential.** A 256-bit secret is returned once; only its SHA-256 digest is stored.

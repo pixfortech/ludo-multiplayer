@@ -3,12 +3,16 @@
 // a RoomError naming the exact problem.
 
 import {
+  CITY_THEME_IDS,
+  DEFAULT_CITY_THEME,
   DEFAULT_RULE_OPTIONS,
+  isCityThemeId,
   MAX_PLAYERS,
   MIN_PLAYERS,
   RANKING_MODES,
   TURN_TIMER_OPTIONS,
   colourById,
+  type CityThemeId,
   type RankingMode,
   type RoomRuleOptions,
   type RoomSettings,
@@ -106,6 +110,17 @@ function parseTurnTimer(input: unknown): TurnTimerSeconds {
   return 0;
 }
 
+/** The city theme is presentation only; it is validated so every player loads a theme that exists. */
+export function parseCityTheme(input: unknown): CityThemeId {
+  if (!isCityThemeId(input)) throw new RoomError("invalid-settings", `cityTheme must be one of: ${CITY_THEME_IDS.join(", ")}`, { field: "cityTheme" });
+  return input;
+}
+
+/** Settings as stored: rooms created before city themes have none and read as the classic table. */
+export function normaliseSettings(settings: RoomSettings): RoomSettings {
+  return isCityThemeId(settings.cityTheme) ? settings : { ...settings, cityTheme: DEFAULT_CITY_THEME };
+}
+
 function parseVisibility(input: unknown): "private" {
   if (input === "private") return input;
   if (input === "public") throw new RoomError("unsupported-setting", "Public rooms are not available yet; rooms are private (join by code)", { field: "visibility" });
@@ -132,7 +147,7 @@ function parseRules(input: unknown): RoomRuleOptions {
   return rules;
 }
 
-export const SETTINGS_FIELDS = ["maxPlayers", "autoMove", "rankingMode", "visibility", "turnTimerSeconds", "rules"] as const;
+export const SETTINGS_FIELDS = ["maxPlayers", "autoMove", "rankingMode", "visibility", "turnTimerSeconds", "rules", "cityTheme"] as const;
 
 /** Full settings for a new room; omitted fields take their defaults. */
 export function parseNewRoomSettings(input: Record<string, unknown>): RoomSettings {
@@ -143,6 +158,7 @@ export function parseNewRoomSettings(input: Record<string, unknown>): RoomSettin
     visibility: input.visibility === undefined ? "private" : parseVisibility(input.visibility),
     turnTimerSeconds: input.turnTimerSeconds === undefined ? 0 : parseTurnTimer(input.turnTimerSeconds),
     rules: input.rules === undefined ? { ...DEFAULT_RULE_OPTIONS } : parseRules(input.rules),
+    cityTheme: input.cityTheme === undefined ? DEFAULT_CITY_THEME : parseCityTheme(input.cityTheme),
   };
 }
 
@@ -155,6 +171,7 @@ export function applySettingsPatch(current: RoomSettings, input: Record<string, 
     visibility: input.visibility === undefined ? current.visibility : parseVisibility(input.visibility),
     turnTimerSeconds: input.turnTimerSeconds === undefined ? current.turnTimerSeconds : parseTurnTimer(input.turnTimerSeconds),
     rules: input.rules === undefined ? current.rules : parseRules({ ...current.rules, ...asRules(input.rules) }),
+    cityTheme: input.cityTheme === undefined ? normaliseSettings(current).cityTheme : parseCityTheme(input.cityTheme),
   };
 }
 

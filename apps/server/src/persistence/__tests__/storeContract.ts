@@ -14,6 +14,7 @@ export const SETTINGS: RoomSettings = {
   visibility: "private",
   turnTimerSeconds: 0,
   rules: DEFAULT_RULE_OPTIONS,
+  cityTheme: "classic",
 };
 
 export const newRoom = (overrides: Partial<NewRoom> = {}): NewRoom => ({

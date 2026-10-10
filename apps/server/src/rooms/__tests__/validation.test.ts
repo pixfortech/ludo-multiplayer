@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_RULE_OPTIONS } from "@ludo/shared-types";
+import { DEFAULT_RULE_OPTIONS, type RoomSettings } from "@ludo/shared-types";
 import { RoomError } from "../errors.js";
 import {
   applySettingsPatch,
   displayNameKey,
   normaliseDisplayName,
+  normaliseSettings,
   normaliseRoomName,
   parseColourChoice,
   parseMaxPlayers,
@@ -28,6 +29,21 @@ describe("room input validation", () => {
     for (const bad of [0, 1, 16, 2.5, "4", null, undefined, Number.NaN]) expect(code(() => parseMaxPlayers(bad))).toBe("invalid-player-count");
   });
 
+  it("accepts a known city theme and refuses anything else", () => {
+    expect(parseNewRoomSettings({ maxPlayers: 2, cityTheme: "kolkata" }).cityTheme).toBe("kolkata");
+    for (const city of ["delhi", "chennai", "mumbai", "bengaluru", "classic"]) expect(parseNewRoomSettings({ maxPlayers: 2, cityTheme: city }).cityTheme).toBe(city);
+    for (const bad of ["paris", "", 3, null, "Kolkata"]) {
+      expect(() => parseNewRoomSettings({ maxPlayers: 2, cityTheme: bad })).toThrow(expect.objectContaining({ code: "invalid-settings" }));
+    }
+  });
+
+  it("reads rooms stored before city themes as the classic table", () => {
+    const legacy = { maxPlayers: 2, autoMove: true, rankingMode: "winner-only", visibility: "private", turnTimerSeconds: 0, rules: DEFAULT_RULE_OPTIONS } as unknown as RoomSettings;
+    expect(normaliseSettings(legacy).cityTheme).toBe("classic");
+    expect(applySettingsPatch(legacy, { autoMove: false }).cityTheme).toBe("classic");
+    expect(applySettingsPatch(legacy, { cityTheme: "mumbai" }).cityTheme).toBe("mumbai");
+  });
+
   it("fills defaults for a new room", () => {
     expect(parseNewRoomSettings({ maxPlayers: 3 })).toEqual({
       maxPlayers: 3,
@@ -36,6 +52,7 @@ describe("room input validation", () => {
       visibility: "private",
       turnTimerSeconds: 0,
       rules: DEFAULT_RULE_OPTIONS,
+      cityTheme: "classic",
     });
     expect(parseNewRoomSettings({ maxPlayers: 4, autoMove: false, rankingMode: "full-ranking", rules: { blocksEnabled: false } })).toMatchObject({
       autoMove: false,

@@ -8,7 +8,7 @@
 import type { ErrorDetails, ProtocolErrorCode } from "./errors.js";
 import type { GameActionView, GameStateView } from "./game.js";
 import type { PauseInfo, PlayerSessionCredential, RoomPlayerView, RoomPreview, RoomRuleOptions, RoomView, RoomVisibility } from "./rooms.js";
-import type { RankingMode, TurnTimerSeconds } from "./settings.js";
+import type { CityThemeId, RankingMode, TurnTimerSeconds } from "./settings.js";
 
 export const PROTOCOL_VERSION = 3;
 
@@ -51,6 +51,8 @@ export interface CreateRoomRequest extends RequestBase {
   rules?: Partial<RoomRuleOptions>;
   turnTimerSeconds?: TurnTimerSeconds;
   visibility?: RoomVisibility;
+  /** The city theme (presentation only); omitted = classic. */
+  cityTheme?: CityThemeId;
 }
 
 export interface PreviewRoomRequest extends RequestBase {

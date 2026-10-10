@@ -5,6 +5,7 @@
 import { colourById, coloursForRoom, type RoomPlayerView, type RoomPreview, type RoomView } from "@ludo/shared-types";
 import type { PlayerRecord, RoomRecord } from "../persistence/types.js";
 import { canStart, deriveLifecycle, joinBlockReason } from "./lifecycle.js";
+import { normaliseSettings } from "./validation.js";
 
 const colourName = (id: string) => colourById(id)?.name ?? id;
 
@@ -31,7 +32,7 @@ export function toRoomView(room: RoomRecord, players: readonly PlayerRecord[]): 
     lifecycle: deriveLifecycle(room.status, players.length),
     hostPlayerId: room.hostPlayerId,
     maxPlayers: room.maxPlayers,
-    settings: structuredClone(room.settings),
+    settings: structuredClone(normaliseSettings(room.settings)),
     roomVersion: room.roomVersion,
     players: [...players].sort((a, b) => a.seat - b.seat).map((p) => toPlayerView(room, p)),
     canStart: canStart(room.status, players.length),
@@ -69,6 +70,7 @@ export function toRoomPreview(room: RoomRecord, players: readonly PlayerRecord[]
     availableColours: blocked ? [] : colours.filter((c) => !c.taken).map((c) => c.colour),
     occupiedSeats: players.map((p) => p.seat).sort((a, b) => a - b),
     hostName: players.find((p) => p.id === room.hostPlayerId)?.displayName ?? null,
+    cityTheme: normaliseSettings(room.settings).cityTheme,
     joinable: blocked === null,
     blockedReason: blocked,
   };

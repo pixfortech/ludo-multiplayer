@@ -22,6 +22,7 @@ function preview(over: Partial<RoomPreview> = {}): RoomPreview {
     availableColours: ["royal-blue", "emerald", "golden"],
     occupiedSeats: [0],
     hostName: "Aman",
+    cityTheme: "classic",
     joinable: true,
     blockedReason: null,
     ...over,

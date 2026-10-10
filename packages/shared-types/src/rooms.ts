@@ -1,7 +1,7 @@
 // Room vocabulary shared by server and client. The server validates every
 // value; these types only describe the contract.
 
-import type { RankingMode, TurnTimerSeconds } from "./settings.js";
+import type { CityThemeId, RankingMode, TurnTimerSeconds } from "./settings.js";
 
 /**
  * Stored room status. lobby → playing ⇄ paused → finished → archived; a room
@@ -84,6 +84,8 @@ export interface RoomSettings {
   /** Reserved; timers are not enforced yet. */
   turnTimerSeconds: TurnTimerSeconds;
   rules: RoomRuleOptions;
+  /** The city the table is themed as (presentation only; every player loads the same one). */
+  cityTheme: CityThemeId;
 }
 
 /** Why a room cannot be joined right now (preview and join use the same reasons). */
@@ -113,6 +115,8 @@ export interface RoomPreview {
   availableColours: string[];
   occupiedSeats: number[];
   hostName: string | null;
+  /** The room's city theme, so people joining know where they are going. */
+  cityTheme: CityThemeId;
   joinable: boolean;
   /** Set when joinable is false. */
   blockedReason: JoinBlockReason | null;

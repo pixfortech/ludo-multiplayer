@@ -34,7 +34,7 @@ export function roomView(over: Partial<RoomView> = {}): RoomView {
     lifecycle: players.length >= 2 ? "ready" : "waiting",
     hostPlayerId: "p-host",
     maxPlayers: 4,
-    settings: { maxPlayers: 4, autoMove: true, rankingMode: "winner-only", visibility: "private", turnTimerSeconds: 0, rules: { sixWithoutMoveGrantsRoll: true, captureStackedOpponents: true, blocksEnabled: false } },
+    settings: { maxPlayers: 4, cityTheme: "classic", autoMove: true, rankingMode: "winner-only", visibility: "private", turnTimerSeconds: 0, rules: { sixWithoutMoveGrantsRoll: true, captureStackedOpponents: true, blocksEnabled: false } },
     roomVersion: 0,
     players,
     canStart: players.length >= 2,

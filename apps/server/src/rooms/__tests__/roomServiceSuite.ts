@@ -59,6 +59,23 @@ export function runRoomServiceSuite(name: string, setup: () => Promise<{ store: 
       return { code: host.room.code, roomId: host.room.roomId, members, actors };
     }
 
+    describe("city theme", () => {
+      it("stores the chosen city, shows every member and the join preview the same one, and keeps it across a reload", async () => {
+        const { code, roomId, actors, members } = await roomWith(["Ben"], { cityTheme: "mumbai" });
+        expect((await store.getRoom(roomId))!.settings.cityTheme, "persisted with the room").toBe("mumbai");
+        for (const actor of actors) expect((await rooms.getRoomView(actor)).settings.cityTheme).toBe("mumbai");
+        expect((await rooms.previewRoom(code, ctx)).cityTheme).toBe("mumbai");
+        // A fresh service on the same store (as after a server restart) reads the same city.
+        const fresh = serviceFor(store);
+        expect((await fresh.getRoomView(await fresh.authenticate(members[1]!.credential))).settings.cityTheme).toBe("mumbai");
+      });
+
+      it("defaults to the classic table and refuses an unknown city", async () => {
+        expect((await create()).room.settings.cityTheme).toBe("classic");
+        await expectRoomError(create({ cityTheme: "atlantis" }), "invalid-settings");
+      });
+    });
+
     describe("create", () => {
       it("creates a private lobby with the host seated, persisted, and a one-time credential", async () => {
         const result = await create({ roomName: "Friday Ludo" });
@@ -149,7 +166,7 @@ export function runRoomServiceSuite(name: string, setup: () => Promise<{ store: 
         const { code, members } = await roomWith(["Ben"], { roomName: "Friday Ludo" });
         const preview = await rooms.previewRoom(code, ctx);
         expect(Object.keys(preview).sort()).toEqual(
-          ["availableColours", "blockedReason", "code", "colours", "hostName", "joinable", "joinedCount", "lifecycle", "maxPlayers", "name", "occupiedSeats", "status"].sort(),
+          ["availableColours", "blockedReason", "cityTheme", "code", "colours", "hostName", "joinable", "joinedCount", "lifecycle", "maxPlayers", "name", "occupiedSeats", "status"].sort(),
         );
         expect(preview).toMatchObject({
           code,
