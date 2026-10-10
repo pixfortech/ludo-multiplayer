@@ -111,6 +111,8 @@ for (const city of CITIES) {
       await shot(page, `${city.id}-${size.label}`);
     }
     for (const p of [host, guest]) expect(p.errors, `${p.name}: no page errors`).toEqual([]);
+    // Close the pages: an animated city left open would load the machine for the tests after this one.
+    for (const p of [host, guest]) await p.context.close();
   });
 }
 
@@ -166,4 +168,5 @@ test("the city survives joining, a refresh and a network drop, and play stays in
   expect(snap.room.settings.cityTheme).toBe("chennai");
   for (const p of [host, guest]) expect(await cityOf(p)).toBe("chennai");
   for (const p of [host, guest]) expect(p.errors, `${p.name}: no page errors`).toEqual([]);
+  for (const p of [host, guest]) await p.context.close();
 });
