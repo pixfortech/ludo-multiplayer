@@ -56,7 +56,7 @@ export function aerialPose(): Pose {
   return { target: { x: 0, y: 0, z: 0 }, pitch: AERIAL_PITCH, yaw: 0, distance: 40 };
 }
 
-export const ORBIT_LIMITS = { minPitch: 24 * DEG, maxPitch: 84 * DEG, minDistance: 11, maxDistance: 34 } as const;
+export const ORBIT_LIMITS = { minPitch: 24 * DEG, maxPitch: 84 * DEG, minDistance: 11, maxDistance: 52 } as const;
 
 /** The distance at which a perspective camera with vertical `fov` (radians) shows the whole board. */
 export function fitDistance(fov: number, aspect: number, pitch: number): number {

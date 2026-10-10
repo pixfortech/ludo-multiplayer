@@ -18,7 +18,8 @@ import type { ClassicBoardProps } from "../board/ClassicBoard";
 import { CELL, svgToWorld } from "../board/geometry";
 import { placeTokens, TOKEN_SCALE } from "../board/placement";
 import type { BoardTokenState } from "../board/BoardToken";
-import { BoardMesh3D } from "./BoardMesh3D";
+import { BoardMesh3D, H } from "./BoardMesh3D";
+import { buildBoardModel, type BoardModel } from "./boardModel";
 import { CameraRig, type ImmersiveView } from "./CameraRig";
 import { DETAIL } from "./geometry3d";
 import { Effects3D, MovePreview3D } from "./Overlays3D";
@@ -67,11 +68,12 @@ function Lights({ shadows, mapSize }: { shadows: boolean; mapSize: number }) {
     l.target.position.set(0, 0, 0);
     l.target.updateMatrixWorld();
   }, [mapSize]);
-  // A soft studio light: broad sky light for faithful colours, one key light from the upper left for depth and shadow.
+  // A soft studio light: mostly broad sky light, for faithful colours on every cell; a gentle key light from
+  // high on the upper left gives depth and short contact shadows that never darken a cell enough to misread it.
   return (
     <>
-      <hemisphereLight args={["#FFFFFF", "#D8CEC0", 2.1]} />
-      <directionalLight ref={light} position={[-7, 18, -4]} intensity={1.35} castShadow={shadows} />
+      <hemisphereLight args={["#FFFFFF", "#D8CEC0", 2.55]} />
+      <directionalLight ref={light} position={[-3.5, 20, -2.5]} intensity={0.62} castShadow={shadows} />
     </>
   );
 }
@@ -80,10 +82,23 @@ function Lights({ shadows, mapSize }: { shadows: boolean; mapSize: number }) {
 function FrameWatch({ onReady, onFrameStats }: { onReady: () => void; onFrameStats?: ((ms: number) => void) | undefined }) {
   const ready = useRef(false);
   const stats = useRef({ total: 0, frames: 0 });
+  const gl = useThree((s) => s.gl);
+  // Renderer counters on the board element (GPU memory objects, draw calls), for tooling and the performance tests.
+  const publish = (frameMs?: number) => {
+    const host = gl.domElement.closest<HTMLElement>('[data-testid="game-board"]');
+    if (!host) return;
+    const { memory, render } = gl.info;
+    host.dataset.glGeometries = String(memory.geometries);
+    host.dataset.glTextures = String(memory.textures);
+    host.dataset.glCalls = String(render.calls);
+    host.dataset.glTriangles = String(render.triangles);
+    if (frameMs !== undefined) host.dataset.frameMs = frameMs.toFixed(1);
+  };
   useFrame((_, delta) => {
     if (!ready.current) {
       ready.current = true;
       onReady();
+      requestAnimationFrame(() => publish());
     }
     // Only consecutive frames count (on-demand rendering idles in between).
     if (delta > 0.25) return;
@@ -91,7 +106,9 @@ function FrameWatch({ onReady, onFrameStats }: { onReady: () => void; onFrameSta
     w.total += delta;
     w.frames++;
     if (w.total >= 2) {
-      onFrameStats?.((w.total / w.frames) * 1000);
+      const ms = (w.total / w.frames) * 1000;
+      publish(ms);
+      onFrameStats?.(ms);
       stats.current = { total: 0, frames: 0 };
     }
   });
@@ -143,11 +160,23 @@ function ContextWatch({ onFailure }: { onFailure: (reason: string) => void }) {
  * canvas) to a hidden list after every frame, for tests and tooling (the 2D
  * board exposes the same data on its token elements).
  */
-function Projection({ objects, mirror }: { objects: Map<string, Group>; mirror: React.RefObject<HTMLUListElement | null> }) {
+function Projection({ objects, mirror, cells }: { objects: Map<string, Group>; mirror: React.RefObject<HTMLUListElement | null>; cells: React.RefObject<HTMLOListElement | null> }) {
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
   const v = useMemo(() => new Vector3(), []);
+  const lastView = useRef("");
   useFrame(() => {
+    // Board cells move on screen only when the camera or the canvas does.
+    const view = `${size.width}x${size.height}:${camera.matrixWorld.elements.join(",")}:${camera.projectionMatrix.elements.join(",")}`;
+    const cellList = cells.current;
+    if (cellList && view !== lastView.current) {
+      lastView.current = view;
+      for (const el of cellList.children as HTMLCollectionOf<HTMLElement>) {
+        v.set(Number(el.dataset.x), Number(el.dataset.y), Number(el.dataset.z)).project(camera);
+        el.dataset.cx = (((v.x + 1) / 2) * size.width).toFixed(1);
+        el.dataset.cy = (((1 - v.y) / 2) * size.height).toFixed(1);
+      }
+    }
     const list = mirror.current;
     if (!list) return;
     for (const el of list.children as HTMLCollectionOf<HTMLElement>) {
@@ -208,6 +237,8 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
 
   // The 2D board's placements (stacks included), in world units.
   const placements = useMemo(() => placeTokens(tokens), [tokens]);
+  const seatsKey = [...activeSeats].sort().join(",");
+  const model: BoardModel = useMemo(() => buildBoardModel(material, seatsKey ? seatsKey.split(",").map(Number) : []), [material, seatsKey]);
   const items: Token3DInput[] = useMemo(
     () =>
       placements.map((p) => {
@@ -240,6 +271,7 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
   }, [items, motion, props.raised, currentSeat, placements]);
 
   const mirror = useRef<HTMLUListElement>(null);
+  const cellMirror = useRef<HTMLOListElement>(null);
   const [failed, setFailed] = useState(false);
   const fail = useCallback(
     (reason: string) => {
@@ -281,14 +313,14 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
           <FrameWatch onReady={ready} onFrameStats={onFrameStats} />
           <CameraRig mode={mode === "2.5d" ? "aerial" : "immersive"} view={immersiveView} resetKey={resetKey} focus={focus} reduced={reduced} onViewChange={onImmersiveViewChange} />
           <Lights shadows={Boolean(q.shadows)} mapSize={q.shadowMap} />
-          <BoardMesh3D material={material} activeSeats={activeSeats} currentSeat={currentSeat} youSeat={youSeat} detail={q.detail} shadows={Boolean(q.shadows)} textures={textures} />
+          <BoardMesh3D model={model} material={material} currentSeat={currentSeat} youSeat={youSeat} detail={q.detail} shadows={Boolean(q.shadows)} textures={textures} />
           {preview ? <MovePreview3D preview={preview} detail={q.detail} /> : null}
           {items.map((t) => (
             <Token3D key={t.key} token={t} kit={kit} textures={textures} shadows={Boolean(q.shadows)} reduced={reduced} register={register} {...(t.interactive ? { onActivate, onPreview } : {})} />
           ))}
           <TapCatcher candidates={candidates} onActivate={onActivate} />
           <Effects3D effects={effects} detail={q.detail} />
-          <Projection objects={objects} mirror={mirror} />
+          <Projection objects={objects} mirror={mirror} cells={cellMirror} />
         </Canvas>
       )}
       {/* The board for assistive tech and tests: each token's step and state (the move tray offers the choices). */}
@@ -297,6 +329,15 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
           <li key={t.key} data-key={t.key} data-testid={`token-${t.key}`} data-step={t.step === null ? "base" : t.step} data-state={t.state} data-floor={floorFor(t.step)} data-label={labels[t.key]} />
         ))}
       </ul>
+      {/* The board's cells with their drawn colours and on-screen centres (tests check the pixels against the layout). */}
+      <ol ref={cellMirror} className="sr-only" aria-hidden="true" data-testid="board-cells-mirror">
+        {model.tiles.map((t) => (
+          <li key={`t${t.cell.row}-${t.cell.col}`} data-kind={t.kind} data-row={t.cell.row} data-col={t.cell.col} data-index={t.index ?? undefined} data-seat={t.seat ?? undefined} data-colour={t.colour} data-x={t.x} data-y={H.plate + H.tile} data-z={t.z} />
+        ))}
+        {model.stars.map((st, i) => (
+          <li key={`s${i}`} data-kind="star" data-colour={st.colour} data-x={st.x} data-y={H.plate + H.tile + H.inlay} data-z={st.z} />
+        ))}
+      </ol>
       {preview ? <span className="sr-only" aria-hidden="true" data-testid="move-preview-3d" data-to={preview.to} /> : null}
     </div>
   );

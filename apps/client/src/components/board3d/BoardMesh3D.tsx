@@ -12,7 +12,7 @@ import { WORLD_BOARD_SIZE } from "@ludo/board-layouts";
 import type { BoardMaterial2d } from "@ludo/city-themes";
 import { PLAYER_IDENTITIES, mixLab } from "@ludo/design-tokens";
 import { BOARD_HALF } from "./cameraMath";
-import { buildBoardModel, type BoardModel } from "./boardModel";
+import type { BoardModel } from "./boardModel";
 import { chevronGeometry, discGeometry, extrudeUp, frameShape, roundedRect, starGeometry, tileGeometry, triangleGeometry, type Detail } from "./geometry3d";
 import type { TextureCache } from "./textures";
 
@@ -60,8 +60,8 @@ function Instances({ geometry, material, items, shadows }: { geometry: BufferGeo
 }
 
 export interface BoardMesh3DProps {
+  model: BoardModel;
   material: BoardMaterial2d;
-  activeSeats: readonly number[];
   currentSeat: number | null;
   youSeat: number | null;
   detail: Detail;
@@ -69,9 +69,7 @@ export interface BoardMesh3DProps {
   textures: TextureCache;
 }
 
-export const BoardMesh3D = memo(function BoardMesh3D({ material, activeSeats, currentSeat, youSeat, detail, shadows, textures }: BoardMesh3DProps) {
-  const seatsKey = [...activeSeats].sort().join(",");
-  const model: BoardModel = useMemo(() => buildBoardModel(material, seatsKey ? seatsKey.split(",").map(Number) : []), [material, seatsKey]);
+export const BoardMesh3D = memo(function BoardMesh3D({ model, material, currentSeat, youSeat, detail, shadows, textures }: BoardMesh3DProps) {
   const frame = material.plinth ?? CLASSIC_FRAME;
 
   // Geometries (shared by every instance) and materials, disposed with the board.

@@ -185,7 +185,10 @@ export class Table {
     const entry = tray.getByRole("button", { name: new RegExp(`^Token ${tokenId + 1}:`) });
     if (actor.touch) {
       await entry.tap();
-      await expect(actor.page.getByTestId("move-destination"), "the first tap previews the move").toBeVisible();
+      // The 2D board draws the destination; the 3D board marks its preview in its mirror.
+      const on3d = (await actor.page.locator('[data-testid="game-board"][data-renderer]').count()) > 0;
+      if (on3d) await expect(actor.page.getByTestId("move-preview-3d"), "the first tap previews the move").toBeAttached();
+      else await expect(actor.page.getByTestId("move-destination"), "the first tap previews the move").toBeVisible();
       expect((await readBoard(actor.page))[`token-${actor.id}:${tokenId}`], "nothing moves before confirming").toBe(stepLabel(game, actor.id, tokenId));
       await tray.getByRole("button", { name: /Tap again to move/ }).tap();
     } else {
