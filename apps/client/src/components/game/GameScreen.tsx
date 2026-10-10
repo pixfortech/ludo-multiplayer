@@ -117,6 +117,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   const [autoLevel, setAutoLevel] = useState<QualityLevel>(() => autoQuality(deviceClass()));
   const quality: QualityLevel = viewPref.quality ?? autoLevel;
   const [immersiveView, setImmersiveView] = useState<ImmersiveView>("overview");
+  const [pendingView, setPendingView] = useState<{ quality?: QualityLevel; fallback?: boolean } | null>(null);
   const [cameraReset, setCameraReset] = useState(0);
 
   const [rollPending, setRollPending] = useState(false);
@@ -392,6 +393,17 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
 
   const dice = <DicePanel die={playback.die} identity={trayIdentity} canRoll={canRoll} rolling={dieRolling} waitingLabel={waitingLabel} onRoll={() => void roll()} reduced={reduced} active={myTurn} />;
 
+  const quiet = !choosing && !playback.busy;
+  useEffect(() => {
+    if (!pendingView || !quiet) return;
+    setPendingView(null);
+    if (pendingView.quality) setAutoLevel(pendingView.quality);
+    if (pendingView.fallback && !failure3d) {
+      setFailure3d("slow");
+      say("info", "Switched to the 2D board for smoother play.");
+    }
+  }, [pendingView, quiet, failure3d, say]);
+
   const onBoardFailure = (reason: string) => {
     if (failure3d) return;
     setFailure3d(reason);
@@ -399,13 +411,11 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   };
   const onFrameStats = (ms: number) => {
     // Automatic quality: step down while frames are slow; if even Low is too slow, use the 2D board
-    // (only when the player has not chosen a view themselves).
+    // (only when the player has not chosen a view themselves). Either change rebuilds the board, so it
+    // waits for a quiet moment (no choice open, nothing moving): it never interrupts a pick.
     if (viewPref.quality !== null) return;
-    if (ms > 22 && quality !== "low") setAutoLevel(quality === "high" ? "medium" : "low");
-    else if (ms > 45 && quality === "low" && viewPref.mode === null && !failure3d) {
-      setFailure3d("slow");
-      say("info", "Switched to the 2D board for smoother play.");
-    }
+    if (ms > 22 && quality !== "low") setPendingView({ quality: quality === "high" ? "medium" : "low" });
+    else if (ms > 45 && quality === "low" && viewPref.mode === null && !failure3d) setPendingView({ fallback: true });
   };
   const viewControls = (
     <BoardViewControls

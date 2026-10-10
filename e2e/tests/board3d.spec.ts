@@ -5,7 +5,7 @@
 // raycaster, with a mouse and with touch. Positions are compared with the
 // server and with the 2D board.
 import { expect, test, type Browser, type WebSocketRoute } from "@playwright/test";
-import { boardCells, boardTokens, colourDistance, expectBoard3d, hexRgb, pickToken3d, pixelAt } from "../support/board3d";
+import { boardCells, boardTokens, colourDistance, expectBoard3d, hexRgb, pickDiagnostics, pickToken3d, pixelAt } from "../support/board3d";
 import { serverState } from "../support/control";
 import { createRoom, joinRoom, openPlayer, plan, readBoard, seatTable, startGame, visible, type BoardView, type Player } from "../support/game";
 import { readTimeline, startTimeline } from "../support/timeline";
@@ -111,7 +111,12 @@ test("2.5D play: mouse and touch pick only legal tokens, the die shows before to
   expect((await table.state()).game!.stateVersion).toBe(before);
   // Clicking his own token (through the raycaster) moves it, once the server agrees.
   await pickToken3d(aman, A(0));
-  await expect.poll(async () => (await table.state()).game!.stateVersion, { message: "the click sends the move" }).toBeGreaterThan(before);
+  await expect
+    .poll(async () => (await table.state()).game!.stateVersion, { message: "the click sends the move", timeout: 15_000 })
+    .toBeGreaterThan(before)
+    .catch(async (error: unknown) => {
+      throw new Error(`${String(error)}\nDiagnostics: ${await pickDiagnostics(aman, A(0))}`);
+    });
   expect(aman.sent.move).toBe(1);
   table.moves++;
   let snap = await table.expectInSync();

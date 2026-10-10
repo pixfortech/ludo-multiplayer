@@ -150,5 +150,23 @@ export async function pickToken3d(player: Player, key: string): Promise<void> {
   const token = (await boardTokens(player.page)).find((t) => t.key === key);
   if (!token) throw new Error(`no token ${key} on the 3D board`);
   if (player.touch) await player.page.touchscreen.tap(token.x, token.y);
-  else await player.page.mouse.click(token.x, token.y);
+  else {
+    // A player's pointer arrives over the token before pressing (hover previews the move).
+    await player.page.mouse.move(token.x, token.y, { steps: 3 });
+    await player.page.waitForTimeout(120);
+    await player.page.mouse.click(token.x, token.y);
+  }
+}
+
+/** What a page shows about one token and its pointer, for failure messages. */
+export async function pickDiagnostics(player: Player, key: string): Promise<string> {
+  const token = (await boardTokens(player.page)).find((t) => t.key === key);
+  const extra = await player.page.evaluate(() => ({
+    finePointer: matchMedia("(hover: hover) and (pointer: fine)").matches,
+    canvas: document.querySelector('[data-testid="game-board"] canvas')?.getBoundingClientRect().toJSON(),
+    status: document.querySelector('[data-testid="game-status"]')?.textContent ?? null,
+    quality: (document.querySelector('[data-testid="game-board"]') as HTMLElement | null)?.dataset.quality,
+    frameMs: (document.querySelector('[data-testid="game-board"]') as HTMLElement | null)?.dataset.frameMs,
+  }));
+  return JSON.stringify({ token, sent: player.sent, errors: player.errors, ...extra });
 }
