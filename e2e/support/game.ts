@@ -29,11 +29,16 @@ export interface Player {
   sent: { roll: number; move: number };
 }
 
-export async function openPlayer(browser: Browser, name: string, device: Device, options: { reducedMotion?: boolean } = {}): Promise<Player> {
+/** The board view a page starts with. The suites written for the SVG board pin "2d"; the 3D suites choose "2.5d" or "3d". */
+export type BoardView = "2d" | "2.5d" | "3d" | "default";
+
+export async function openPlayer(browser: Browser, name: string, device: Device, options: { reducedMotion?: boolean; board?: BoardView } = {}): Promise<Player> {
   const { viewport, touch } = DEVICES[device];
   // E2E_RECORD_DIR records each player's screen to video (for reviewing animation; off in CI).
   const record = process.env.E2E_RECORD_DIR ? { recordVideo: { dir: `${process.env.E2E_RECORD_DIR}/${name.toLowerCase()}`, size: viewport } } : {};
   const context = await browser.newContext({ viewport, hasTouch: touch, isMobile: device === "phone", reducedMotion: options.reducedMotion ? "reduce" : "no-preference", ...record });
+  const board = options.board ?? "2d";
+  if (board !== "default") await context.addInitScript((mode) => localStorage.setItem("ludo.board-view.v1", JSON.stringify({ mode, quality: null })), board);
   const page = await context.newPage();
   const errors: string[] = [];
   const sent = { roll: 0, move: 0 };

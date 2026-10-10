@@ -19,9 +19,12 @@ import { identityFor } from "../../lib/identities";
 import { useFinePointer, usePrefersReducedMotion } from "../../lib/media";
 import { Link, paths } from "../../lib/router";
 import { useGame } from "../../state/gameClient";
-import { ClassicBoard } from "../board/ClassicBoard";
+import { BoardView } from "../board3d/BoardView";
+import { BoardViewControls } from "../board3d/BoardViewControls";
+import type { ImmersiveView } from "../board3d/CameraRig";
+import { autoQuality, deviceClass, hasWebGL2, useViewPreference, type BoardViewMode, type QualityLevel } from "../board3d/capabilities";
 import { CityBackdrop, cityStyle, useCityDocument } from "../city/CityBackdrop";
-import { CityChip, CityPlinth, CitySign } from "../city/CityFrame";
+import { CityChip, CitySign } from "../city/CityFrame";
 import type { BoardTokenState } from "../board/BoardToken";
 import { tokenKey } from "../board/placement";
 import type { MovePreview } from "../board/TokenOverlay";
@@ -103,6 +106,18 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   const material = useMemo(() => boardMaterial2d(theme), [theme]);
   const city = theme.id !== "classic";
   useCityDocument(theme);
+
+  // The board view: 2.5D by default where WebGL works, the 3D preview or the 2D board on request.
+  // A failure (no WebGL, a lost context, no first frame, an error) falls back to 2D without touching the game.
+  const [viewPref, setViewPref] = useViewPreference();
+  const webgl = useMemo(() => hasWebGL2(), []);
+  const [failure3d, setFailure3d] = useState<string | null>(null);
+  const requestedView: BoardViewMode = viewPref.mode ?? "2.5d";
+  const boardMode: BoardViewMode = !webgl || failure3d ? "2d" : requestedView;
+  const [autoLevel, setAutoLevel] = useState<QualityLevel>(() => autoQuality(deviceClass()));
+  const quality: QualityLevel = viewPref.quality ?? autoLevel;
+  const [immersiveView, setImmersiveView] = useState<ImmersiveView>("overview");
+  const [cameraReset, setCameraReset] = useState(0);
 
   const [rollPending, setRollPending] = useState(false);
   // After our roll is acknowledged, the die keeps tumbling until the board starts showing that roll,
@@ -377,6 +392,41 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
 
   const dice = <DicePanel die={playback.die} identity={trayIdentity} canRoll={canRoll} rolling={dieRolling} waitingLabel={waitingLabel} onRoll={() => void roll()} reduced={reduced} active={myTurn} />;
 
+  const onBoardFailure = (reason: string) => {
+    if (failure3d) return;
+    setFailure3d(reason);
+    say("info", "Showing the 2D board: the 3D board could not continue on this device.");
+  };
+  const onFrameStats = (ms: number) => {
+    // Automatic quality: step down while frames are slow; if even Low is too slow, use the 2D board
+    // (only when the player has not chosen a view themselves).
+    if (viewPref.quality !== null) return;
+    if (ms > 22 && quality !== "low") setAutoLevel(quality === "high" ? "medium" : "low");
+    else if (ms > 45 && quality === "low" && viewPref.mode === null && !failure3d) {
+      setFailure3d("slow");
+      say("info", "Switched to the 2D board for smoother play.");
+    }
+  };
+  const viewControls = (
+    <BoardViewControls
+      mode={boardMode}
+      unavailable={!webgl ? "3D needs WebGL, which this browser does not offer." : failure3d && failure3d !== "slow" ? "The 3D board stopped on this device; choose a 3D view to try again." : null}
+      quality={viewPref.quality ?? "auto"}
+      immersiveView={immersiveView}
+      onMode={(mode) => {
+        if (mode !== "2d") setFailure3d(null);
+        if (mode === "3d") setImmersiveView("overview");
+        setViewPref({ mode });
+      }}
+      onQuality={(q) => setViewPref({ quality: q === "auto" ? null : q })}
+      onOverview={() => {
+        setImmersiveView("overview");
+        setCameraReset((k) => k + 1);
+      }}
+      onFollow={() => setImmersiveView("follow")}
+    />
+  );
+
   const roomInfo = (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-2">
@@ -397,6 +447,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
           </Button>
         ) : null}
       </div>
+      {viewControls}
     </div>
   );
 
@@ -416,26 +467,35 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
 
   const board = (
     <div className="relative mx-auto w-[var(--board)] max-w-full">
-      <CityPlinth material={material}>
-      <ClassicBoard
-        tokens={playback.tokens}
-        identityOf={identityOf}
-        activeSeats={game.players.map((p) => p.seat)}
-        currentSeat={over ? null : (shown.players.find((p) => p.id === shown.currentPlayerId)?.seat ?? null)}
-        youSeat={mySeat}
-        states={states}
-        badges={badges}
-        labels={labels}
-        motion={playback.motion}
-        raised={playback.raised}
-        preview={preview}
-        effects={playback.effects}
-        {...(choosing ? { onActivate: onBoardActivate, onPreview: onBoardPreview } : {})}
-        title={`Ludo board. ${turn.title}. ${turn.detail}`}
-        dimmed={paused}
+      <BoardView
+        mode={boardMode}
+        quality={quality}
+        reduced={reduced}
         material={material}
+        immersiveView={immersiveView}
+        resetKey={cameraReset}
+        onImmersiveViewChange={setImmersiveView}
+        onReady={() => undefined}
+        onFailure={onBoardFailure}
+        onFrameStats={onFrameStats}
+        board={{
+        tokens: playback.tokens,
+        identityOf,
+        activeSeats: game.players.map((p) => p.seat),
+        currentSeat: over ? null : (shown.players.find((p) => p.id === shown.currentPlayerId)?.seat ?? null),
+        youSeat: mySeat,
+        states,
+        badges,
+        labels,
+        motion: playback.motion,
+        raised: playback.raised,
+        preview,
+        effects: playback.effects,
+        ...(choosing ? { onActivate: onBoardActivate, onPreview: onBoardPreview } : {}),
+        title: `Ludo board. ${turn.title}. ${turn.detail}`,
+        dimmed: paused,
+        }}
       />
-      </CityPlinth>
       {pausedOverlay}
     </div>
   );

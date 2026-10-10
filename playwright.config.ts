@@ -26,6 +26,9 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${CLIENT_PORT}`,
     browserName: "chromium",
+    // The 3D board renders with WebGL. CI machines have no GPU: opt in to Chromium's software renderer
+    // (SwiftShader) explicitly, as the implicit fallback is deprecated.
+    launchOptions: { args: ["--enable-unsafe-swiftshader"] },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
