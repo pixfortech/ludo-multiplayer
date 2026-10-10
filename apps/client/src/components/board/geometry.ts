@@ -3,7 +3,7 @@
 // the layout's grid cells into SVG coordinates. It holds no movement map of
 // its own and decides nothing about the game.
 
-import { CLASSIC_FINISH_STEP, CLASSIC_GRID, CLASSIC_LAST_TRACK_STEP, classicBaseSlots, classicSeatPath, type Cell } from "@ludo/board-layouts";
+import { CLASSIC_GRID, classicBaseSlots, classicSeatPath, classicStepCell, gridToWorld, type Cell, type WorldPoint } from "@ludo/board-layouts";
 
 /** One cell, in SVG units (the board scales as a whole). */
 export const CELL = 40;
@@ -22,11 +22,16 @@ export const cellCentre = (c: Cell): Point => ({ x: px(c.col) + CELL / 2, y: px(
 
 /** Where a token at `step` stands, as a layout cell (null while in its base). Steps: 0–50 track, 51–55 lane, 56 finish. */
 export function stepCell(seat: number, step: number | null): Cell | null {
-  if (step === null) return null;
-  const path = classicSeatPath(seat);
-  if (step <= CLASSIC_LAST_TRACK_STEP) return path.track[step]!;
-  if (step < CLASSIC_FINISH_STEP) return path.lane[step - CLASSIC_LAST_TRACK_STEP - 1]!;
-  return path.finish;
+  return classicStepCell(seat, step);
+}
+
+/**
+ * A 2D board point (SVG units) in 3D world units. The 3D board places tokens
+ * through this, from the same placements the 2D board draws (stacks included),
+ * so the two renderers can never disagree about where a token is.
+ */
+export function svgToWorld(p: Point): WorldPoint {
+  return gridToWorld((p.x - PAD) / CELL, (p.y - PAD) / CELL);
 }
 
 /** Centre of base slot `slot` (0–3) of a seat. */

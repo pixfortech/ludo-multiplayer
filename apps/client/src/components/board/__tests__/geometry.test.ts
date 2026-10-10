@@ -116,3 +116,15 @@ describe("token placement", () => {
     expect(placed[0]!.x === placed[1]!.x && placed[0]!.y === placed[1]!.y).toBe(false);
   });
 });
+
+describe("2D and 3D agree", () => {
+  it("maps every 2D position to the shared world position, for every seat, step and base slot", async () => {
+    const { tokenPositionToWorld, cellToWorld, CLASSIC_TRACK } = await import("@ludo/board-layouts");
+    const { piecePosition, svgToWorld, cellCentre } = await import("../geometry");
+    for (let seat = 0; seat < 4; seat++) {
+      for (let step = 0; step <= 56; step++) expect(svgToWorld(piecePosition(seat, step))).toEqual(tokenPositionToWorld(seat, step));
+      for (let slot = 0; slot < 4; slot++) expect(svgToWorld(piecePosition(seat, null, slot))).toEqual(tokenPositionToWorld(seat, null, slot));
+    }
+    for (const c of CLASSIC_TRACK) expect(svgToWorld(cellCentre(c))).toEqual(cellToWorld(c.row, c.col));
+  });
+});
