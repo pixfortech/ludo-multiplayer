@@ -83,6 +83,10 @@ The current player's base glows.
 
 `ClassicBoard` renders whatever positions it is given and reports which token was picked. A Canvas or 3D renderer can take the same inputs: placements, states and preview.
 
+### The 2.5D board (Batch C.1)
+
+`GameScreen` renders the board through `BoardView`: the 2.5D board by default (a lazily loaded three.js / React Three Fiber renderer), the 3D preview or the 2D `ClassicBoard` on request, and the 2D board while the 3D chunk loads or whenever 3D fails. All three take the same props from the playback. See [board-3d.md](board-3d.md).
+
 ### City themes (Batch B)
 
 In a city room, `GameScreen` passes the city's `boardMaterial2d` to `ClassicBoard` (neutral surfaces only: body, track cells, outlines, safe stars), wraps the board in a `CityPlinth`, and mounts a `CityBackdrop` behind the page: a fixed, non-interactive, `aria-hidden` layer whose artwork is a lazily loaded chunk per city. Geometry, seat colours, tokens, dice and every control are the same as on the classic table. See [city themes](city-themes.md#batch-b-2d-city-environments) and, for the 3D view, [3d-readiness.md](3d-readiness.md).

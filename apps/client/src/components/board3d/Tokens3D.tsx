@@ -9,7 +9,8 @@
 //
 // The visual is one component (PawnBody) behind a small interface, so an
 // animated character can replace it later without touching the board or the
-// rules: it receives the token's identity, state and motion sample.
+// rules: it receives the token's identity and state; Token3D places it,
+// scales it and moves it along the motion sample.
 
 import { memo, useEffect, useLayoutEffect, useRef } from "react";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
@@ -65,8 +66,8 @@ export class TokenKit {
   ) {
     this.pawn = pawnGeometry(detail);
     this.cap = discGeometry(PAWN.topRadius * 0.98, 0.004, detail);
-    this.ring = ringGeometry(0.43, 0.5, detail);
-    this.ringInner = ringGeometry(0.39, 0.43, detail);
+    this.ring = ringGeometry(0.41, 0.53, detail);
+    this.ringInner = ringGeometry(0.37, 0.41, detail);
     this.blob = ringGeometry(0, 0.36, detail);
     this.hit = new CylinderGeometry(0.5, 0.5, 1, 16).translate(0, 0.5, 0);
   }
@@ -99,7 +100,8 @@ export class TokenKit {
   }
 
   ringMaterial(identity: PlayerIdentity): Material {
-    return this.cached(`ring:${identity.id}`, () => new MeshBasicMaterial({ color: identity.body, transparent: true, opacity: 0.9 }));
+    // The seat's rim colour: darker than its body, so the ring reads on the light slot wells and cells.
+    return this.cached(`ring:${identity.id}`, () => new MeshBasicMaterial({ color: identity.rim, transparent: true, opacity: 0.95 }));
   }
 
   dispose(): void {
@@ -128,6 +130,26 @@ export interface Token3DProps {
   register: (key: string, object: Group | null) => void;
   onActivate?: ((key: string) => void) | undefined;
   onPreview?: ((key: string | null) => void) | undefined;
+}
+
+/** What a token's visual receives. A GLB character (Batch C.3) implements the same props. */
+export interface TokenBodyProps {
+  identity: PlayerIdentity;
+  state: BoardTokenState;
+  kit: TokenKit;
+  textures: TextureCache;
+  shadows: boolean;
+}
+
+/** The placeholder token: a lathe-turned resin pawn with the seat symbol on its flat top. */
+export function PawnBody({ identity, state, kit, textures, shadows }: TokenBodyProps) {
+  const dim = state === "unmovable";
+  return (
+    <>
+      <mesh geometry={kit.pawn} material={kit.body(identity, dim)} castShadow={shadows} receiveShadow={false} dispose={null} />
+      <mesh geometry={kit.cap} material={kit.top(identity, textures, dim)} position={[0, PAWN.height, 0]} dispose={null} />
+    </>
+  );
 }
 
 export const Token3D = memo(function Token3D({ token, kit, textures, shadows, reduced, register, onActivate, onPreview }: Token3DProps) {
@@ -189,7 +211,6 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
     }
   });
 
-  const dim = token.state === "unmovable";
   const hitRadius = Math.max(0.36, 0.55 * token.scale);
   const handlers = token.interactive
     ? {
@@ -217,8 +238,7 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
         </group>
       ) : null}
       <group ref={body}>
-        <mesh geometry={kit.pawn} material={kit.body(token.identity, dim)} castShadow={shadows} receiveShadow={false} dispose={null} />
-        <mesh geometry={kit.cap} material={kit.top(token.identity, textures, dim)} position={[0, PAWN.height, 0]} dispose={null} />
+        <PawnBody identity={token.identity} state={token.state} kit={kit} textures={textures} shadows={shadows} />
       </group>
       {token.badge !== null ? (
         <sprite position={[0.32 * token.scale, 0.95, -0.32 * token.scale]} scale={0.34} material={kit.badge(String(token.badge), false, textures)} dispose={null} />

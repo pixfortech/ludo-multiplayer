@@ -84,3 +84,22 @@ Reading: the static scenery costs nothing measurable (frame pacing identical to 
 
 Bundle (production build, gzip): main JS 147.2 → 149.2 KB (+2.0 KB), CSS 10.9 → 12.6 KB (+1.7 KB); each city's artwork is a separate chunk loaded only in that city (2.7–3.4 KB) plus a shared 2.4 KB scene kit.
 
+### The 2.5D board (Batch C.1, 2026-10-10)
+
+Headless Chromium, WebGL in software (SwiftShader, on the CPU), laptop viewport 1366 × 768, a live two-player game, from `e2e/tests/board3d-performance.spec.ts`. These compare views on one machine; they are not device frame rates, and no GPU device has been measured yet.
+
+| | 2D | 2.5D Low | 2.5D Medium | 3D preview Medium |
+| --- | --- | --- | --- | --- |
+| First drawn board after a reload | 211 ms | 1,224 ms | 1,640 ms | 1,805 ms |
+| Main thread busy while idle | 4.4% | 4.0% | 3.8% | 3.9% |
+| Main thread busy during a token move | 10.2% | 51.3% | 74.0% | 57.5% |
+| Worst frame during a move | 67 ms | 117 ms | 217 ms | 200 ms |
+| Tap to move request leaving the page | 0.5 ms | 1.0 ms | 1.6 ms | 1.0 ms |
+| GPU geometries / textures | — | 24 / 8 | 24 / 8 | 24 / 8 |
+| Draw calls / triangles per frame | — | 55 / 29k | 55 / 35k | 55 / 35k |
+| JS heap | 10.0 MB | 13.5 MB | 13.5 MB | 16.9 MB |
+
+Bundle (gzip): the main bundle is 151.2 KB (+2.0 KB for the view switch and controls); the 3D renderer chunk is 258.6 KB (three.js, React Three Fiber and the board), downloaded only when a 3D view is shown; the 2D board never loads it.
+
+Reading: at rest the 3D board costs nothing (on-demand rendering); taps reach the server request in about a millisecond; during movement, software rendering is expensive, which is what the automatic quality steps and the 2D fallback are for. Measured on the way: Medium uses contact shadows instead of a shadow-map pass (worst frame 333 → 217 ms), and small pieces use fewer segments (58k → 35k triangles).
+

@@ -1,6 +1,6 @@
 # 3D technical readiness specification
 
-**Status: specification (Batch B).** Nothing in this document is implemented yet. It defines what the 3D city experience must do, how it is built, and how it is proven, so the next milestone (a genuine interactive Kolkata proof of concept, [kolkata-3d-poc.md](../design/kolkata-3d-poc.md)) starts from agreed contracts.
+**Status: foundation implemented (Batch C.1).** The shared world coordinates, the procedural board, the 2.5D aerial view, placeholder tokens, picking, playback, the camera controller (aerial, isometric, orbit, follow, reset), quality presets and the 2D fallback are built and tested: see [board-3d.md](board-3d.md). Still to come: city environments in 3D (Kolkata first, Batch C.2), 3D dice, the Explore View and characters (Batch C.3). The rest of this document is the specification those batches implement, so they start from agreed contracts ([kolkata-3d-poc.md](../design/kolkata-3d-poc.md)).
 
 ## Principles
 

@@ -111,6 +111,17 @@ The driver reads the authoritative state and queues dice so a game ends determin
 | `city-environments.spec.ts` | Every city at desktop (1920×1080), laptop (1366×768), tablet landscape and portrait, phone portrait (390×844) and landscape (844×390): the right city; scenery only in the fixed, non-interactive backdrop layer; nothing on top of the board (15 probe points) or the die; the whole board on screen inside its plinth; no sideways scrolling. Then joining, a refresh and a network drop keep the city, with play in sync. `E2E_SHOTS_DIR` saves a screenshot of every case. |
 | `city-performance.spec.ts` | Classic against each city, with ambient motion on and with reduced motion: main-thread time, style and layout, frame pacing idle and during a move, DOM size. `E2E_PERF_OUT` saves the numbers. Headless Chromium composites in software: relative numbers only, not device frame rates. |
 
+## The 2.5D board (Batch C.1)
+
+The 3D board is a WebGL canvas (software-rendered in headless Chromium). `e2e/support/board3d.ts` decodes screenshot pixels and reads the renderer's hidden mirror (each token's step, state and projected position; each cell's colour and projected centre), and picks tokens with the mouse or touch where they appear. Suites written for the SVG board pin the 2D view (`openPlayer(..., { board: "2d" })`).
+
+| Spec | Covers |
+| ---- | ------ |
+| `board3d.spec.ts` | Topology drawn as approved (4 starts in seat colours, 4 safe stars, 20 lane cells deepening, orientation; pixels within ΔE 9–14 of the layout's colours); mouse and touch picks of legal tokens only (an opponent's or unmovable token sends nothing); the die before automatic movement; capture and home entry against a 2D player; switching 2.5D / 3D / 2D without any request or change on the server; 3D camera orbit, follow and overview; refresh, reconnect and full screen; the no-WebGL and lost-context fallbacks; the whole board and every token in view at six screen sizes |
+| `board3d-performance.spec.ts` | 2D against 2.5D (Low, Medium) and the 3D preview: first frame, the lazy chunk, frames and main-thread time idle and during a move, GPU object counts, tap-to-request latency |
+
+The simulated network loss (Playwright's WebSocket route closing new connections) leaves one connection attempt hanging until socket.io's 20-second connect timeout; a real network failure ends attempts at once. Tests that drop the network wait for "Reconnected" (up to 45 s) before comparing boards.
+
 ## Bugs found and fixed
 
 1. **A double click sent two requests.** Two clicks in the same moment, before React re-rendered, sent two `game:roll` (or `game:move`) requests. The server's state-version check refused the second as stale, so the game state was never wrong. But the client sent a duplicate request and could briefly show a refusal.
