@@ -378,9 +378,10 @@ test("the 2.5D board fits every supported screen: whole board and all tokens in 
       expect(canvas.y + canvas.height, where).toBeLessThanOrEqual(size.height + 0.5);
       expect(await p.page.evaluate(() => document.documentElement.scrollWidth), `${where}: no sideways scroll`).toBeLessThanOrEqual(size.width);
       const inCanvas = (pt: { x: number; y: number }) => pt.x > canvas.x && pt.x < canvas.x + canvas.width && pt.y > canvas.y && pt.y < canvas.y + canvas.height;
-      const cells = await boardCells(p.page);
-      for (const c of cells) expect(inCanvas(c), `${where}: cell ${c.kind} r${c.row}c${c.col} in view`).toBe(true);
-      for (const t of await boardTokens(p.page)) expect(inCanvas(t), `${where}: token ${t.key} in view`).toBe(true);
+      // Once the view has settled (the 3D camera eases into its overview), every cell and token is in view.
+      const outOfView = async () => [...(await boardCells(p.page)).filter((c) => !inCanvas(c)).map((c) => `cell ${c.kind} r${c.row}c${c.col}`), ...(await boardTokens(p.page)).filter((t) => !inCanvas(t)).map((t) => `token ${t.key}`)];
+      await expect.poll(outOfView, { message: `${where}: the whole board and every token in view`, timeout: 5000 }).toEqual([]);
+      expect(await boardCells(p.page)).toHaveLength(76);
       if (process.env.E2E_SHOTS_DIR) await p.page.screenshot({ path: `${process.env.E2E_SHOTS_DIR}/board-${mode}-${size.label}.png` });
       if (mode === "3d") await visible(p.page.getByRole("radio", { name: "2.5D board" })).click();
     }
