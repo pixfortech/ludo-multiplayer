@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import type { RoomPreview } from "@ludo/shared-types";
+import { CityBadge } from "../components/city/CityBadge";
 import { AUTO_COLOUR, ColourPicker } from "../components/game/ColourPicker";
 import { MobileActionBar } from "../components/layout/MobileActionBar";
 import { PlayerToken } from "../components/game/PlayerToken";
@@ -179,6 +180,7 @@ export function JoinRoomPage({ initialCode }: { initialCode: string | null }) {
                 <p className="tabular text-[15px] font-semibold text-ink">
                   {room.joinedCount} of {room.maxPlayers} players
                 </p>
+                <CityBadge city={room.cityTheme} layout="row" />
                 <ul className="flex flex-col gap-2">
                   {room.colours
                     .filter((c) => c.taken)

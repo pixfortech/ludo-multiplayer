@@ -10,6 +10,7 @@
 import type {
   Ack,
   ActionData,
+  CityThemeId,
   GameActionView,
   ClientToServerEvents,
   ErrorDetails,
@@ -82,6 +83,8 @@ export interface CreateRoomInput {
   colour?: string;
   autoMove?: boolean;
   rankingMode?: "winner-only" | "full-ranking";
+  /** Presentation only: the city every player in the room sees. */
+  cityTheme?: CityThemeId;
 }
 
 export interface JoinRoomInput {

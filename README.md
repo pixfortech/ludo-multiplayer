@@ -28,6 +28,7 @@ packages/
   assets/            Asset manifest schema, validation, resolver with fallbacks
   game-engine/       Pure rules engine (server-authoritative)
   board-layouts/     Board geometry for 2–15 players
+  city-themes/       City themes as data (Kolkata, Delhi, Chennai, Mumbai, Bengaluru): presentation only
 assets/              Source tree for generated and hand-made art/audio (+ manifest.json)
 docs/
   architecture/      System design
@@ -156,6 +157,7 @@ Variables set with `$env:` last for the current terminal only. `Remove-Item Env:
 | 1 | Classic 2–4 player game engine with full rules and tests ([engine](docs/architecture/game-engine.md)) | ✅ |
 | 2 | Rooms and sessions backend: create, join, resume, identity, persistence foundation | In progress: 2A persistence ✅, 2B rooms and players ✅ ([rooms](docs/architecture/rooms.md)), 2C real-time gameplay ✅ ([realtime](docs/architecture/realtime.md)), 2D resume and recovery ✅ ([sessions](docs/architecture/sessions.md)), 2E CI and QA ✅ ([QA](docs/qa/phase-2e.md)) |
 | 3 | Basic 2D client: lobby, room, classic board, dice, movement, reconnect | In progress: 3A app shell, home, create and join, live lobby, sessions ✅; 3B playable 2D board, dice, moves, game screen ✅ ([client](docs/architecture/client.md)) |
+| 3T | City themes: the same classic board dressed as an Indian city ([city themes](docs/architecture/city-themes.md)) | In progress: A architecture, data, city picker, room persistence ✅; B 2D city mode, C 3D, D dialogue and reactions, E polish to come |
 | 4 | Premium 2D UI: animation, responsive layouts, fullscreen, accessibility | |
 | 5 | Polygon board geometry for 2–15 players, with previews and tests | |
 | 6 | Expanded 5–15 player gameplay: fair paths, fast mode, power system foundation | |

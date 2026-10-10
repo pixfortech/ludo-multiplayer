@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RoomPlayerView, RoomView } from "@ludo/shared-types";
+import { getCityTheme } from "@ludo/city-themes";
 import { ClassicBoardArt } from "../components/brand/ClassicBoardArt";
+import { CityBadge } from "../components/city/CityBadge";
 import { GameScreen } from "../components/game/GameScreen";
 import { PlayerToken } from "../components/game/PlayerToken";
 import { RoomCodeCard } from "../components/game/RoomCodeCard";
@@ -116,6 +118,7 @@ function EmptySlot() {
 function SettingsList({ room }: { room: RoomView }) {
   const rows: [string, string][] = [
     ["Game", "Classic"],
+    ["City", getCityTheme(room.settings.cityTheme).name],
     ["Players", `${room.maxPlayers}`],
     ["Auto-move", room.settings.autoMove ? "On" : "Off"],
     ["Game ends", room.settings.rankingMode === "winner-only" ? "First player home" : "Full ranking"],
@@ -359,7 +362,8 @@ export function LobbyPage({ code }: { code: string }) {
 
         <div className="flex flex-col gap-6 lg:col-span-2 xl:col-span-1">
           <Card className="grid gap-5 p-5 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)] sm:p-6 xl:grid-cols-1">
-            <div className="mx-auto w-full max-w-[240px]">
+            <div className="mx-auto flex w-full max-w-[240px] flex-col gap-3">
+              <CityBadge city={room.settings.cityTheme} />
               <ClassicBoardArt
                 activeSeats={occupiedSeats.length ? occupiedSeats : [0]}
                 pieces={room.players.flatMap((p) => [0, 1, 2, 3].map((slot) => ({ key: `${p.playerId}-${slot}`, seat: p.seat, step: null, slot })))}

@@ -55,6 +55,14 @@ describe("join room", () => {
     expect(screen.getByText("1 of 4 players")).toBeTruthy();
   });
 
+  it("shows the room's city before joining", async () => {
+    const s = services();
+    s.client.previewResult = preview({ cityTheme: "chennai" });
+    render(<App services={s} initialPath="/join/ABC234" />);
+    expect(await screen.findByText("Graceful moves by the shore")).toBeTruthy();
+    expect(document.querySelector("[data-room-city]")?.getAttribute("data-room-city")).toBe("chennai");
+  });
+
   it("joins with the chosen name and colour, and refreshes availability if the colour was just taken", async () => {
     const s = services();
     s.client.previewResult = preview();

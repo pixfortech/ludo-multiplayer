@@ -25,6 +25,17 @@ describe("lobby", () => {
     expect(screen.getByText("First player home")).toBeTruthy();
   });
 
+  it("shows the room's city, and nothing extra for the classic table", () => {
+    const { unmount } = render(<App services={inRoom("p-host")} initialPath="/room/ABC234" />);
+    expect(screen.getByText("City").nextElementSibling?.textContent).toBe("Classic");
+    expect(document.querySelector("[data-room-city]")).toBeNull();
+    unmount();
+    render(<App services={inRoom("p-host", roomView({ settings: { ...roomView().settings, cityTheme: "kolkata" } }))} initialPath="/room/ABC234" />);
+    expect(screen.getByText("City").nextElementSibling?.textContent).toBe("Kolkata");
+    expect(document.querySelector("[data-room-city]")?.getAttribute("data-room-city")).toBe("kolkata");
+    expect(screen.getByText("Every move tells a story")).toBeTruthy();
+  });
+
   it("gives only the host a Start button, enabled once two players are in", async () => {
     const s = inRoom("p-host", roomView({ players: [player()] }));
     render(<App services={s} initialPath="/room/ABC234" />);

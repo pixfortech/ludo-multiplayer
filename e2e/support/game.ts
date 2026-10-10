@@ -59,13 +59,14 @@ async function seatId(page: Page): Promise<string> {
   return (JSON.parse(marker) as { playerId: string }).playerId;
 }
 
-export async function createRoom(host: Player, options: { players: 2 | 3 | 4; autoMove?: boolean; fullRanking?: boolean }): Promise<string> {
+export async function createRoom(host: Player, options: { players: 2 | 3 | 4; autoMove?: boolean; fullRanking?: boolean; city?: string }): Promise<string> {
   const { page } = host;
   await page.goto("/create");
   await page.getByLabel("Your name").fill(host.name);
   await page.getByRole("radio", { name: String(options.players), exact: true }).click();
   if (options.autoMove === false) await page.getByRole("switch", { name: /Auto-move/ }).click();
   if (options.fullRanking) await page.getByRole("radio", { name: "Full ranking" }).click();
+  if (options.city) await page.getByRole("radiogroup", { name: "City" }).getByRole("radio", { name: new RegExp(`^${options.city}:`) }).click();
   await visible(page.getByRole("button", { name: "Create room" })).click();
   await page.waitForURL(/\/room\/[A-Z0-9]{6}$/);
   host.id = await seatId(page);

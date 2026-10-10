@@ -3,7 +3,7 @@
 import type { GameStateView } from "@ludo/shared-types";
 
 export interface ServerSnapshot {
-  room: { id: string; code: string; status: string; hostPlayerId: string; settings: { autoMove: boolean; rankingMode: string } };
+  room: { id: string; code: string; status: string; hostPlayerId: string; settings: { autoMove: boolean; rankingMode: string; cityTheme?: string } };
   players: { id: string; displayName: string; seat: number; colour: string; connectionStatus: string; finishPlace: number | null }[];
   game: GameStateView | null;
   /** The full authoritative history (the wire state carries only the last 20 entries). */

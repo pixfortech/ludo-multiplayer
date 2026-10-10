@@ -1,5 +1,8 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { getCityTheme, type CityThemeId } from "@ludo/city-themes";
+import { DEFAULT_CITY_THEME } from "@ludo/shared-types";
 import { ClassicBoardArt, type BoardPiece } from "../components/brand/ClassicBoardArt";
+import { CityPicker } from "../components/city/CityPicker";
 import { MobileActionBar } from "../components/layout/MobileActionBar";
 import { AUTO_COLOUR, ColourPicker } from "../components/game/ColourPicker";
 import { PlayerToken } from "../components/game/PlayerToken";
@@ -51,6 +54,7 @@ export function CreateRoomPage() {
   const [colour, setColour] = useState<string>(AUTO_COLOUR);
   const [autoMove, setAutoMove] = useState(true);
   const [ranking, setRanking] = useState<"winner-only" | "full-ranking">("winner-only");
+  const [city, setCity] = useState<CityThemeId>(DEFAULT_CITY_THEME);
   const [submitting, setSubmitting] = useState(false);
   const [nameError, setNameError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -78,6 +82,7 @@ export function CreateRoomPage() {
         colour,
         autoMove,
         rankingMode: ranking,
+        cityTheme: city,
       });
       rememberName(trimmed);
       seats.save({ roomCode: created.room.code, playerId: created.player.playerId, secret: created.credential.secret, displayName: created.player.displayName, roomName: created.room.name });
@@ -132,6 +137,14 @@ export function CreateRoomPage() {
             <TextField label="Room name (optional)" maxLength={40} placeholder="Friday night Ludo" value={roomName} onChange={(e) => setRoomName(e.target.value)} />
           </Card>
 
+          <Card className="flex flex-col gap-4 p-5 sm:p-7">
+            <div className="flex flex-col gap-1">
+              <h2 className="font-display text-xl font-semibold text-ink">City</h2>
+              <p className="text-[15px] text-ink-muted">Where the table is set. Every player sees the same city; the board and rules stay the same.</p>
+            </div>
+            <CityPicker label="City" hideLabel value={city} onChange={setCity} />
+          </Card>
+
           <Card className="flex flex-col gap-5 p-5 sm:p-7">
             <h2 className="font-display text-xl font-semibold text-ink">Rules</h2>
             <Switch label="Auto-move" description="When only one token can move, it moves for you." checked={autoMove} onChange={setAutoMove} />
@@ -171,6 +184,12 @@ export function CreateRoomPage() {
               <div className="rounded-[var(--radius-control)] bg-[#f6f3ee] px-3 py-2">
                 <dt className="text-ink-muted">Auto-move</dt>
                 <dd className="font-semibold text-ink">{autoMove ? "On" : "Off"}</dd>
+              </div>
+              <div className="col-span-2 rounded-[var(--radius-control)] bg-[#f6f3ee] px-3 py-2">
+                <dt className="text-ink-muted">City</dt>
+                <dd className="font-semibold text-ink" data-summary-city>
+                  {getCityTheme(city).name}
+                </dd>
               </div>
               <div className="col-span-2 rounded-[var(--radius-control)] bg-[#f6f3ee] px-3 py-2">
                 <dt className="text-ink-muted">Game ends</dt>
