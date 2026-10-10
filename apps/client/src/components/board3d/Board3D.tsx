@@ -213,7 +213,7 @@ function TapCatcher({ candidates, onActivate }: { candidates: readonly { key: st
     if (best) onActivate(best);
   };
   return (
-    <mesh position={[0, 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]} onClick={onClick}>
+    <mesh position={[0, 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]} onClick={onClick} onUpdate={(m) => m.updateWorldMatrix(true, false)}>
       <planeGeometry args={[15, 15]} />
       <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
     </mesh>

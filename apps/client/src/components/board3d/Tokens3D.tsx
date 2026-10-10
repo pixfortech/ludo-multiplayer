@@ -52,6 +52,7 @@ export class TokenKit {
   readonly cap: BufferGeometry;
   readonly ring: BufferGeometry;
   readonly ringInner: BufferGeometry;
+  readonly halo: BufferGeometry;
   readonly blob: BufferGeometry;
   readonly hit: BufferGeometry;
   readonly hitMaterial = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
@@ -68,6 +69,7 @@ export class TokenKit {
     this.cap = discGeometry(PAWN.topRadius * 0.98, 0.004, detail);
     this.ring = ringGeometry(0.41, 0.53, detail);
     this.ringInner = ringGeometry(0.37, 0.41, detail);
+    this.halo = ringGeometry(0.53, 0.6, detail);
     this.blob = ringGeometry(0, 0.36, detail);
     this.hit = new CylinderGeometry(0.5, 0.5, 1, 16).translate(0, 0.5, 0);
   }
@@ -105,7 +107,7 @@ export class TokenKit {
   }
 
   dispose(): void {
-    for (const g of [this.pawn, this.cap, this.ring, this.ringInner, this.blob, this.hit]) g.dispose();
+    for (const g of [this.pawn, this.cap, this.ring, this.ringInner, this.halo, this.blob, this.hit]) g.dispose();
     for (const m of [this.hitMaterial, this.blobMaterial, this.darkRing, this.whiteRing, ...this.materials.values()]) m.dispose();
     this.materials.clear();
   }
@@ -234,6 +236,8 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
       {token.state === "movable" || token.state === "selected" ? (
         <group ref={ring} position={[0, 0.008, 0]}>
           <mesh geometry={kit.ring} material={token.state === "selected" ? kit.darkRing : kit.ringMaterial(token.identity)} dispose={null} />
+          {/* A white halo outside the ring: it reads on the seat-coloured bases as well as on light cells. */}
+          <mesh geometry={kit.halo} material={kit.whiteRing} dispose={null} />
           {token.state === "selected" ? <mesh geometry={kit.ringInner} material={kit.whiteRing} dispose={null} /> : null}
         </group>
       ) : null}
@@ -246,7 +250,9 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
       {token.count !== null ? (
         <sprite position={[-0.38, 0.9, -0.38]} scale={0.32} material={kit.badge(String(token.count), true, textures)} dispose={null} />
       ) : null}
-      {token.interactive ? <mesh geometry={kit.hit} material={kit.hitMaterial} scale={[hitRadius / 0.5, 1, hitRadius / 0.5]} {...handlers} dispose={null} /> : null}
+      {/* The pick target gets its world position at once: a click right after the token becomes movable,
+          before the next frame is drawn, must still find it. */}
+      {token.interactive ? <mesh geometry={kit.hit} material={kit.hitMaterial} scale={[hitRadius / 0.5, 1, hitRadius / 0.5]} {...handlers} onUpdate={(m) => m.updateWorldMatrix(true, false)} dispose={null} /> : null}
     </group>
   );
 });
