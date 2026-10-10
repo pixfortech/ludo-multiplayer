@@ -4,6 +4,7 @@
 // movable, their badges and their previews all come from the server's
 // legal-move list via the game screen.
 import { memo, useMemo } from "react";
+import type { BoardMaterial2d } from "@ludo/city-themes";
 import type { PlayerIdentity } from "@ludo/design-tokens";
 import { BoardSurface } from "./BoardSurface";
 import type { TokenMotion } from "../game/useBoardPlayback";
@@ -32,9 +33,11 @@ export interface ClassicBoardProps {
   onPreview?: (key: string | null) => void;
   title: string;
   dimmed?: boolean;
+  /** A city theme's board surfaces (presentation only; default: the classic table). */
+  material?: BoardMaterial2d;
 }
 
-export const ClassicBoard = memo(function ClassicBoard({ tokens, identityOf, activeSeats, currentSeat, youSeat, states = {}, badges = {}, labels = {}, motion = {}, raised = [], preview = null, effects = [], onActivate, onPreview, title, dimmed = false }: ClassicBoardProps) {
+export const ClassicBoard = memo(function ClassicBoard({ tokens, identityOf, activeSeats, currentSeat, youSeat, states = {}, badges = {}, labels = {}, motion = {}, raised = [], preview = null, effects = [], onActivate, onPreview, title, dimmed = false, material }: ClassicBoardProps) {
   const placements = useMemo(() => placeTokens(tokens), [tokens]);
   // Draw order: plain tokens, then movable ones (so their hit areas win), then raised.
   const ordered = useMemo(() => {
@@ -45,7 +48,7 @@ export const ClassicBoard = memo(function ClassicBoard({ tokens, identityOf, act
 
   return (
     <svg viewBox={`0 0 ${BOARD_PX} ${BOARD_PX}`} role="group" aria-label={title} className="block h-auto w-full select-none" data-testid="game-board">
-      <BoardSurface activeSeats={activeSeats} currentSeat={currentSeat} baseLabels={baseLabels} />
+      <BoardSurface activeSeats={activeSeats} currentSeat={currentSeat} baseLabels={baseLabels} {...(material ? { material } : {})} />
       {preview ? <MovePreviewPath preview={preview} /> : null}
       <g opacity={dimmed ? 0.85 : 1} style={{ transition: "opacity 220ms ease" }}>
         {ordered.map((p) => {

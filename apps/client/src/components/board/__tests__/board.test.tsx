@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { PLAYER_IDENTITIES } from "@ludo/design-tokens";
+import { CITY_THEMES, CLASSIC_BOARD_MATERIAL, boardMaterial2d } from "@ludo/city-themes";
+import { BOARD_SURFACES, PLAYER_IDENTITIES } from "@ludo/design-tokens";
+import { SEPARATOR, WHITE } from "../surfaceShared";
 import { ClassicBoard } from "../ClassicBoard";
 
 const identityOf = (id: string) => PLAYER_IDENTITIES[id === "a" ? 0 : 2]!;
@@ -67,4 +69,28 @@ describe("classic board", () => {
     expect(screen.getByTestId("move-preview")).toBeTruthy();
     expect(screen.getByTestId("move-destination")).toBeTruthy();
   });
+
+  it("keeps the classic table's approved surfaces by default", () => {
+    expect(CLASSIC_BOARD_MATERIAL).toMatchObject({ body: WHITE, cell: BOARD_SURFACES.cell, separator: SEPARATOR, safeMark: BOARD_SURFACES.safeMark });
+    const { container } = board();
+    const cell = container.querySelector('[data-cell="r6c2"] rect')!;
+    expect(cell.getAttribute("fill")).toBe(BOARD_SURFACES.cell);
+    expect(container.querySelector("[data-safe]")!.getAttribute("fill")).toBe(BOARD_SURFACES.safeMark);
+  });
+
+  it("dresses only the neutral surfaces for a city: the same cells, lanes, starts, stars and tokens", () => {
+    const classicRoot = board().container;
+    const classic = classicRoot.innerHTML;
+    const material = boardMaterial2d(CITY_THEMES.kolkata);
+    const { container } = render(<ClassicBoard tokens={tokens} identityOf={identityOf} activeSeats={[0, 2]} currentSeat={0} youSeat={0} title="Board" material={material} />);
+    // Geometry and seat colours are identical: only the neutral fills differ.
+    const neutral = (html: string) => html.replaceAll(/fill="#[0-9A-Fa-f]{6}"|stroke="#[0-9A-Fa-f]{6}"/g, "").replaceAll(/_r_[0-9a-z]+_|«r[0-9a-z]+»|:r[0-9a-z]+:/g, "id");
+    expect(neutral(container.innerHTML)).toBe(neutral(classic));
+    expect(container.querySelector('[data-cell="r6c2"] rect')!.getAttribute("fill")).toBe(material.cell);
+    expect(container.querySelector('[data-cell="r6c1"] rect')!.getAttribute("fill")).toBe(PLAYER_IDENTITIES[0]!.body);
+    expect(container.querySelector("[data-safe]")!.getAttribute("fill")).toBe(material.safeMark);
+    const laneFills = (root: Element) => [...root.querySelectorAll("[data-lane] rect")].map((r) => r.getAttribute("fill"));
+    expect(laneFills(container)).toEqual(laneFills(classicRoot));
+  });
 });
+
