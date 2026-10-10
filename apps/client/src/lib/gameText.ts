@@ -47,21 +47,69 @@ export function describeEntry(entry: GameHistoryEntry, nameOf: NameOf): string |
   }
 }
 
-/** Short banners for the action just shown (at most two). */
-export function calloutsFor(entries: readonly GameHistoryEntry[], nameOf: NameOf, youId: string | null): string[] {
-  const out: string[] = [];
-  const you = (playerId: string) => playerId === youId;
-  for (const e of entries) {
-    if (e.type === "win") out.push(you(e.playerId) ? "You win!" : `${nameOf(e.playerId)} wins!`);
-    else if (e.type === "player-finished" && !entries.some((x) => x.type === "win" && x.playerId === e.playerId)) out.push(`${you(e.playerId) ? "You" : nameOf(e.playerId)} finished ${ordinal(e.place)}`);
-    else if (e.type === "forfeit") out.push(you(e.playerId) ? "Three sixes: turn forfeited" : `${nameOf(e.playerId)} rolled three sixes: turn forfeited`);
-    else if (e.type === "auto-pass") out.push(you(e.playerId) ? "No moves: passing turn" : `${nameOf(e.playerId)} has no moves: passing turn`);
-    else if (e.type === "bonus-roll") {
-      const reason = e.reasons.includes("capture") ? "Capture" : e.reasons.includes("home") ? "Home" : "Six";
-      out.push(you(e.playerId) ? `${reason}: roll again` : `${reason}: ${nameOf(e.playerId)} rolls again`);
-    } else if (e.type === "auto-move") out.push("Auto-moved: only one legal move");
+/** What the turn banner says about the action just shown. One banner, one visual language. */
+export type TurnEventKind = "win" | "finished" | "forfeit" | "capture" | "home" | "six" | "pass" | "auto";
+
+export interface TurnEvent {
+  kind: TurnEventKind;
+  /** The banner itself ("Capture: roll again"). */
+  title: string;
+  /** One quieter line under it, if useful ("You captured Ben's token"). */
+  detail: string | null;
+  /** A full sentence for screen readers. */
+  spoken: string;
+  /** Whose event it is (colours a capture banner). */
+  playerId: string;
+}
+
+const MULTI = ["", "", "Double ", "Triple ", "Quadruple "];
+
+/** The single most important thing about the action just shown, or null when there is nothing to say. */
+export function turnEventFor(entries: readonly GameHistoryEntry[], nameOf: NameOf, youId: string | null): TurnEvent | null {
+  const you = (id: string) => id === youId;
+  const who = (id: string) => (you(id) ? "You" : nameOf(id));
+  const autoMoved = entries.some((e) => e.type === "auto-move");
+  const autoLine = autoMoved ? "Auto-moved: only one legal move" : null;
+
+  const win = entries.find((e) => e.type === "win");
+  if (win && win.type === "win") {
+    const title = you(win.playerId) ? "You win!" : `${nameOf(win.playerId)} wins!`;
+    return { kind: "win", title, detail: "All four tokens are home.", spoken: `${title} All four tokens are home. The game is over.`, playerId: win.playerId };
   }
-  return out.slice(0, 2);
+  const finished = entries.find((e) => e.type === "player-finished");
+  if (finished && finished.type === "player-finished") {
+    const title = `${who(finished.playerId)} finished ${ordinal(finished.place)}`;
+    return { kind: "finished", title, detail: "All four tokens are home.", spoken: `${title}. All four tokens are home.`, playerId: finished.playerId };
+  }
+  const forfeit = entries.find((e) => e.type === "forfeit");
+  if (forfeit && forfeit.type === "forfeit") {
+    const title = you(forfeit.playerId) ? "Three sixes: turn forfeited" : `${nameOf(forfeit.playerId)} rolled three sixes: turn forfeited`;
+    return { kind: "forfeit", title, detail: null, spoken: `${title}.`, playerId: forfeit.playerId };
+  }
+  const bonus = entries.find((e) => e.type === "bonus-roll");
+  if (bonus && bonus.type === "bonus-roll") {
+    const id = bonus.playerId;
+    const again = you(id) ? "roll again" : `${nameOf(id)} rolls again`;
+    if (bonus.reasons.includes("capture")) {
+      const captures = entries.filter((e) => e.type === "capture");
+      const victims = [...new Set(captures.map((c) => (c.type === "capture" ? c.victimPlayerId : "")))];
+      const whose = victims.map((v) => (you(v) ? "your" : `${nameOf(v)}'s`)).join(" and ");
+      const detail = `${who(id)} captured ${whose} ${captures.length > 1 ? `${captures.length} tokens` : "token"}`;
+      return { kind: "capture", title: `${MULTI[Math.min(captures.length, 4)]}${captures.length > 1 ? "capture" : "Capture"}: ${again}`, detail, spoken: `${detail}. ${you(id) ? "You roll again." : `${nameOf(id)} rolls again.`}`, playerId: id };
+    }
+    if (bonus.reasons.includes("home")) {
+      return { kind: "home", title: `Home: ${again}`, detail: autoLine, spoken: `${who(id)} brought a token home. ${you(id) ? "You roll again." : `${nameOf(id)} rolls again.`}`, playerId: id };
+    }
+    return { kind: "six", title: `Six: ${again}`, detail: autoLine, spoken: `${you(id) ? "You" : nameOf(id)} rolled a six. ${you(id) ? "Roll again." : `${nameOf(id)} rolls again.`}`, playerId: id };
+  }
+  const pass = entries.find((e) => e.type === "auto-pass");
+  if (pass && pass.type === "auto-pass") {
+    const title = you(pass.playerId) ? "No moves: passing turn" : `${nameOf(pass.playerId)} has no moves: passing turn`;
+    return { kind: "pass", title, detail: null, spoken: `${title}.`, playerId: pass.playerId };
+  }
+  const auto = entries.find((e) => e.type === "auto-move");
+  if (auto && auto.type === "auto-move") return { kind: "auto", title: "Auto-moved: only one legal move", detail: null, spoken: "Auto-moved: only one legal move.", playerId: auto.playerId };
+  return null;
 }
 
 /** Where a legal move goes, in words: "Base → start", "6 squares", "Into home lane", "Finishes". */

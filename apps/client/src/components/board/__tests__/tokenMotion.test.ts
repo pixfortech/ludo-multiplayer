@@ -27,12 +27,17 @@ describe("token travel keyframes", () => {
     expect(frames.body.some((f) => String(f.transform).includes("scale(1.04, 0.95)"))).toBe(true);
   });
 
-  it("returns a captured token along a curve, shrunk and faded, not a straight line", () => {
+  it("a captured token reacts in place first, then returns along a curve, shrunk and faded", () => {
     const base = { x: 100, y: 600 };
     const frames = tokenKeyframes("capture", from, base, CELL);
-    const mid = xy(frames.travel[2]!);
-    expect(mid[0]).not.toBeCloseTo(100); // bowed off the straight vertical path
-    expect(frames.body[1]).toMatchObject({ transform: "scale(0.8)", opacity: 0.35 });
+    // The impact: still on its cell, with a jolt, before it leaves.
+    expect(xy(frames.travel[1]!)).toEqual([100, 200]);
+    expect(frames.travel[1]!.offset).toBeGreaterThan(0.15);
+    expect(frames.body[1]!.transform).toContain("scale(1.12)");
+    // Then home along a bowed path, small and faded.
+    const mid = xy(frames.travel[3]!);
+    expect(mid[0]).not.toBeCloseTo(100);
+    expect(frames.body.find((f) => f.opacity === 0.35)).toMatchObject({ transform: "scale(0.8) rotate(0deg)" });
   });
 
   it("does not lift or bounce under reduced motion", () => {

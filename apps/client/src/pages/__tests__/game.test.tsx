@@ -187,9 +187,38 @@ describe("game screen", () => {
     });
     expect(step("p-ben:1")).toBe("base");
     await act(async () => {
-      vi.advanceTimersByTime(600);
+      vi.advanceTimersByTime(140 + 520 + 20);
     });
     expect(screen.getAllByText("Capture: Aman rolls again").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Aman captured your token").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("turn-callouts")[0]!.getAttribute("data-kind")).toBe("capture");
+  });
+
+  it("sends every token captured by one move home together, after the attacker lands", async () => {
+    vi.useFakeTimers();
+    const s = inGame(host, withTokens(gameView({ stateVersion: 7, historyLength: 10 }), [8, null, null, null], [null, 22, 22, null]));
+    const history: GameHistoryEntry[] = [
+      { seq: 11, type: "move", playerId: host, tokenId: 0, from: 8, to: 10, dice: 2 },
+      { seq: 12, type: "capture", playerId: host, tokenId: 0, cell: 10, victimPlayerId: "p-ben", victimTokenId: 1 },
+      { seq: 13, type: "capture", playerId: host, tokenId: 0, cell: 10, victimPlayerId: "p-ben", victimTokenId: 2 },
+      { seq: 14, type: "bonus-roll", playerId: host, reasons: ["capture"] },
+    ];
+    act(() => s.client.set({ game: withTokens(gameView({ stateVersion: 8, recentHistory: history, historyLength: 14 }), [10, null, null, null], [null, null, null, null]) }));
+    await act(async () => {
+      vi.advanceTimersByTime(170 * 2 - 10);
+    });
+    expect([step("p-ben:1"), step("p-ben:2")]).toEqual(["22", "22"]);
+    await act(async () => {
+      vi.advanceTimersByTime(10 + 60);
+    });
+    expect([step("p-ben:1"), step("p-ben:2")], "both leave together (60 ms apart)").toEqual(["base", "base"]);
+    await act(async () => {
+      vi.advanceTimersByTime(800);
+    });
+    expect(screen.getAllByText("Double capture: roll again").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("You captured Ben's 2 tokens").length).toBeGreaterThan(0);
+    // Each token is drawn exactly once.
+    expect(screen.getAllByTestId("token-p-ben:1")).toHaveLength(1);
   });
 
   it("snaps to the server's state after a refresh or missed versions, without replaying moves", () => {

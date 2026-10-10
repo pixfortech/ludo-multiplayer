@@ -13,7 +13,7 @@ import type { GameStateView, RoomView } from "@ludo/shared-types";
 import type { ConnectionState, Notice } from "../../lib/connection";
 import { friendlyError } from "../../lib/errors";
 import { formatRoomCode } from "../../lib/format";
-import { calloutsFor, moveOutcomes, moveSummary, ordinal, trayOrder } from "../../lib/gameText";
+import { moveOutcomes, moveSummary, ordinal, trayOrder, turnEventFor } from "../../lib/gameText";
 import { identityFor } from "../../lib/identities";
 import { useFinePointer, usePrefersReducedMotion } from "../../lib/media";
 import { Link, paths } from "../../lib/router";
@@ -244,9 +244,11 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       isYou: p.id === me,
       isHost: p.id === room.hostPlayerId,
       connected: rp?.connectionStatus === "connected",
-      home: p.tokens.filter((t) => t.step === 56).length,
+      // The counter shown advances when a token arrives home, never ahead of the board.
+      home: playback.home[p.id] ?? p.tokens.filter((t) => t.step === 56).length,
       current: !finished && p.id === shown.currentPlayerId,
       place: place >= 0 ? place + 1 : null,
+      flash: playback.flash?.playerId === p.id ? { kind: playback.flash.kind, key: playback.flash.key } : null,
     };
   });
 
@@ -260,6 +262,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
     const next = order[(i + 1) % order.length]!;
     return next.id === me ? "You" : nameOf(next.id);
   })();
+  const event = useMemo(() => turnEventFor(playback.callouts, nameOf, me), [playback.callouts, nameOf, me]);
   const winnerName = game.winnerId ? (game.winnerId === me ? "You" : nameOf(game.winnerId)) : null;
   const turn: TurnInfo = {
     identity: finished ? (game.winnerId ? identityOf(game.winnerId) : null) : current ? identityOf(current) : null,
@@ -282,8 +285,9 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
                 ? `${currentName} rolled a six and rolls again`
                 : `${currentName} is choosing a move`,
     next: finished ? null : nextName,
-    callouts: calloutsFor(playback.callouts, nameOf, me),
-    calloutKey: playback.calloutKey,
+    event,
+    eventIdentity: event ? identityOf(event.playerId) : null,
+    eventKey: playback.calloutKey,
     mine: current === me,
   };
 

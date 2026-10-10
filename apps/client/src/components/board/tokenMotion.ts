@@ -7,11 +7,17 @@
 //               "land" ends with a short settle.
 //   open:       rises from the base slot and arcs onto the start cell.
 //   home:       glides into the finish wedge and settles.
-//   capture:    shrinks, fades and arcs back to its base slot over the board.
+//   capture:    a short impact where it stood (a jolt and settle), then it
+//               shrinks, fades and arcs back to its base slot over the board.
 //   slide:      reduced motion: straight to the destination, no lift.
 
+import { MOTION } from "@ludo/design-tokens";
 import type { MotionKind } from "../game/useBoardPlayback";
 import type { Point } from "./geometry";
+
+/** A captured token's impact before it leaves; its capture motion lasts CAPTURE_IMPACT_MS + MOTION.duration.capture. */
+export const CAPTURE_IMPACT_MS = 140;
+const IMPACT = CAPTURE_IMPACT_MS / (CAPTURE_IMPACT_MS + MOTION.duration.capture);
 
 export type Keyframes = Keyframe[];
 
@@ -88,16 +94,20 @@ export function tokenKeyframes(kind: MotionKind, from: Point, to: Point, cell: n
     }
     case "capture": {
       const bow = Math.min(cell * 3, Math.hypot(to.x - from.x, to.y - from.y) * 0.25);
+      const travel = (t: number) => IMPACT + t * (1 - IMPACT);
       const points = [0.25, 0.5, 0.75].map((t) => arcPoint(from, to, t, bow));
       return {
-        travel: [{ transform: at(from) }, ...points.map((p, i) => ({ transform: at(p), offset: (i + 1) / 4 })), { transform: at(to) }],
+        travel: [{ transform: at(from) }, { transform: at(from), offset: IMPACT }, ...points.map((p, i) => ({ transform: at(p), offset: travel((i + 1) / 4) })), { transform: at(to) }],
         body: [
-          { transform: "scale(1)", opacity: 1 },
-          { transform: "scale(0.8)", opacity: 0.35, offset: 0.25 },
-          { transform: "scale(0.8)", opacity: 0.35, offset: 0.8 },
-          { transform: "scale(1)", opacity: 1 },
+          { transform: "scale(1) rotate(0deg)", opacity: 1 },
+          { transform: "scale(1.12) rotate(-7deg)", opacity: 1, offset: IMPACT * 0.35 },
+          { transform: "scale(0.95) rotate(5deg)", opacity: 1, offset: IMPACT * 0.7 },
+          { transform: "scale(1) rotate(0deg)", opacity: 1, offset: IMPACT },
+          { transform: "scale(0.8) rotate(0deg)", opacity: 0.35, offset: travel(0.25) },
+          { transform: "scale(0.8) rotate(0deg)", opacity: 0.35, offset: travel(0.8) },
+          { transform: "scale(1) rotate(0deg)", opacity: 1 },
         ],
-        shadow: [{ opacity: 1 }, { opacity: 0, offset: 0.2 }, { opacity: 0, offset: 0.85 }, { opacity: 1 }],
+        shadow: [{ opacity: 1 }, { opacity: 1, offset: IMPACT }, { opacity: 0, offset: travel(0.2) }, { opacity: 0, offset: travel(0.85) }, { opacity: 1 }],
         easing: EASE_STANDARD,
       };
     }

@@ -223,6 +223,39 @@ body {
   animation: tray-breathe 1.6s ease-in-out infinite;
 }
 
+/* A player's chip: a brief sweep of their colour (a capture, a token home), and the home counter's pop. */
+@keyframes seat-sweep {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+.seat-sweep {
+  animation: seat-sweep 760ms var(--ease-standard) both;
+}
+@keyframes count-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.3);
+    color: #a77b0e;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.count-pop {
+  animation: count-pop 480ms var(--ease-settle) both;
+}
+
 /* The game screen sizes the board to the space left by its bars and columns
    (docs/design/ui-desktop.md, ui-tablet.md, ui-mobile.md): never clipped,
    never scrolled separately. */

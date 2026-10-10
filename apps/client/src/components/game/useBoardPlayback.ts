@@ -11,6 +11,12 @@
 // has finished. Each token change carries a typed motion (hop, land, open,
 // home, capture, slide) that the board token turns into transform-only
 // animation; a change without a motion is a jump.
+//
+// Captures in one move play together, right after the attacker settles: a
+// short impact, then every captured token lifts, shrinks and arcs back to its
+// base (lightly staggered). Home counters advance only when a token actually
+// arrives home. A finished game raises a celebration only when its last
+// action is seen live: a refresh or reconnect never replays one.
 
 import { useEffect, useRef, useState } from "react";
 import { MOTION } from "@ludo/design-tokens";
@@ -18,6 +24,7 @@ import type { GameHistoryEntry, GameStateView } from "@ludo/shared-types";
 import { hopSteps, piecePosition } from "../board/geometry";
 import { tokenKey, type BoardTokenInput } from "../board/placement";
 import type { BoardEffect } from "../board/TokenOverlay";
+import { CAPTURE_IMPACT_MS } from "../board/tokenMotion";
 
 const D = MOTION.duration;
 const OPEN_MS = 320;
@@ -25,6 +32,8 @@ const FAST_HOP_MS = 120;
 const REDUCED_SLIDE_MS = 180;
 const REDUCED_REVEAL_MS = 120;
 const NO_MOVE_HOLD_MS = 600;
+/** Stagger between tokens captured together. */
+const CAPTURE_STAGGER_MS = 60;
 
 export interface DieView {
   value: number | null;
@@ -60,11 +69,19 @@ export interface Playback {
   /** The entries of the last revealed action (for the banner). */
   callouts: GameHistoryEntry[];
   calloutKey: number;
+  /** Tokens home per player, as shown: a counter advances when the token arrives, not before. */
+  home: Record<string, number>;
+  /** A brief highlight on a player's panel (a capture, a token home); `key` changes each time. */
+  flash: { playerId: string; kind: "capture" | "home"; key: number } | null;
+  /** Set when the end of the game was just played live (never on a refresh or reconnect). */
+  celebrate: { key: number } | null;
 }
 
 export function boardTokens(game: GameStateView): BoardTokenInput[] {
   return game.players.flatMap((p) => p.tokens.map((t) => ({ playerId: p.id, seat: p.seat, tokenId: t.id, step: t.step })));
 }
+
+const homeCounts = (game: GameStateView): Record<string, number> => Object.fromEntries(game.players.map((p) => [p.id, p.tokens.filter((t) => t.step === 56).length]));
 
 const lastSeq = (game: GameStateView): number => game.recentHistory.reduce((max, e) => Math.max(max, e.seq), 0);
 const dieValue = (game: GameStateView): number | null => game.turn.dice ?? game.lastRoll?.value ?? null;
@@ -82,6 +99,9 @@ function snapshot(game: GameStateView, previous?: Playback): Playback {
     revealedSeq: lastSeq(game),
     callouts: previous?.callouts ?? [],
     calloutKey: previous?.calloutKey ?? 0,
+    home: homeCounts(game),
+    flash: previous?.flash ?? null,
+    celebrate: previous?.celebrate ?? null,
   };
 }
 
@@ -149,23 +169,35 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean, p
           t += ms;
         });
       } else if (entry.type === "capture") {
-        const victim = tokenKey(entry.victimPlayerId, entry.victimTokenId);
+        // All tokens captured by this move go together (handled at the first capture entry).
+        const group = entries.filter((e) => e.type === "capture" && e.playerId === entry.playerId && e.tokenId === entry.tokenId);
+        if (group[0] !== entry) continue;
         const attackerSeat = seatOf.get(entry.playerId) ?? 0;
         const mover = entries.find((e) => (e.type === "move" || e.type === "auto-move") && e.playerId === entry.playerId && e.tokenId === entry.tokenId);
         const where = piecePosition(attackerSeat, mover && (mover.type === "move" || mover.type === "auto-move") ? mover.to : null);
-        const effect: BoardEffect = { id: `capture-${entry.seq}`, kind: "capture", at: where, seat: seatOf.get(entry.victimPlayerId) ?? 0 };
-        const ms = reduced ? REDUCED_REVEAL_MS : D.capture;
-        at(t, (v) => ({ ...withStep(v, victim, null, reduced ? "slide" : "capture", ms), effects: [...v.effects, effect] }));
-        t += ms;
+        const ms = reduced ? REDUCED_REVEAL_MS : CAPTURE_IMPACT_MS + D.capture;
+        group.forEach((victimEntry, i) => {
+          if (victimEntry.type !== "capture") return;
+          const victim = tokenKey(victimEntry.victimPlayerId, victimEntry.victimTokenId);
+          const effect: BoardEffect = { id: `capture-${victimEntry.seq}`, kind: "capture", at: where, seat: seatOf.get(victimEntry.victimPlayerId) ?? 0 };
+          const delay = reduced ? 0 : i * CAPTURE_STAGGER_MS;
+          at(t + delay, (v) => ({ ...withStep(v, victim, null, reduced ? "slide" : "capture", ms), raised: [...v.raised, victim], effects: [...v.effects, effect] }));
+        });
+        const flashAt = t + (reduced ? 0 : CAPTURE_IMPACT_MS);
+        at(flashAt, (v) => ({ ...v, flash: { playerId: entry.playerId, kind: "capture", key: (v.flash?.key ?? 0) + 1 } }));
+        t += ms + (reduced ? 0 : (group.length - 1) * CAPTURE_STAGGER_MS);
       } else if (entry.type === "home") {
+        // The token has arrived (its glide is complete): the accent, the counter and the panel move together.
         const seat = seatOf.get(entry.playerId) ?? 0;
         const effect: BoardEffect = { id: `home-${entry.seq}`, kind: "home", at: piecePosition(seat, 56), seat };
-        at(t, (v) => ({ ...v, effects: [...v.effects, effect] }));
+        const who = entry.playerId;
+        at(t, (v) => ({ ...v, effects: [...v.effects, effect], home: { ...v.home, [who]: (v.home[who] ?? 0) + 1 }, flash: { playerId: who, kind: "home", key: (v.flash?.key ?? 0) + 1 } }));
       }
     }
 
-    at(t, (v) => ({ ...snapshot(game, v), callouts: entries, calloutKey: v.calloutKey + 1 }));
-    at(t + 700, (v) => ({ ...v, effects: [] }));
+    const over = entries.some((e) => e.type === "game-over");
+    at(t, (v) => ({ ...snapshot(game, v), callouts: entries, calloutKey: v.calloutKey + 1, ...(over ? { celebrate: { key: (v.celebrate?.key ?? 0) + 1 } } : {}) }));
+    at(t + 900, (v) => ({ ...v, effects: [] }));
   }, [game, reduced]);
 
   // A pause (or anything else that stops play) fast-forwards whatever is still playing.
@@ -187,5 +219,5 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean, p
 }
 
 function emptyPlayback(): Playback {
-  return { game: null, playing: -1, tokens: [], motion: {}, raised: [], effects: [], die: { value: null, rolling: false, revealKey: 0 }, busy: false, revealedSeq: 0, callouts: [], calloutKey: 0 };
+  return { game: null, playing: -1, tokens: [], motion: {}, raised: [], effects: [], die: { value: null, rolling: false, revealKey: 0 }, busy: false, revealedSeq: 0, callouts: [], calloutKey: 0, home: {}, flash: null, celebrate: null };
 }
