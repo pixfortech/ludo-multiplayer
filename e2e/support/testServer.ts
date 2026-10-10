@@ -2,13 +2,17 @@
 //
 // It is the production HTTP + Socket.IO server (startServer) and the
 // production room and gameplay services, on an isolated, disposable
-// PostgreSQL (the same harness as the server's integration tests). The one
-// difference is the gameplay service's dice source, the documented test seam
-// (GameplayServiceOptions.dice): values queued by the tests are drawn first,
-// then secure random dice. Clients can never choose a die: the queue is
-// reachable only through a separate control port on 127.0.0.1 that requires
-// a per-run token. None of this is part of the server build (apps/server/src)
-// or reachable from a production deployment.
+// PostgreSQL (the same harness as the server's integration tests). Two
+// differences:
+//  - the gameplay service's dice source, the documented test seam
+//    (GameplayServiceOptions.dice): values queued by the tests are drawn
+//    first, then secure random dice. Clients can never choose a die: the
+//    queue is reachable only through a separate control port on 127.0.0.1
+//    that requires a per-run token;
+//  - the per-client limits on creating rooms and looking up codes are
+//    relaxed, because every browser in the suite connects from 127.0.0.1.
+// None of this is part of the server build (apps/server/src) or reachable
+// from a production deployment.
 //
 // Control port (JSON, header x-e2e-token):
 //   POST /dice   { values: number[] }  queue die values
@@ -22,6 +26,7 @@ import { startTestDatabase } from "../../apps/server/src/persistence/__tests__/p
 import { migrate } from "../../apps/server/src/persistence/migrate.js";
 import { PostgresGameStore } from "../../apps/server/src/persistence/postgresStore.js";
 import { projectGameState } from "../../apps/server/src/gameplay/stateProjection.js";
+import { CodeLookupGuard, SlidingWindowLimiter } from "../../apps/server/src/rooms/rateLimiter.js";
 import { RoomService } from "../../apps/server/src/rooms/roomService.js";
 import { GameplayService } from "../../apps/server/src/gameplay/gameplayService.js";
 import { startServer } from "../../apps/server/src/httpServer.js";
@@ -42,8 +47,16 @@ const store = PostgresGameStore.connect(db.url, {});
 const queue: number[] = [];
 const random = createCryptoDice();
 const dice = { roll: () => queue.shift() ?? random.roll() };
-// The host (first seat) starts, so scripted games are reproducible.
-const rooms = new RoomService({ store, drawFirstPlayer: () => 0 });
+// The host (first seat) starts, so scripted games are reproducible. Every browser in the suite connects
+// from 127.0.0.1, so the per-client limits on creating rooms and looking up codes are relaxed here (as in
+// the server's own integration harness); the limits themselves are covered by the server's tests.
+const GENEROUS = { limit: 1_000_000, windowMs: 1000 };
+const rooms = new RoomService({
+  store,
+  drawFirstPlayer: () => 0,
+  creationLimiter: new SlidingWindowLimiter(GENEROUS),
+  lookupGuard: new CodeLookupGuard({ lookups: GENEROUS, misses: GENEROUS }),
+});
 const gameplay = new GameplayService({ store, rooms, dice });
 const server = await startServer({ port: API_PORT, clientOrigins: ORIGINS, realtime: { rooms, gameplay, log: () => undefined } });
 

@@ -15,7 +15,7 @@ CI runs the suite on Ubuntu and Windows after the other checks. If it fails, tra
 | ---- | ---- |
 | `playwright.config.ts` | One worker (one shared server), and the client build served by `vite preview` on 127.0.0.1:4173 |
 | `e2e/support/globalSetup.ts` | Starts the test server for the run. Stops it with a graceful shutdown over the control port, so it behaves the same on Windows. |
-| `e2e/support/testServer.ts` | **Test only.** The production `startServer`, room and gameplay services on a disposable PostgreSQL (the server tests' `pgHarness`). See below. |
+| `e2e/support/testServer.ts` | **Test only.** The production `startServer`, room and gameplay services on a disposable PostgreSQL (the server tests' `pgHarness`). It relaxes the per-client room-creation and code-lookup limits, because every browser connects from 127.0.0.1. See below. |
 | `e2e/support/game.ts` | Players on different devices; create, join and start through the UI; rolling and moving like a person; the in-sync checks; the game driver |
 | `e2e/tests/*.spec.ts` | The scenarios |
 
@@ -120,6 +120,9 @@ The driver reads the authoritative state and queues dice so a game ends determin
    - **Fix:** the banner now has reserved space, and the end-of-game row keeps its height.
    - **Measured after the fix:** 0.009–0.018 during captures, about 0.03 across the finish.
 7. **Phase 3C.3, caught before commit: focus did not return to "Show results" after closing the victory screen.** The button exists twice (rail and phone bar), and the ref pointed at the hidden copy. Focus now goes to the visible one.
+8. **Phase 3C.3, found by CI on Ubuntu: under reduced motion, effect marks were still drawn.** Their animations were cut to 1 ms, but the test could catch them still running. Under reduced motion, capture and home effects are now not drawn at all; the banner still explains what happened.
+9. **Phase 3C.3, found by CI on Ubuntu: the suite tripped the production room-creation limit.** The limit is 10 rooms per 10 minutes per client. The suite now creates 12 rooms from 127.0.0.1, so whether the 11th was refused depended on timing. This is a test-harness issue, not a product bug: the test server now relaxes the per-client limits (as the server's integration harness does), and the limits keep their own server tests.
+10. **Phase 3C.3, found locally, in the tests and present since 3C.1: a race in the in-sync check.** The check read the server's state once. When it ran right after a click whose move was still committing, it compared the pages with a stale state and timed out. It now re-reads the server's state on every poll.
 
 ## Not covered here
 

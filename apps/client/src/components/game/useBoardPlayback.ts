@@ -181,7 +181,8 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean, p
           const victim = tokenKey(victimEntry.victimPlayerId, victimEntry.victimTokenId);
           const effect: BoardEffect = { id: `capture-${victimEntry.seq}`, kind: "capture", at: where, seat: seatOf.get(victimEntry.victimPlayerId) ?? 0 };
           const delay = reduced ? 0 : i * CAPTURE_STAGGER_MS;
-          at(t + delay, (v) => ({ ...withStep(v, victim, null, reduced ? "slide" : "capture", ms), raised: [...v.raised, victim], effects: [...v.effects, effect] }));
+          // Reduced motion: no effect marks at all (the banner still explains the capture).
+          at(t + delay, (v) => ({ ...withStep(v, victim, null, reduced ? "slide" : "capture", ms), raised: [...v.raised, victim], effects: reduced ? v.effects : [...v.effects, effect] }));
         });
         const flashAt = t + (reduced ? 0 : CAPTURE_IMPACT_MS);
         at(flashAt, (v) => ({ ...v, flash: { playerId: entry.playerId, kind: "capture", key: (v.flash?.key ?? 0) + 1 } }));
@@ -191,7 +192,7 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean, p
         const seat = seatOf.get(entry.playerId) ?? 0;
         const effect: BoardEffect = { id: `home-${entry.seq}`, kind: "home", at: piecePosition(seat, 56), seat };
         const who = entry.playerId;
-        at(t, (v) => ({ ...v, effects: [...v.effects, effect], home: { ...v.home, [who]: (v.home[who] ?? 0) + 1 }, flash: { playerId: who, kind: "home", key: (v.flash?.key ?? 0) + 1 } }));
+        at(t, (v) => ({ ...v, effects: reduced ? v.effects : [...v.effects, effect], home: { ...v.home, [who]: (v.home[who] ?? 0) + 1 }, flash: { playerId: who, kind: "home", key: (v.flash?.key ?? 0) + 1 } }));
       }
     }
 

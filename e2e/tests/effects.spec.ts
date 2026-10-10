@@ -194,8 +194,7 @@ test("reduced motion: a capture is one straight move home, with no effect animat
   expect(snap.history.some((e) => e.type === "capture")).toBe(true);
   for (const p of [aman, ben]) {
     expect(stepsOf(await readTimeline(p.page), B(0)), `${p.name}: one straight move home`).toEqual(["base"]);
-    const effectAnimations = await p.page.evaluate(() => [...document.querySelectorAll("[data-effect] *")].flatMap((el) => el.getAnimations()).filter((a) => a.playState === "running").length);
-    expect(effectAnimations, `${p.name}: no effect animation`).toBe(0);
+    await expect(p.page.locator("[data-effect]"), `${p.name}: no capture effect is drawn`).toHaveCount(0);
     await expect(visible(p.page.getByTestId("turn-callouts"))).toHaveAttribute("data-kind", "capture");
   }
   noErrors([aman, ben]);

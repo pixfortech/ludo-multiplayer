@@ -119,13 +119,24 @@ export class Table {
 
   /** Every page shows the server's committed board, and only the current player can act. */
   async expectInSync(): Promise<ServerSnapshot> {
-    const snap = await this.state();
-    const game = snap.game!;
-    const expected = expectedBoard(game);
+    // Each poll re-reads the server, so a page is always compared with the latest committed state
+    // (an action clicked just before this call may still be committing).
     for (const p of this.players) {
       if (this.offline.has(p)) continue;
-      await expect.poll(() => readBoard(p.page), { message: `${p.name}'s board matches the server (v${game.stateVersion})`, timeout: 20_000 }).toEqual(expected);
+      await expect
+        .poll(
+          async () => {
+            const [latest, board] = await Promise.all([this.state(), readBoard(p.page)]);
+            const expected = expectedBoard(latest.game!);
+            const same = (a: Record<string, string>, b: Record<string, string>) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
+            return same(board, expected) ? "in sync" : { version: latest.game!.stateVersion, board, expected };
+          },
+          { message: `${p.name}'s board matches the server`, timeout: 20_000 },
+        )
+        .toBe("in sync");
     }
+    const snap = await this.state();
+    const game = snap.game!;
     if (game.phase === "playing" && snap.room.status === "playing" && !this.offline.has(this.player(game.currentPlayerId))) {
       const actor = this.player(game.currentPlayerId);
       const control = game.turn.phase === "awaiting-roll" ? visible(actor.page.getByRole("button", { name: "Roll dice" })) : visible(actor.page.getByTestId("move-tray"));
