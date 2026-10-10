@@ -1,0 +1,334 @@
+/*
+ * City themes in 2D (docs/architecture/city-themes.md). The city is a fixed
+ * backdrop behind the game: it never covers the board or the controls, takes
+ * no pointer events and is hidden from assistive tech. Density follows the
+ * environment presets: full on desktops, reduced on tablets, minimal on
+ * phones. Ambient motion is transform-only, slow, and off under reduced motion.
+ */
+
+.city-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+  /* The horizon: where landmarks stand and the paving begins. */
+  --hz: 132px;
+  --far-h: 72px;
+  --hero-h: 130px;
+  --support-h: 84px;
+  --water-h: 0px;
+  background: var(--city-ground);
+}
+.city-backdrop[data-water] {
+  --water-h: 26px;
+}
+/* Desktops and laptops: the city stands to the left of the board, under the players. */
+@media (min-width: 1024px) and (min-height: 541px) {
+  .city-backdrop {
+    --hz: 80vh;
+    --far-h: 18vh;
+    /* The hero fits the open space between the player panels and the horizon. */
+    --hero-h: clamp(180px, calc(80vh - 380px), min(48vh, 36vw));
+    --support-h: min(30vh, 22vw);
+  }
+  .city-backdrop[data-water] {
+    --water-h: 7vh;
+  }
+}
+/* Phones held sideways: just the skyline behind the header. */
+@media (orientation: landscape) and (max-height: 540px) and (max-width: 1023px) {
+  .city-backdrop {
+    --hz: 64px;
+    --far-h: 40px;
+    --hero-h: 58px;
+  }
+  .city-backdrop[data-water] {
+    --water-h: 0px;
+  }
+}
+
+.cb-layer {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+.cb-sky {
+  top: 0;
+  height: calc(var(--hz) + 2px);
+}
+.cb-far {
+  top: calc(var(--hz) - var(--far-h));
+  height: var(--far-h);
+}
+.cb-far > svg,
+.cb-band > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.cb-water {
+  top: var(--hz);
+  height: var(--water-h);
+}
+.cb-ground {
+  top: calc(var(--hz) + var(--water-h));
+  bottom: 0;
+}
+.cb-landmark {
+  position: absolute;
+  bottom: calc(100% - var(--hz));
+  height: var(--hero-h);
+  width: auto;
+}
+.cb-landmark > svg {
+  display: block;
+  height: 100%;
+  width: auto;
+}
+.cb-landmark[data-role="support"] {
+  height: var(--support-h);
+}
+.cb-landmark[data-side="left"] {
+  left: var(--offset, 2vw);
+}
+.cb-landmark[data-side="right"] {
+  right: var(--offset, 2vw);
+}
+.cb-landmark[data-side="centre"] {
+  left: 50%;
+  transform: translateX(-50%);
+}
+/* On portrait screens the landmarks crown the board: centred, behind the header. */
+@media (max-width: 1023px) {
+  .cb-landmark[data-portrait="centre"] {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+  }
+  .cb-landmark[data-portrait="left"] {
+    left: 4vw;
+    right: auto;
+  }
+  .cb-landmark[data-portrait="right"] {
+    right: 4vw;
+    left: auto;
+  }
+}
+
+/* Travellers (trams, trains, boats) cross the visible flank and pass behind the board. */
+.cb-lane {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--lane-h, 5vh);
+  top: calc(var(--hz) + var(--lane-y, 0px));
+}
+.cb-traveller {
+  position: absolute;
+  bottom: 0;
+  height: 100%;
+  left: 0;
+  animation: cb-travel var(--dur, 60s) linear infinite;
+  animation-delay: var(--delay, 0s);
+  will-change: transform;
+}
+.cb-traveller[data-dir="rtl"] {
+  animation-name: cb-travel-rtl;
+}
+.cb-traveller > svg {
+  display: block;
+  height: 100%;
+  width: auto;
+}
+@keyframes cb-travel {
+  from {
+    transform: translateX(-30vw);
+  }
+  to {
+    transform: translateX(105vw);
+  }
+}
+@keyframes cb-travel-rtl {
+  from {
+    transform: translateX(105vw) scaleX(-1);
+  }
+  to {
+    transform: translateX(-30vw) scaleX(-1);
+  }
+}
+
+.cb-cloud {
+  position: absolute;
+  animation: cb-drift var(--dur, 140s) linear infinite;
+  animation-delay: var(--delay, 0s);
+  opacity: 0.75;
+}
+@keyframes cb-drift {
+  from {
+    transform: translateX(-25vw);
+  }
+  to {
+    transform: translateX(110vw);
+  }
+}
+/* Slow ambient motion updates in steps (about 15 per second): it looks the same and costs far less. */
+.cb-shimmer {
+  animation: cb-shimmer 9s steps(135, end) infinite alternate;
+}
+@keyframes cb-shimmer {
+  from {
+    transform: translateX(-1.5%);
+    opacity: 0.45;
+  }
+  to {
+    transform: translateX(1.5%);
+    opacity: 0.8;
+  }
+}
+.cb-sway {
+  transform-origin: 50% 100%;
+  animation: cb-sway 7s steps(105, end) infinite alternate;
+}
+@keyframes cb-sway {
+  from {
+    transform: rotate(-1.6deg);
+  }
+  to {
+    transform: rotate(1.6deg);
+  }
+}
+.cb-bob {
+  animation: cb-bob 5s steps(75, end) infinite alternate;
+}
+@keyframes cb-bob {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(6%);
+  }
+}
+.cb-particle {
+  position: absolute;
+  top: -4vh;
+  animation: cb-fall var(--dur, 18s) linear infinite;
+  animation-delay: var(--delay, 0s);
+}
+@keyframes cb-fall {
+  from {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  to {
+    transform: translate(var(--drift, 6vw), 108vh) rotate(var(--spin, 200deg));
+  }
+}
+.cb-float {
+  animation: cb-float 11s steps(165, end) infinite alternate;
+}
+@keyframes cb-float {
+  from {
+    transform: translate(0, 0) rotate(-4deg);
+  }
+  to {
+    transform: translate(1.5vw, -2vh) rotate(5deg);
+  }
+}
+
+/* Density: [data-d] is the least density at which a piece appears. */
+@media (max-width: 1279px), (max-height: 540px) {
+  .city-backdrop [data-d="full"] {
+    display: none;
+  }
+}
+@media (max-width: 639px), (orientation: landscape) and (max-height: 540px) and (max-width: 1023px) {
+  .city-backdrop [data-d="reduced"] {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .city-backdrop *,
+  .city-backdrop *::before,
+  .city-backdrop *::after {
+    animation: none !important;
+  }
+  .city-backdrop .cb-lane,
+  .city-backdrop .cb-particle {
+    display: none;
+  }
+}
+
+/* The plinth the board stands on: the city's material, lit from above, casting a soft shadow. */
+.city-plinth {
+  position: relative;
+  padding: clamp(5px, 1.3%, 13px);
+  border-radius: 36px;
+  background:
+    var(--plinth-texture, none),
+    linear-gradient(160deg, var(--plinth-light), var(--plinth-base) 46%, var(--plinth-dark));
+  box-shadow:
+    inset 0 1px 0 var(--plinth-edge),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18),
+    0 2px 3px rgba(20, 16, 10, 0.18),
+    0 28px 56px -18px rgba(20, 16, 10, 0.5);
+}
+.city-plinth[data-finish="teak"] {
+  --plinth-texture: repeating-linear-gradient(97deg, rgba(255, 230, 200, 0.07) 0 2px, transparent 2px 9px, rgba(40, 18, 6, 0.08) 9px 11px, transparent 11px 19px);
+}
+.city-plinth[data-finish="sandstone"] {
+  --plinth-texture: repeating-linear-gradient(0deg, rgba(255, 236, 214, 0.1) 0 1px, transparent 1px 14px), repeating-linear-gradient(90deg, rgba(60, 20, 8, 0.1) 0 1px, transparent 1px 28px);
+}
+.city-plinth[data-finish="granite"] {
+  --plinth-texture: radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.08) 0 1px, transparent 1.5px), radial-gradient(circle at 70% 60%, rgba(0, 0, 0, 0.12) 0 1px, transparent 1.5px);
+  background-size:
+    7px 7px,
+    auto;
+}
+.city-plinth[data-finish="deco"] {
+  --plinth-texture: repeating-linear-gradient(90deg, rgba(227, 199, 123, 0.22) 0 1px, transparent 1px 22px);
+  box-shadow:
+    inset 0 0 0 2px rgba(227, 199, 123, 0.55),
+    inset 0 1px 0 var(--plinth-edge),
+    0 2px 3px rgba(10, 12, 24, 0.22),
+    0 28px 56px -18px rgba(10, 12, 24, 0.55);
+}
+.city-plinth[data-finish="slate"] {
+  --plinth-texture: linear-gradient(115deg, rgba(255, 255, 255, 0.06), transparent 40%), repeating-linear-gradient(45deg, rgba(160, 220, 170, 0.06) 0 1px, transparent 1px 12px);
+}
+
+/* Panels over the city: city-tinted, slightly translucent so the world shows through. */
+.city-game .city-glass {
+  background-color: color-mix(in srgb, var(--city-surface) 87%, transparent);
+  box-shadow:
+    0 1px 2px rgba(20, 24, 33, 0.08),
+    0 10px 30px -12px rgba(20, 24, 33, 0.22);
+}
+/* Tall panels stay solid (tinted): blending a full-height translucent panel over moving scenery costs every frame. */
+.city-game .city-solid {
+  background-color: var(--city-surface);
+}
+html[data-city] body {
+  background-color: var(--city-ground, var(--color-canvas));
+  background-image: none;
+}
+html[data-city] header {
+  background-color: color-mix(in srgb, var(--city-surface, #fff) 52%, transparent) !important;
+}
+@media (max-width: 639px) {
+  html[data-city] header {
+    background-color: color-mix(in srgb, var(--city-surface, #fff) 40%, transparent) !important;
+  }
+}
+
+/* The city's signboard (desktop) and chip (phones and tablets). */
+.city-sign {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  color: var(--city-accent-ink);
+  background: linear-gradient(150deg, color-mix(in srgb, var(--city-accent) 88%, white), var(--city-accent) 55%, color-mix(in srgb, var(--city-accent) 78%, black));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 10px 30px -12px rgba(20, 24, 33, 0.35);
+}

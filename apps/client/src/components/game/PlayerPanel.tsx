@@ -18,6 +18,8 @@ export interface GamePlayerRow {
   place: number | null;
   /** A live highlight on this player (a capture, a token home); `key` restarts it. */
   flash: { kind: "capture" | "home"; key: number } | null;
+  /** The seat's district in a city-themed room (presentation only). */
+  district?: string | null;
 }
 
 /** A brief sweep of the seat's colour across a player's chip (presentation only). */
@@ -67,6 +69,11 @@ export function PlayerPanel({ players }: { players: readonly GamePlayerRow[] }) 
             <span className="flex items-center gap-2 text-[12px] text-ink-muted">
               <HomeDots home={p.home} identity={p.identity} flash={p.flash} playerId={p.playerId} />
               {p.place ? <span className="font-semibold text-ink">{ordinal(p.place)}</span> : p.connected ? null : <span>Away</span>}
+              {p.district ? (
+                <span className="min-w-0 truncate" data-district={p.seat}>
+                  {p.district}
+                </span>
+              ) : null}
             </span>
           </span>
         </li>

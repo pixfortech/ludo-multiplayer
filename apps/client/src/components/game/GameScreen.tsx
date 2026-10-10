@@ -8,6 +8,7 @@
 // board until the server has confirmed it.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { boardMaterial2d, getCityTheme } from "@ludo/city-themes";
 import { PLAYER_IDENTITIES, type PlayerIdentity } from "@ludo/design-tokens";
 import type { GameStateView, RoomView } from "@ludo/shared-types";
 import type { ConnectionState, Notice } from "../../lib/connection";
@@ -19,6 +20,8 @@ import { useFinePointer, usePrefersReducedMotion } from "../../lib/media";
 import { Link, paths } from "../../lib/router";
 import { useGame } from "../../state/gameClient";
 import { ClassicBoard } from "../board/ClassicBoard";
+import { CityBackdrop, cityStyle, useCityDocument } from "../city/CityBackdrop";
+import { CityChip, CityPlinth, CitySign } from "../city/CityFrame";
 import type { BoardTokenState } from "../board/BoardToken";
 import { tokenKey } from "../board/placement";
 import type { MovePreview } from "../board/TokenOverlay";
@@ -95,6 +98,11 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   const shown = playback.game ?? game;
   const me = state.seat?.playerId ?? null;
   const fullscreen = useFullscreen();
+  // The room's city (presentation only): every player in the room sees the same one.
+  const theme = useMemo(() => getCityTheme(room.settings.cityTheme), [room.settings.cityTheme]);
+  const material = useMemo(() => boardMaterial2d(theme), [theme]);
+  const city = theme.id !== "classic";
+  useCityDocument(theme);
 
   const [rollPending, setRollPending] = useState(false);
   // After our roll is acknowledged, the die keeps tumbling until the board starts showing that roll,
@@ -253,6 +261,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       current: !over && p.id === shown.currentPlayerId,
       place: place >= 0 ? place + 1 : null,
       flash: playback.flash?.playerId === p.id ? { kind: playback.flash.kind, key: playback.flash.key } : null,
+      district: city ? (theme.districts[p.seat]?.name ?? null) : null,
     };
   });
 
@@ -407,6 +416,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
 
   const board = (
     <div className="relative mx-auto w-[var(--board)] max-w-full">
+      <CityPlinth material={material}>
       <ClassicBoard
         tokens={playback.tokens}
         identityOf={identityOf}
@@ -423,50 +433,60 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
         {...(choosing ? { onActivate: onBoardActivate, onPreview: onBoardPreview } : {})}
         title={`Ludo board. ${turn.title}. ${turn.detail}`}
         dimmed={paused}
+        material={material}
       />
+      </CityPlinth>
       {pausedOverlay}
     </div>
   );
 
   return (
-    <div className="game-layout mx-auto w-full max-w-[1800px] px-4 pb-[calc(var(--action-bar-h,0px)+16px)] pt-3 sm:px-6 phone-landscape:grid phone-landscape:h-[calc(100svh-65px)] phone-landscape:grid-cols-[var(--board)_minmax(0,1fr)] phone-landscape:grid-rows-[minmax(0,1fr)] phone-landscape:gap-3 phone-landscape:py-2 lg:grid lg:h-[calc(100svh-65px)] lg:grid-cols-[var(--board)_300px] lg:grid-rows-[minmax(0,1fr)] lg:justify-center lg:gap-6 lg:py-5 xl:grid-cols-[240px_var(--board)_280px] 2xl:grid-cols-[280px_var(--board)_320px]" data-testid="game-screen">
+    <div className={`game-layout mx-auto w-full max-w-[1800px] px-4 pb-[calc(var(--action-bar-h,0px)+16px)] pt-3 sm:px-6 phone-landscape:grid phone-landscape:h-[calc(100svh-65px)] phone-landscape:grid-cols-[var(--board)_minmax(0,1fr)] phone-landscape:grid-rows-[minmax(0,1fr)] phone-landscape:gap-3 phone-landscape:py-2 lg:grid lg:h-[calc(100svh-65px)] lg:grid-cols-[var(--board)_300px] lg:grid-rows-[minmax(0,1fr)] lg:justify-center lg:gap-6 lg:py-5 xl:grid-cols-[240px_var(--board)_280px] 2xl:grid-cols-[280px_var(--board)_320px] ${city ? "city-game" : ""}`} data-testid="game-screen" data-city={theme.id} style={city ? cityStyle(theme) : undefined}>
+      <CityBackdrop theme={theme} />
       {/* Left column (desktop): players and room. */}
       <aside className="hidden min-h-0 flex-col gap-4 xl:flex" aria-label="Players and room">
+        {city ? <CitySign theme={theme} /> : null}
         <PlayerPanel players={rows} />
-        <div className="rounded-[var(--radius-card)] bg-surface p-3 shadow-raised">{roomInfo}</div>
+        <div className="city-glass rounded-[var(--radius-card)] bg-surface p-3 shadow-raised">{roomInfo}</div>
       </aside>
 
       {/* Phones and tablet portrait: compact players strip. */}
       <div className="mb-3 flex items-center justify-between gap-2 phone-landscape:hidden lg:hidden">
         <PlayerStrip players={rows} />
+        {city ? <CityChip theme={theme} /> : null}
       </div>
 
       <div className="min-w-0 phone-landscape:self-center lg:self-center">{board}</div>
 
       {/* Right rail (tablet landscape and desktop): turn, die, tray, log. */}
       <aside className="hidden min-h-0 flex-col gap-4 overflow-y-auto phone-landscape:flex phone-landscape:gap-3 lg:flex" aria-label="Game controls">
-        <div className="flex flex-col gap-4 rounded-[var(--radius-panel)] bg-surface p-4 shadow-raised">
+        {city ? (
+          <div className="phone-landscape:hidden xl:hidden">
+            <CitySign theme={theme} />
+          </div>
+        ) : null}
+        <div className="city-glass flex flex-col gap-4 rounded-[var(--radius-panel)] bg-surface p-4 shadow-raised">
           <TurnIndicator turn={turn} />
           {results ?? dice}
           {statusLine}
         </div>
         {/* In a short landscape window the choice comes first, where it is visible without scrolling. */}
-        {railTray ? <div className="rounded-[var(--radius-card)] bg-surface p-3 shadow-raised phone-landscape:order-first">{railTray}</div> : null}
+        {railTray ? <div className="city-glass rounded-[var(--radius-card)] bg-surface p-3 shadow-raised phone-landscape:order-first">{railTray}</div> : null}
         <div className="xl:hidden">
           <PlayerPanel players={rows} />
         </div>
-        <div className="flex min-h-[120px] flex-1 flex-col rounded-[var(--radius-card)] bg-surface p-3 shadow-raised">
+        <div className="city-solid flex min-h-[120px] flex-1 flex-col rounded-[var(--radius-card)] bg-surface p-3 shadow-raised">
           <GameActionFeed entries={game.recentHistory} revealedSeq={playback.revealedSeq} nameOf={nameOf} limit={14} />
         </div>
-        <div className="rounded-[var(--radius-card)] bg-surface p-3 shadow-raised xl:hidden">{roomInfo}</div>
+        <div className="city-glass rounded-[var(--radius-card)] bg-surface p-3 shadow-raised xl:hidden">{roomInfo}</div>
       </aside>
 
       {/* Below the board on phones and tablet portrait: log and room. */}
       <div className="mt-4 flex flex-col gap-4 phone-landscape:hidden lg:hidden">
-        <div className="rounded-[var(--radius-card)] bg-surface p-3 shadow-raised">
+        <div className="city-glass rounded-[var(--radius-card)] bg-surface p-3 shadow-raised">
           <GameActionFeed entries={game.recentHistory} revealedSeq={playback.revealedSeq} nameOf={nameOf} limit={8} />
         </div>
-        <div className="rounded-[var(--radius-card)] bg-surface p-3 shadow-raised">{roomInfo}</div>
+        <div className="city-glass rounded-[var(--radius-card)] bg-surface p-3 shadow-raised">{roomInfo}</div>
       </div>
 
       {/* Thumb zone (phones and tablet portrait). */}

@@ -357,5 +357,52 @@ describe("game screen", () => {
     expect(screen.getAllByText("Play continues for the remaining places.").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Your turn").length).toBeGreaterThan(0);
   });
+
+  it("plays a classic room on the plain table: no city around the board", () => {
+    inGame("p-host");
+    expect(screen.getByTestId("game-screen").getAttribute("data-city")).toBe("classic");
+    expect(document.querySelector("[data-city-backdrop]")).toBeNull();
+    expect(screen.queryByTestId("city-plinth")).toBeNull();
+    expect(document.documentElement.dataset.city).toBeUndefined();
+  });
+
+  it("sets a city room in its city: backdrop behind the board, plinth, sign, districts, same board", async () => {
+    const { unmount } = render(<></>);
+    unmount();
+    inGame("p-host", gameView(), { settings: { ...roomView().settings, cityTheme: "kolkata" } });
+    const screenEl = screen.getByTestId("game-screen");
+    expect(screenEl.getAttribute("data-city")).toBe("kolkata");
+    const backdrop = document.querySelector("[data-city-backdrop]")!;
+    expect(backdrop.getAttribute("data-city-backdrop")).toBe("kolkata");
+    expect(backdrop.getAttribute("aria-hidden")).toBe("true");
+    // The scenery is decoration only: never inside the board, never focusable.
+    expect(screen.getByTestId("game-board").closest("[data-city-backdrop]")).toBeNull();
+    expect(backdrop.querySelectorAll("button, a, [tabindex]")).toHaveLength(0);
+    expect(screen.getByTestId("city-plinth").contains(screen.getByTestId("game-board"))).toBe(true);
+    expect(screen.getAllByText("Every move tells a story").length).toBeGreaterThan(0);
+    expect(document.querySelector('[data-district="0"]')?.textContent).toBe("College Street");
+    expect(document.querySelector('[data-district="2"]')?.textContent).toBe("The Maidan");
+    expect(document.documentElement.dataset.city).toBe("kolkata");
+    // The same 52 cells and the same tokens as the classic table.
+    expect(screen.getByTestId("game-board").querySelectorAll("[data-cell]")).toHaveLength(52);
+    expect(step("p-host:0")).toBe("base");
+    // The city's artwork arrives as its own chunk.
+    expect(await screen.findByTestId("game-screen")).toBeTruthy();
+    await vi.waitFor(() => expect(backdrop.querySelector('[data-landmark="howrah-bridge"]')).not.toBeNull());
+  });
+
+  it("clears the city from the page when the game screen closes", () => {
+    const view = render(<></>);
+    view.unmount();
+    const s = services();
+    const room = roomView({ players: [player(), ben], status: "playing", lifecycle: "playing", settings: { ...roomView().settings, cityTheme: "chennai" } });
+    s.client.set({ seat: { roomId: room.roomId, roomCode: room.code, playerId: host }, room, game: gameView() });
+    const app = render(<App services={s} initialPath="/room/ABC234" />);
+    expect(document.documentElement.dataset.city).toBe("chennai");
+    expect(document.documentElement.style.getPropertyValue("--city-accent")).toBe("#0F6873");
+    app.unmount();
+    expect(document.documentElement.dataset.city).toBeUndefined();
+    expect(document.documentElement.style.getPropertyValue("--city-accent")).toBe("");
+  });
 });
 
