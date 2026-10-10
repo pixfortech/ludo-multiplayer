@@ -83,6 +83,10 @@ The current player's base glows.
 
 `ClassicBoard` renders whatever positions it is given and reports which token was picked. A Canvas or 3D renderer can take the same inputs: placements, states and preview.
 
+### City themes (Batch B)
+
+In a city room, `GameScreen` passes the city's `boardMaterial2d` to `ClassicBoard` (neutral surfaces only: body, track cells, outlines, safe stars), wraps the board in a `CityPlinth`, and mounts a `CityBackdrop` behind the page: a fixed, non-interactive, `aria-hidden` layer whose artwork is a lazily loaded chunk per city. Geometry, seat colours, tokens, dice and every control are the same as on the classic table. See [city themes](city-themes.md#batch-b-2d-city-environments) and, for the 3D view, [3d-readiness.md](3d-readiness.md).
+
 ## Gameplay (Phase 3B)
 
 ### Requests

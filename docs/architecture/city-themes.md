@@ -17,8 +17,8 @@ batches and only where they help play.
 | Batch | Scope | Status |
 | ----- | ----- | ------ |
 | A | Architecture, data model, city picker, persistence in room state, placeholder configs | ✅ |
-| B | 2D city mode: themed backdrop, ground and districts around the board; responsive density | Next |
-| C | 3D foundation: lazy-loaded scene from `sceneDescription3d`, camera intro and drift, 2D fallback | |
+| B | 2D city environments for all five cities; board materials; responsive density; 3D readiness spec and Kolkata proof-of-concept plan | ✅ |
+| C | Interactive Kolkata 3D proof of concept: Tabletop and Explore views ([3d-readiness.md](3d-readiness.md), [plan](../design/kolkata-3d-poc.md)) | Proposed |
 | D | Emotions, captions and dialogue, city reactions, mute and volume settings | |
 | E | Performance, responsive and accessibility QA, settings, polish | |
 
@@ -75,14 +75,16 @@ Pure data and pure functions; no React, no DOM, no WebGL.
 
 Nothing is third-party, and nothing is generated without approval.
 
-- **Procedural** (drawn in code today): the six city-card illustrations
-  (`apps/client/src/components/city/CityPreviewArt.tsx`), original simple
-  silhouettes in each city's palette.
-- **Placeholder** (briefs only): every landmark and prop. Batch B/C stand in
-  simple shapes; final art goes through the approved asset pipeline
-  ([Higgsfield workflow](../design/higgsfield-integration.md)) only with
-  explicit approval.
+- **Procedural** (original artwork drawn in code): the six city cards
+  (`CityPreviewArt`), and in Batch B every landmark and prop the 2D scenes
+  show (`apps/client/src/components/city/scenes/`).
+- **Planned** (not drawn, so never shown): a few props listed in the theme
+  data for later (Kolkata tea stall, Delhi metro and arches, Chennai coffee
+  stall and bell, Mumbai terminus and puddles, Bengaluru metro and cycles).
+  The asset manifest and a client test keep this honest: every "procedural"
+  asset is in its city's scene, and no "planned" one is.
 - **Hooks only**: audio cue ids exist; no audio ships.
+- 3D models are specified in [3d-readiness.md](3d-readiness.md) § D.
 
 ## Dialogue
 
@@ -99,3 +101,51 @@ native speaker's review** before release (`reviewStatus:
 - `CityBadge`: the room's city in the lobby and on the join preview; it shows
   nothing for classic, so classic rooms look exactly as before.
 - The lobby's settings list names the city.
+
+## Batch B: 2D city environments
+
+The game screen sets the city around the board. The board, rules, player
+colours, tokens and dice are unchanged in every city (tokens and dice are
+deliberately identical everywhere, so nobody relearns the pieces).
+
+| City | Hero | Around it | Ground and board | Ambient motion |
+| ---- | ---- | --------- | ---------------- | -------------- |
+| Kolkata | Howrah Bridge (truss computed from its chord, with a far truss plane for depth) | Riverbank skyline with Victoria Memorial's dome and colonial facades, riverside temples, the Hooghly | Laterite promenade, brass tram rails, cast-iron railing, gas lamps, book stall; teak plinth | Tram, yellow taxi, ferry, river glints, dust motes, clouds |
+| Delhi | India Gate | Qutub Minar, Red Fort gate, Jama Masjid and a far dome; dusk sky | Red sandstone avenue with buff bands and lawns, canopy pavilion, avenue lamps; sandstone plinth | Kites, auto-rickshaw, clouds |
+| Chennai | Temple gopuram (seven painted tiers) | Marina lighthouse, cathedral spire, Indo-Saracenic court, palms; the Bay of Bengal with surf | Sand laid with kolam, coconut palms, beached fishing boat; granite plinth | Catamaran, gulls, swaying palms, sea glints, clouds |
+| Mumbai | Gateway of India | Art deco facades, a skyline with lit windows, the Sea Link, the Queen's Necklace; the Arabian Sea | Wet promenade, tetrapods, street lamps; art deco plinth with a brass line | Local train, black-and-yellow taxi, monsoon drizzle, sea glints |
+| Bengaluru | Vidhana Soudha | Glass house, tech towers with LED strips; garden-city canopy | Cubbon Park lawn and granite walkway, rain tree, pink trumpet tree, café kiosk, lit bollards; slate plinth | Falling blossoms, swaying trees, clouds |
+
+How it is built:
+
+- **The backdrop** (`CityBackdrop`) is one fixed layer behind the page
+  (`z-index: -1`, `pointer-events: none`, `aria-hidden`), so scenery can never
+  cover the board or a control, take a click, or be read out. Each city's
+  artwork is its own lazily loaded chunk (≈3 KB gz).
+- **Placement** (`city.css`): a horizon line sets where landmarks stand. On
+  desktops and laptops the city stands in the open space to the left of the
+  board under the players (the hero is sized to fit between the panels and the
+  horizon); on portrait screens the landmark crowns the board behind the
+  header; phones in landscape keep only the skyline behind the header.
+- **Density** follows the environment presets: desktop full (all landmarks,
+  props, travellers, particles), tablet reduced (no travellers or particles),
+  phone minimal (sky, hero, ground). Reduced motion stops all ambient motion
+  and hides travellers and particles.
+- **Board materials** (`boardMaterial2d`): only neutral surfaces change (board
+  body, track cells, outlines, safe stars) plus a plinth in the city's finish.
+  Tests prove lanes, start cells and safe stars stay at least as distinct as on
+  the classic table, and that the classic table is byte-for-byte unchanged.
+- **Frame**: a city signboard (wordmark, name in its script, tagline, the
+  city's motif) on desktop and tablet; a city chip on phones; each seat's
+  district name in the players panel; city-tinted, slightly translucent panels
+  (tall panels stay solid).
+- **Performance**: ambient motion is transform-only on composited HTML layers,
+  stepped where slow, and all moving pieces paint after the static scenery.
+  Measurements are in [performance-budgets.md](../design/performance-budgets.md#measurements).
+
+Verified in real browsers (`e2e/tests/city-environments.spec.ts`): every city
+at desktop, laptop, tablet landscape and portrait, and phone portrait and
+landscape, with the right city, scenery only in the backdrop layer, nothing
+covering the board or the die, the whole board on screen and no sideways
+scrolling; and the city surviving joining, a refresh and a network drop with
+play in sync.

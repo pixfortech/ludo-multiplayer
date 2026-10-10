@@ -63,3 +63,24 @@ Only the identities present in a room are prepared (materials and decals). Nothi
 ## Measurement plan
 
 Lighthouse (mobile profile) for load; a scripted 4-player and 15-player auto-play in Playwright for frame-time traces at 1920×1080 and 390×844, plus Chrome's CPU 4× throttle as the "mid-range" proxy. Results go into this document with date and commit.
+
+## Measurements
+
+### City themes, 2D (Batch B, 2026-10-10)
+
+Headless Chromium on the CI-class Linux container, laptop viewport (1366 × 768), a live two-player game, from `e2e/tests/city-performance.spec.ts`. Headless Chromium rasterises and composites **in software**, so these are relative comparisons on one machine, not device frame rates. No real-device measurement has been made yet.
+
+| | Classic | Kolkata | Delhi | Chennai | Mumbai | Bengaluru |
+| --- | --- | --- | --- | --- | --- | --- |
+| Main thread busy while idle (ambient motion on) | 4.4% | 8.5% | 6.7% | 8.3% | 9.2% | 6.9% |
+| Style + layout while idle, per 4 s | 19 ms | 53 ms | 32 ms | 42 ms | 54 ms | 50 ms |
+| Frames in 4 s idle, motion on (software compositing) | 138 | 103 | 113 | 121 | 119 | 107 |
+| Frames in 4 s idle, reduced motion (static scenery) | 240 | 242 | 242 | 242 | 242 | 242 |
+| Worst frame during a token move, motion on | 100 ms | 83 ms | 83 ms | 67 ms | 83 ms | 83 ms |
+| DOM elements | 1,105 | 1,621 | 1,403 | 1,492 | 1,744 | 1,615 |
+| Scene ready after game start | — | 517 ms | 565 ms | 534 ms | 501 ms | 764 ms |
+
+Reading: the static scenery costs nothing measurable (frame pacing identical to classic with motion off); the main thread stays nearly idle with motion on; with motion on, software compositing in headless Chromium produces 75–88% of classic's idle frames (classic itself runs at ~35 fps there because of its own idle animations). GPU compositing on real devices is expected to absorb this, but that must be measured before it is claimed.
+
+Bundle (production build, gzip): main JS 147.2 → 149.2 KB (+2.0 KB), CSS 10.9 → 12.6 KB (+1.7 KB); each city's artwork is a separate chunk loaded only in that city (2.7–3.4 KB) plus a shared 2.4 KB scene kit.
+
