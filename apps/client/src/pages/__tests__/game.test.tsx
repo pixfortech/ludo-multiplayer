@@ -295,5 +295,67 @@ describe("game screen", () => {
     });
     expect(step("p-host:0")).toBe("15");
   });
+
+  it("advances the home counter only when the token arrives home, and offers the home bonus", async () => {
+    vi.useFakeTimers();
+    const s = inGame("p-ben", withTokens(gameView({ stateVersion: 4, historyLength: 8 }), [53, 56, null, null]));
+    const homeCount = () => screen.getAllByTestId("home-count")[0]!.getAttribute("data-home");
+    expect(homeCount()).toBe("1");
+    const history: GameHistoryEntry[] = [
+      { seq: 9, type: "move", playerId: host, tokenId: 0, from: 53, to: 56, dice: 3 },
+      { seq: 10, type: "home", playerId: host, tokenId: 0 },
+      { seq: 11, type: "bonus-roll", playerId: host, reasons: ["home"] },
+    ];
+    act(() => s.client.set({ game: withTokens(gameView({ stateVersion: 5, recentHistory: history, historyLength: 11 }), [56, 56, null, null]) }));
+    await act(async () => {
+      vi.advanceTimersByTime(170 * 2 + 300); // two hops and part of the glide home
+    });
+    expect(step("p-host:0")).toBe("56");
+    expect(homeCount(), "not before the token has arrived").toBe("1");
+    await act(async () => {
+      vi.advanceTimersByTime(320);
+    });
+    expect(homeCount()).toBe("2");
+    expect(screen.getAllByText("Home: Aman rolls again").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("turn-callouts")[0]!.getAttribute("data-kind")).toBe("home");
+    expect(tokenState("p-host:0")).toBe("finished");
+  });
+
+  it("the fourth token home is a win, not another bonus", async () => {
+    vi.useFakeTimers();
+    const s = inGame(host, withTokens(gameView({ stateVersion: 4, historyLength: 8 }), [55, 56, 56, 56]));
+    const history: GameHistoryEntry[] = [
+      { seq: 9, type: "auto-move", playerId: host, tokenId: 0, from: 55, to: 56, dice: 1 },
+      { seq: 10, type: "home", playerId: host, tokenId: 0 },
+      { seq: 11, type: "player-finished", playerId: host, place: 1 },
+      { seq: 12, type: "win", playerId: host },
+      { seq: 13, type: "game-over", ranking: [host] },
+    ];
+    act(() => s.client.set({ game: withTokens(gameView({ stateVersion: 5, phase: "finished", currentPlayerId: null, winnerId: host, ranking: [host], recentHistory: history, historyLength: 13 }), [56, 56, 56, 56]) }));
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(screen.getAllByTestId("turn-callouts")[0]!.getAttribute("data-kind")).toBe("win");
+    expect(screen.queryByText(/Home: roll again/)).toBeNull();
+  });
+
+  it("announces a player finishing in a full-ranking game while play continues", async () => {
+    vi.useFakeTimers();
+    const s = inGame(host, withTokens(gameView({ stateVersion: 4, historyLength: 8, settings: { autoMove: true, rankingMode: "full-ranking" } }), [null, null, null, null], [55, 56, 56, 56]));
+    const history: GameHistoryEntry[] = [
+      { seq: 9, type: "auto-move", playerId: "p-ben", tokenId: 0, from: 55, to: 56, dice: 1 },
+      { seq: 10, type: "home", playerId: "p-ben", tokenId: 0 },
+      { seq: 11, type: "player-finished", playerId: "p-ben", place: 1 },
+      { seq: 12, type: "win", playerId: "p-ben" },
+      { seq: 13, type: "turn", playerId: host, reason: "player-finished" },
+    ];
+    act(() => s.client.set({ game: withTokens(gameView({ stateVersion: 5, winnerId: "p-ben", ranking: ["p-ben"], recentHistory: history, historyLength: 13, settings: { autoMove: true, rankingMode: "full-ranking" } }), [null, null, null, null], [56, 56, 56, 56]) }));
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(screen.getAllByText("Ben wins!").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Play continues for the remaining places.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Your turn").length).toBeGreaterThan(0);
+  });
 });
 

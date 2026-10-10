@@ -75,3 +75,39 @@ test("a double capture: both tokens react and go home together, after the attack
   noErrors([aman, ben]);
 });
 
+test("home: the token runs up its own lane, the gold accent plays, and the counter changes only on arrival", async ({ browser }) => {
+  const { aman, ben, table, A } = await twoPlayers(browser);
+  // Round the board with sixes (Ben has nothing out, so his 1s are auto-passed).
+  await table.act(6, () => 0); // opens: 0
+  await table.act(6, () => 0); // 6
+  await table.act(5); // 11
+  await table.act(1); // Ben
+  for (let lap = 0; lap < 2; lap++) {
+    await table.act(6, () => 0); // 17 | 34
+    await table.act(6, () => 0); // 23 | 40
+    await table.act(5); // 28 | 45
+    await table.act(1); // Ben
+  }
+  await table.act(6, () => 0); // 45 → 51, the first lane cell
+  for (const p of [aman, ben]) await startTimeline(p.page);
+  const snap = await table.act(5); // 51 → 56: home
+  expect(snap.history.some((e) => e.type === "home" && e.playerId === aman.id)).toBe(true);
+  for (const p of [aman, ben]) {
+    await expect(p.page.locator('[data-effect="home"]').first(), `${p.name} sees the gold accent`).toBeAttached({ timeout: 3000 });
+  }
+  for (const p of [aman, ben]) {
+    await expect.poll(async () => (await readTimeline(p.page)).some((e) => e.target === `home:${aman.id}` && e.value === "1"), { message: `${p.name}'s counter shows 1` }).toBe(true);
+    const tl = await readTimeline(p.page);
+    expect(stepsOf(tl, A(0)), `${p.name}: up the lane, cell by cell`).toEqual(["52", "53", "54", "55", "56"]);
+    const arrivedAt = tl.find((e) => e.target === A(0) && e.value === "56")!.t;
+    const counted = tl.find((e) => e.target === `home:${aman.id}` && e.value === "1")!;
+    expect(counted.t - arrivedAt, `${p.name}: the counter waits for the glide home`).toBeGreaterThan(450);
+    await expect(p.page.getByTestId(`token-${A(0)}`)).toHaveAttribute("data-state", "finished");
+    await expect(p.page.getByTestId(`token-${A(0)}`)).not.toHaveAttribute("role", "button");
+  }
+  await expect(visible(aman.page.getByText("Home: roll again"))).toBeVisible();
+  await expect(visible(ben.page.getByText("Home: Aman rolls again"))).toBeVisible();
+  await expect(visible(ben.page.locator(`[data-testid="home-count"][data-player="${aman.id}"]`))).toHaveText("1/4");
+  noErrors([aman, ben]);
+});
+

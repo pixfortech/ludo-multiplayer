@@ -43,11 +43,28 @@ export function DestinationMarker({ preview }: { preview: MovePreview }) {
   );
 }
 
+const SPARKS = Array.from({ length: 8 }, (_, i) => {
+  const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+  return { dx: Math.cos(a) * CELL * 0.95, dy: Math.sin(a) * CELL * 0.95 };
+});
+
 export function EffectMark({ effect }: { effect: BoardEffect }) {
   const identity = PLAYER_IDENTITIES[effect.seat]!;
+  if (effect.kind === "home") {
+    // The finishing accent: a soft gold glow, an expanding ring and eight small sparks. One burst, ~700 ms.
+    return (
+      <g pointerEvents="none" transform={`translate(${effect.at.x} ${effect.at.y})`} data-effect="home">
+        <circle className="board-home-glow" r={CELL * 0.62} fill="#E3B341" />
+        <circle className="board-effect-home" r={CELL * 0.5} fill="none" stroke="#E3B341" strokeWidth="3" />
+        {SPARKS.map((s, i) => (
+          <path key={i} className="board-home-spark" d="M0 -4.2L1.4 0L0 4.2L-1.4 0Z" fill="#E3B341" style={{ ["--dx" as string]: `${s.dx.toFixed(1)}px`, ["--dy" as string]: `${s.dy.toFixed(1)}px` }} />
+        ))}
+      </g>
+    );
+  }
   return (
     <g pointerEvents="none" transform={`translate(${effect.at.x} ${effect.at.y})`} data-effect={effect.kind}>
-      <circle className={effect.kind === "home" ? "board-effect-home" : "board-effect-capture"} r={CELL * 0.5} fill="none" stroke={effect.kind === "home" ? "#E3B341" : identity.rim} strokeWidth="3" />
+      <circle className="board-effect-capture" r={CELL * 0.5} fill="none" stroke={identity.rim} strokeWidth="3" />
     </g>
   );
 }

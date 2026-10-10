@@ -5,9 +5,9 @@ import type { Page } from "@playwright/test";
 
 export interface TimelineEvent {
   t: number;
-  /** "die" or a token key (playerId:tokenId). */
+  /** "die", a token key (playerId:tokenId), or "home:<playerId>" for a home counter. */
   target: string;
-  /** data-value of the die, or data-step of a token. */
+  /** data-value of the die, data-step of a token, or a home count. */
   value: string;
 }
 
@@ -19,13 +19,23 @@ export async function startTimeline(page: Page): Promise<void> {
     const visibleDie = () => [...document.querySelectorAll<HTMLElement>('[data-testid="die"]')].find((d) => d.getBoundingClientRect().width > 0);
     const observer = new MutationObserver((records) => {
       for (const r of records) {
+        // A counter re-mounted to restart its animation arrives as a new element.
+        if (r.type === "childList") {
+          for (const node of r.addedNodes) {
+            if (!(node instanceof Element)) continue;
+            const counters = node.matches('[data-testid="home-count"]') ? [node] : [...node.querySelectorAll('[data-testid="home-count"]')];
+            for (const c of counters) if (c.getBoundingClientRect().width > 0) w.__timeline.push({ t: performance.now(), target: `home:${c.getAttribute("data-player")}`, value: c.getAttribute("data-home")! });
+          }
+          continue;
+        }
         const el = r.target as Element;
         const id = el.getAttribute("data-testid") ?? "";
         if (id === "die" && el === visibleDie()) w.__timeline.push({ t: performance.now(), target: "die", value: el.getAttribute("data-value")! });
         if (id.startsWith("token-") && r.attributeName === "data-step") w.__timeline.push({ t: performance.now(), target: id.slice(6), value: el.getAttribute("data-step")! });
+        if (id === "home-count" && r.attributeName === "data-home" && el.getBoundingClientRect().width > 0) w.__timeline.push({ t: performance.now(), target: `home:${el.getAttribute("data-player")}`, value: el.getAttribute("data-home")! });
       }
     });
-    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ["data-step", "data-value"] });
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-step", "data-value", "data-home"] });
     w.__timelineObserver = observer;
   });
 }

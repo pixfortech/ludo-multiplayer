@@ -74,7 +74,9 @@ export function turnEventFor(entries: readonly GameHistoryEntry[], nameOf: NameO
   const win = entries.find((e) => e.type === "win");
   if (win && win.type === "win") {
     const title = you(win.playerId) ? "You win!" : `${nameOf(win.playerId)} wins!`;
-    return { kind: "win", title, detail: "All four tokens are home.", spoken: `${title} All four tokens are home. The game is over.`, playerId: win.playerId };
+    const over = entries.some((e) => e.type === "game-over");
+    const detail = over ? "All four tokens are home." : "Play continues for the remaining places.";
+    return { kind: "win", title, detail, spoken: `${title} ${detail}${over ? " The game is over." : ""}`, playerId: win.playerId };
   }
   const finished = entries.find((e) => e.type === "player-finished");
   if (finished && finished.type === "player-finished") {

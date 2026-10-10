@@ -189,12 +189,47 @@ body {
 .board-effect-home {
   transform-box: fill-box;
   transform-origin: center;
-  animation: board-ring-out 600ms var(--ease-enter) both;
+  animation: board-ring-out 680ms var(--ease-enter) both;
 }
 .board-effect-capture {
   transform-box: fill-box;
   transform-origin: center;
   animation: board-ring-out 520ms var(--ease-enter) both;
+}
+/* Home: a soft gold glow under the finished token and eight sparks flying out. */
+@keyframes board-home-glow {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  30% {
+    opacity: 0.32;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+.board-home-glow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: board-home-glow 720ms var(--ease-enter) both;
+}
+@keyframes board-home-spark {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0.3);
+  }
+}
+.board-home-spark {
+  animation: board-home-spark 680ms var(--ease-enter) both;
 }
 
 /* "Your roll": the tray breathes in the player's colour. Opacity only, on its own layer, so the

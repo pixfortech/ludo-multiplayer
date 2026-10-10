@@ -27,10 +27,10 @@ function Sweep({ flash, identity }: { flash: GamePlayerRow["flash"]; identity: P
   return <span key={flash.key} aria-hidden="true" className="seat-sweep pointer-events-none absolute inset-y-0 left-0 w-full" style={{ background: `linear-gradient(90deg, transparent, ${colour}55 45%, ${colour}77 50%, ${colour}55 55%, transparent)` }} data-testid="seat-sweep" />;
 }
 
-function HomeDots({ home, identity, flash }: { home: number; identity: PlayerIdentity; flash: GamePlayerRow["flash"] }) {
+function HomeDots({ home, identity, flash, playerId }: { home: number; identity: PlayerIdentity; flash: GamePlayerRow["flash"]; playerId: string }) {
   const pop = flash?.kind === "home";
   return (
-    <span className="flex items-center gap-1.5" aria-label={`${home} of 4 tokens home`} data-testid="home-count" data-home={home}>
+    <span className="flex items-center gap-1.5" aria-label={`${home} of 4 tokens home`} data-testid="home-count" data-home={home} data-player={playerId}>
       <span className="flex items-center gap-1">
         {[0, 1, 2, 3].map((i) => (
           <span key={i} className="h-2 w-2 rounded-full" style={{ background: i < home ? identity.body : "#E2DCD1", boxShadow: i < home ? `inset 0 0 0 1px ${identity.rim}` : "none" }} />
@@ -65,7 +65,7 @@ export function PlayerPanel({ players }: { players: readonly GamePlayerRow[] }) 
               {p.isHost ? <CrownIcon size={13} className="shrink-0 text-[#a77b0e]" aria-label="Host" /> : null}
             </span>
             <span className="flex items-center gap-2 text-[12px] text-ink-muted">
-              <HomeDots home={p.home} identity={p.identity} flash={p.flash} />
+              <HomeDots home={p.home} identity={p.identity} flash={p.flash} playerId={p.playerId} />
               {p.place ? <span className="font-semibold text-ink">{ordinal(p.place)}</span> : p.connected ? null : <span>Away</span>}
             </span>
           </span>
@@ -92,7 +92,7 @@ export function PlayerStrip({ players }: { players: readonly GamePlayerRow[] }) 
             <span className={`absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-white ${p.connected ? "bg-success" : "bg-[#b9b2a6]"}`} />
           </span>
           <span className={`max-w-[88px] truncate text-[13px] font-semibold ${p.current ? "text-ink" : "text-ink-muted"}`}>{p.isYou ? "You" : p.name}</span>
-          <span key={p.flash?.kind === "home" ? p.flash.key : "still"} className={`tabular inline-block text-[12px] font-semibold text-ink-muted ${p.flash?.kind === "home" ? "count-pop" : ""}`} aria-label={`${p.home} of 4 home`}>
+          <span key={p.flash?.kind === "home" ? p.flash.key : "still"} className={`tabular inline-block text-[12px] font-semibold text-ink-muted ${p.flash?.kind === "home" ? "count-pop" : ""}`} aria-label={`${p.home} of 4 home`} data-testid="home-count" data-home={p.home} data-player={p.playerId}>
             {p.home}/4
           </span>
         </li>
