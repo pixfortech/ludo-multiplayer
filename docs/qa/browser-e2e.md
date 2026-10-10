@@ -103,6 +103,14 @@ The driver reads the authoritative state and queues dice so a game ends determin
 | 14 | Reduced motion avoids elaborate effects | A capture is one straight move home with no effect animation, and the banner still explains it. A reduced-motion victory has no confetti. |
 | 15 | Phone effects don't cover the board or controls | On the phone during a capture, the board's centre and corners are not covered and the die is fully in view. On the victory screen, every action is fully in the viewport. |
 
+## City themes (Batches A and B)
+
+| Spec | Covers |
+| ---- | ------ |
+| `city.spec.ts` | The host picks a city; the guest's join preview and lobby show it; it survives a refresh |
+| `city-environments.spec.ts` | Every city at desktop (1920×1080), laptop (1366×768), tablet landscape and portrait, phone portrait (390×844) and landscape (844×390): the right city; scenery only in the fixed, non-interactive backdrop layer; nothing on top of the board (15 probe points) or the die; the whole board on screen inside its plinth; no sideways scrolling. Then joining, a refresh and a network drop keep the city, with play in sync. `E2E_SHOTS_DIR` saves a screenshot of every case. |
+| `city-performance.spec.ts` | Classic against each city, with ambient motion on and with reduced motion: main-thread time, style and layout, frame pacing idle and during a move, DOM size. `E2E_PERF_OUT` saves the numbers. Headless Chromium composites in software: relative numbers only, not device frame rates. |
+
 ## Bugs found and fixed
 
 1. **A double click sent two requests.** Two clicks in the same moment, before React re-rendered, sent two `game:roll` (or `game:move`) requests. The server's state-version check refused the second as stale, so the game state was never wrong. But the client sent a duplicate request and could briefly show a refusal.
