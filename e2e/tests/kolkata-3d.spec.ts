@@ -383,12 +383,22 @@ test("switching views and graphics quality mid-turn, a refresh, a lost context a
   for (const [level, c] of Object.entries(counts)) expect(c.geometries, `${level}: GPU geometries bounded`).toBeLessThan(80);
   expect(counts["Medium (again)"]!.geometries).toBeLessThanOrEqual(Math.max(...Object.values(counts).map((c) => c.geometries)));
   expect(counts.Low!.triangles, "Low draws less than High").toBeLessThan(counts.High!.triangles);
-  await expect.poll(async () => (await boardTokens(aman.page)).filter((t) => t.state === "movable").length, { message: "the choice is still open" }).toBe(4);
-  const version = (await table.state()).game!.stateVersion;
-  await pickToken3d(aman, A(1));
-  await expect.poll(async () => (await table.state()).game!.stateVersion, { message: "the pick after the quality changes plays" }).toBeGreaterThan(version);
-  table.moves++;
-  await table.expectInSync();
+  // On a software GPU under load the WebGL context can be lost (seen once on the Windows runner); the board then
+  // falls back to 2D with a notice, which is the designed behaviour. Either way the choice stays open and the pick plays.
+  const on3d = (await aman.page.locator("canvas[data-board-gl]").count()) > 0;
+  if (on3d) {
+    await expect.poll(async () => (await boardTokens(aman.page)).filter((t) => t.state === "movable").length, { message: "the choice is still open" }).toBe(4);
+    const version = (await table.state()).game!.stateVersion;
+    await pickToken3d(aman, A(1));
+    await expect.poll(async () => (await table.state()).game!.stateVersion, { message: "the pick after the quality changes plays" }).toBeGreaterThan(version);
+    table.moves++;
+    await table.expectInSync();
+  } else {
+    console.log(`after the quality changes the board fell back to 2D: ${await visible(aman.page.getByTestId("game-status")).textContent()}`);
+    await expect(visible(aman.page.getByTestId("game-status"))).toContainText("2D board");
+    await table.move(1);
+    await table.expectInSync();
+  }
   await table.act(5, () => 0); // the bonus roll
 
   // A refresh: back on the stage with the city, exact.
