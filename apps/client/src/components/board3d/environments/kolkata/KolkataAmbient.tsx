@@ -1,13 +1,14 @@
 // Kolkata's ambient life: yellow taxis on the ring road, trams round the
 // Maidan, ferries on the Hooghly, people on the promenade, the ghats, the
 // Maidan and the plaza. One instanced mesh per kind (five draw calls in all).
-// Positions come from the time (movers.ts), updated at most at the quality's
-// ambient rate; under reduced motion everything stays parked. Nothing here
-// takes pointer events, casts shadows or reads or writes game state.
+// Positions come from the time (movers.ts), updated at most at the ambient
+// rate; under reduced motion, or on a device that cannot afford the city's
+// life, everything stands still. Nothing here takes pointer events, casts
+// shadows or reads or writes game state.
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { Color, MeshStandardMaterial, Object3D, type InstancedMesh } from "three";
+import { Color, MeshLambertMaterial, MeshStandardMaterial, Object3D, type InstancedMesh } from "three";
 import { hash01, noRaycast } from "../kit";
 import { ambientTime, makeThrottle, type EnvironmentQuality } from "../ambient";
 import { CLOTHES, buildFerry, buildPedestrian, buildTaxi, buildTram, moverAt, moversFor, type Mover, type MoverKind } from "./movers";
@@ -15,7 +16,8 @@ import { CLOTHES, buildFerry, buildPedestrian, buildTaxi, buildTram, moverAt, mo
 const dummy = new Object3D();
 const tint = new Color();
 
-export function KolkataAmbient({ quality, reduced }: { quality: EnvironmentQuality; reduced: boolean }) {
+/** `rate`: ambient updates a second (0: everything stands still where it is). */
+export function KolkataAmbient({ quality, rate }: { quality: EnvironmentQuality; rate: number }) {
   const { taxis, trams, ferries, pedestrians } = quality;
   const movers = useMemo(() => {
     const all = moversFor({ taxis, trams, ferries, pedestrians });
@@ -31,7 +33,7 @@ export function KolkataAmbient({ quality, reduced }: { quality: EnvironmentQuali
       body: walker.body,
       head: walker.head,
       paint: new MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.05 }),
-      cloth: new MeshStandardMaterial({ vertexColors: true, roughness: 0.9 }),
+      cloth: new MeshLambertMaterial({ vertexColors: true }),
     };
   }, []);
   useEffect(
@@ -84,13 +86,13 @@ export function KolkataAmbient({ quality, reduced }: { quality: EnvironmentQuali
       headMesh.current?.setColorAt(i, tint.setScalar(0.8 + hash01(m.seed + i * 13) * 0.35));
     });
     for (const mesh of [bodyMesh.current, headMesh.current]) if (mesh?.instanceColor) mesh.instanceColor.needsUpdate = true;
-    place(reduced ? 0 : ambientTime());
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `place` reads the refs and movers already listed
-  }, [movers, reduced]);
+    place(rate > 0 ? ambientTime() : 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `place` reads the refs and movers already listed; a change of rate must not move anyone
+  }, [movers]);
 
-  const due = useMemo(() => makeThrottle(quality.fps), [quality.fps]);
+  const due = useMemo(() => makeThrottle(rate), [rate]);
   useFrame(() => {
-    if (reduced) return;
+    if (rate <= 0) return;
     const now = ambientTime();
     if (due(now)) place(now);
   });

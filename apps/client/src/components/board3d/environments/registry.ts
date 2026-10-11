@@ -6,6 +6,7 @@
 import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 import type { CityThemeId } from "@ludo/city-themes";
 import type { QualityLevel } from "../capabilities";
+import type { AmbientState } from "./ambient";
 import { toAabb, type Aabb } from "../sightlines";
 import { GROUND_Y as KOLKATA_GROUND, LANDMARKS as KOLKATA_LANDMARKS, obstacles as kolkataObstacles } from "./kolkata/layout";
 
@@ -16,6 +17,8 @@ export interface EnvironmentProps {
   busy: boolean;
   /** Called once the environment's scenery is built (for tooling). */
   onBuilt?: (info: { assets: readonly string[] }) => void;
+  /** Called when the ambient life's state or rate changes (for tooling). */
+  onAmbient?: (state: AmbientState, fps: number) => void;
 }
 
 export interface EnvironmentEntry {

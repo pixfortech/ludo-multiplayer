@@ -3,7 +3,7 @@
 // landmark or district (lamps instanced), never pickable.
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { MeshStandardMaterial, Object3D, type InstancedMesh } from "three";
+import { MeshLambertMaterial, MeshStandardMaterial, Object3D, type InstancedMesh } from "three";
 import { noRaycast } from "../kit";
 import type { EnvironmentQuality } from "../ambient";
 import { buildBiswaBanglaGate, buildHowrahBridge, buildHowrahStation, buildShaheedMinar, buildVictoriaMemorial, buildWritersBuilding } from "./landmarks";
@@ -33,7 +33,7 @@ export function KolkataLandmarks({ quality }: { quality: EnvironmentQuality }) {
       ] as const,
       glass: contemporary.glass,
       lamp: buildLampPost(),
-      matte: new MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0 }),
+      matte: new MeshLambertMaterial({ vertexColors: true }),
       glassy: new MeshStandardMaterial({ vertexColors: true, roughness: 0.18, metalness: 0.35 }),
     };
   }, [d]);

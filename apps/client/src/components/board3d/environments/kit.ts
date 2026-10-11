@@ -118,9 +118,14 @@ export class Builder {
     return this;
   }
 
-  /** Merges every part into one geometry (and disposes the parts). */
-  build(): BufferGeometry {
-    const merged = mergeGeometries(this.parts, false);
+  /**
+   * Merges every part into one geometry (and disposes the parts). `topFirst`
+   * stores the parts last-added-first: for layered ground (each layer laid on
+   * the one before), the GPU then draws the top layers first and skips the
+   * hidden parts of the layers beneath (less overdraw on weak GPUs).
+   */
+  build(topFirst = false): BufferGeometry {
+    const merged = mergeGeometries(topFirst ? [...this.parts].reverse() : this.parts, false);
     for (const p of this.parts) p.dispose();
     this.parts.length = 0;
     if (!merged) throw new Error("nothing to build");

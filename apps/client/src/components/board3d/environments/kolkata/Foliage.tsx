@@ -4,14 +4,15 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { IcosahedronGeometry, MeshStandardMaterial, Object3D, type InstancedMesh } from "three";
+import { IcosahedronGeometry, MeshLambertMaterial, Object3D, type InstancedMesh } from "three";
 import { Builder, hash01, noRaycast } from "../kit";
 import { ambientTime, makeThrottle, type EnvironmentQuality } from "../ambient";
 import { GROUND_Y, TREES } from "./layout";
 
 const dummy = new Object3D();
 
-export function Foliage({ quality, reduced }: { quality: EnvironmentQuality; reduced: boolean }) {
+/** `rate`: ambient updates a second (0: still). */
+export function Foliage({ quality, rate }: { quality: EnvironmentQuality; rate: number }) {
   const trunks = useRef<InstancedMesh>(null);
   const canopies = useRef<InstancedMesh>(null);
   const res = useMemo(() => {
@@ -21,8 +22,8 @@ export function Foliage({ quality, reduced }: { quality: EnvironmentQuality; red
     return {
       trunk,
       canopy,
-      bark: new MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }),
-      leaves: new MeshStandardMaterial({ color: "#5E8A47", roughness: 0.9, flatShading: true }),
+      bark: new MeshLambertMaterial({ vertexColors: true }),
+      leaves: new MeshLambertMaterial({ color: "#5E8A47", flatShading: true }),
     };
   }, [quality.detail]);
   useEffect(
@@ -59,9 +60,9 @@ export function Foliage({ quality, reduced }: { quality: EnvironmentQuality; red
     trunks.current?.computeBoundingSphere();
     canopies.current?.computeBoundingSphere();
   });
-  const due = useMemo(() => makeThrottle(Math.min(12, quality.fps)), [quality.fps]);
+  const due = useMemo(() => makeThrottle(Math.min(12, rate)), [rate]);
   useFrame(() => {
-    if (!quality.sway || reduced) return;
+    if (!quality.sway || rate <= 0) return;
     const now = ambientTime();
     if (due(now)) place(now);
   });

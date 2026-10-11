@@ -5,15 +5,17 @@
 
 import { useEffect, useRef } from "react";
 import type { Group } from "three";
-import { AmbientClock, ENV_QUALITY } from "../ambient";
+import { ENV_QUALITY, useAmbientClock } from "../ambient";
 import type { EnvironmentProps } from "../registry";
 import { Foliage } from "./Foliage";
 import { KolkataAmbient } from "./KolkataAmbient";
 import { KolkataGround } from "./Ground";
 import { KolkataLandmarks } from "./KolkataLandmarks";
 
-export default function KolkataEnvironment({ quality, reduced, busy, onBuilt }: EnvironmentProps) {
+export default function KolkataEnvironment({ quality, reduced, busy, onBuilt, onAmbient }: EnvironmentProps) {
   const q = ENV_QUALITY[quality];
+  // The rate the city's life runs at (0: standing still, under reduced motion or on a device that cannot afford it).
+  const rate = useAmbientClock({ fps: q.fps, busy, active: !reduced, onState: onAmbient });
   const root = useRef<Group>(null);
   // Report which assets were built (each carries a name "asset:<id>").
   useEffect(() => {
@@ -25,11 +27,10 @@ export default function KolkataEnvironment({ quality, reduced, busy, onBuilt }: 
   }, [onBuilt, quality]);
   return (
     <group ref={root} name="kolkata-environment">
-      <AmbientClock fps={q.fps} busy={busy} active={!reduced} />
       <KolkataGround quality={q} />
       <KolkataLandmarks quality={q} />
-      <Foliage quality={q} reduced={reduced} />
-      <KolkataAmbient quality={q} reduced={reduced} />
+      <Foliage quality={q} rate={rate} />
+      <KolkataAmbient quality={q} rate={rate} />
     </group>
   );
 }

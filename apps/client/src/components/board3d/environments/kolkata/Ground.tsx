@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo } from "react";
 import { useThree } from "@react-three/fiber";
-import { BackSide, BufferAttribute, Color, Fog, MeshBasicMaterial, MeshStandardMaterial, SphereGeometry } from "three";
+import { BackSide, BufferAttribute, Color, Fog, MeshBasicMaterial, MeshLambertMaterial, MeshStandardMaterial, SphereGeometry } from "three";
 import { Builder, hash01, noRaycast, type V3 } from "../kit";
 import type { EnvironmentQuality } from "../ambient";
 import { BOARD_CLEAR, GROUND_Y, RIVER, TAXI_LANES, TRAM_LOOP, WATER_Y, loopLength, loopPoint } from "./layout";
@@ -105,7 +105,7 @@ function groundGeometry() {
       b.beam([x + ox, y + WIRE + 0.04, z + oz], [x, y + WIRE + 0.04, z], 0.02, KOLKATA_COLOURS.wire);
     }
   }
-  return b.build();
+  return b.build(true);
 }
 
 function riverGeometry() {
@@ -166,7 +166,8 @@ function skyGeometry() {
 export function KolkataGround({ quality }: { quality: EnvironmentQuality }) {
   const scene = useThree((s) => s.scene);
   const res = useMemo(() => {
-    const land = new MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
+    // Matte scenery is Lambert-shaded (no specular term): it looks the same on these flat colours and costs less per pixel.
+    const land = new MeshLambertMaterial({ vertexColors: true });
     const water = new MeshStandardMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.08 });
     return {
       ground: groundGeometry(),
@@ -196,8 +197,9 @@ export function KolkataGround({ quality }: { quality: EnvironmentQuality }) {
   );
   return (
     <group name="kolkata-ground">
-      <mesh geometry={res.sky} material={res.skyMaterial} raycast={noRaycast} renderOrder={-10} name="sky" />
-      <mesh geometry={res.ground} material={res.land} raycast={noRaycast} receiveShadow name="ground" />
+      {/* Drawn last, so wherever the city covers it (all of the aerial view) the GPU skips it. */}
+      <mesh geometry={res.sky} material={res.skyMaterial} raycast={noRaycast} renderOrder={10} name="sky" />
+      <mesh geometry={res.ground} material={res.land} raycast={noRaycast} name="ground" />
       <mesh geometry={res.river} material={res.water} raycast={noRaycast} name="asset:hooghly-river" />
       <mesh geometry={res.banks} material={res.land} raycast={noRaycast} name="embankments" />
       <mesh geometry={res.skyline} material={res.land} raycast={noRaycast} name="asset:skyline" />

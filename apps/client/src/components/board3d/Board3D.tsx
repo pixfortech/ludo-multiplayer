@@ -28,6 +28,7 @@ import { TextureCache } from "./textures";
 import { Token3D, TokenKit, floorFor, type Token3DInput } from "./Tokens3D";
 import type { QualityLevel } from "./capabilities";
 import { environmentFor } from "./environments/registry";
+import type { AmbientState } from "./environments/ambient";
 import type { StageViewport } from "./CameraRig";
 
 export interface Board3DProps extends ClassicBoardProps {
@@ -128,6 +129,9 @@ function FrameWatch({ onReady, onFrameStats, host }: { onReady: () => void; onFr
       const now = performance.now();
       total += now - start;
       frames++;
+      // Frames drawn since the canvas was created (tests and tooling compare ambient frame rates).
+      const el = host.current;
+      if (el) el.dataset.frames = String(Number(el.dataset.frames ?? 0) + 1);
       if (frames >= 20 && now - since >= 2000) {
         const ms = total / frames;
         publish(ms);
@@ -141,7 +145,7 @@ function FrameWatch({ onReady, onFrameStats, host }: { onReady: () => void; onFr
       before();
       after();
     };
-  }, [publish, onFrameStats]);
+  }, [publish, onFrameStats, host]);
   useFrame(() => {
     if (!ready.current) {
       ready.current = true;
@@ -353,8 +357,13 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
   const env = environmentFor(environment);
   const obstacles = useMemo(() => env?.obstacles() ?? [], [env]);
   const anchors = useMemo(() => env?.anchors() ?? [], [env]);
-  const [builtAssets, setBuiltAssets] = useState<readonly string[]>([]);
-  const onBuilt = useCallback((info: { assets: readonly string[] }) => setBuiltAssets(info.assets), []);
+  // What the environment reports, tagged with the quality it was built at (a quality change rebuilds it: stale reports are not shown).
+  const [built, setBuilt] = useState<{ quality: QualityLevel; assets: readonly string[] } | null>(null);
+  const onBuilt = useCallback((info: { assets: readonly string[] }) => setBuilt({ quality, assets: info.assets }), [quality]);
+  const builtAssets = built?.quality === quality ? built.assets : [];
+  const [ambientReport, setAmbient] = useState<{ quality: QualityLevel; state: AmbientState; fps: number } | null>(null);
+  const onAmbient = useCallback((state: AmbientState, fps: number) => setAmbient({ quality, state, fps }), [quality]);
+  const ambient = ambientReport?.quality === quality ? ambientReport : null;
   const [failed, setFailed] = useState(false);
   const fail = useCallback(
     (reason: string) => {
@@ -401,7 +410,7 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
         <Lights shadows={Boolean(q.shadows)} mapSize={q.shadowMap} />
         {env ? (
           <Suspense fallback={null}>
-            <env.Component quality={quality} reduced={reduced} busy={busy} onBuilt={onBuilt} />
+            <env.Component quality={quality} reduced={reduced} busy={busy} onBuilt={onBuilt} onAmbient={onAmbient} />
           </Suspense>
         ) : null}
         <BoardMesh3D model={model} material={material} currentSeat={currentSeat} youSeat={youSeat} detail={q.detail} shadows={Boolean(q.shadows)} textures={textures} />
@@ -425,6 +434,8 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
       data-camera={mode === "2.5d" ? "aerial" : immersiveView}
       data-stage={staged ? "" : undefined}
       data-environment={env ? environment : undefined}
+      data-ambient={env && ambient ? ambient.state : undefined}
+      data-ambient-fps={env && ambient ? ambient.fps : undefined}
       role="group"
       aria-label={title}
       // On the stage the canvas lies behind the page: the slot lets pointer events through to it.

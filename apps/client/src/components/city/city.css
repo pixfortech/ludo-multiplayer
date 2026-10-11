@@ -353,3 +353,12 @@ html[data-city] header {
 .board-stage .board-slot [data-testid="paused-overlay"] {
   pointer-events: auto;
 }
+/* Over the live 3D stage a backdrop blur would be recomputed for every frame
+   the city draws (costly, above all on software-rendered or weak GPUs): bars
+   above the stage are solid instead. */
+body:has(.board-stage-host) header,
+body:has(.board-stage-host) .backdrop-blur {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-color: color-mix(in srgb, var(--color-canvas) 94%, transparent);
+}
