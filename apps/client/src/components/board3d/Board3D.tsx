@@ -207,6 +207,9 @@ function Projection({ objects, mirror, cells, anchors }: { objects: Map<string, 
   const v = useMemo(() => new Vector3(), []);
   const lastView = useRef("");
   useFrame(() => {
+    // The renderer updates the camera's world matrix only when it draws (after this): bring it up to date
+    // first, or the mirror would lag the picture by a frame (and stay stale when no further frame comes).
+    camera.updateMatrixWorld();
     // Board cells move on screen only when the camera or the canvas does.
     const view = `${size.width}x${size.height}:${camera.matrixWorld.elements.join(",")}:${camera.projectionMatrix.elements.join(",")}`;
     if (view !== lastView.current) {
