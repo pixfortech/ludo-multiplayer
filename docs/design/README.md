@@ -21,6 +21,6 @@ Phase 0.5 deliverables. The approved direction is **Contemporary Playful (B) wit
 
 Rules: [classic-ludo.md](../rules/classic-ludo.md) (traditional) · [custom-modes.md](../rules/custom-modes.md) (rectangle, triangle, rings). Phase 1 plan: [phase1-readiness.md](../architecture/phase1-readiness.md).
 
-Also: [higgsfield-integration.md](higgsfield-integration.md) (tool access and verified models) and [asset-approval-log.md](asset-approval-log.md).
+Also: [characters.md](characters.md) (C.3A human characters: pipeline, identities, state machine), [higgsfield-integration.md](higgsfield-integration.md) (tool access and verified models) and [asset-approval-log.md](asset-approval-log.md).
 
 Regenerate the measured and diagram artifacts with `npm run design:generate`; `npm run test` fails if they are stale.

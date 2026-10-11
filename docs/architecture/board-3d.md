@@ -179,3 +179,21 @@ for every city frame).
   is drawn last, where nothing covers it.
 - Fog starts well beyond the board, so the board's colours never change.
 - Everything is disposed on unmount and on quality changes (the canvas is rebuilt per quality).
+
+## Human characters (Batch C.3A, prototype)
+
+In Kolkata's 3D and 2.5D board, the Crimson team's four tokens are people (rigged GLB
+characters on plinths in the seat colour) instead of pawns. Design, pipeline, licences and
+limitations: [characters.md](../design/characters.md).
+
+- `apps/client/src/components/board3d/characters/`: `catalog.ts` (which seats of which city
+  have characters, the files, their scale), `brain.ts` (the presentation state machine: pure,
+  tested), `CharacterBody.tsx` (loads a level of detail, tints the `team` material, plays clips
+  through one mixer), `characters.json` (built by `tools/characters`).
+- `Tokens3D.tsx` swaps the pawn for the character and moves it along the playback's motions;
+  the plinth is the pick target. `useBoardPlayback` paces seats with characters at walking
+  speed (`CHARACTER_PACE`); the server, rules and move tray are unchanged.
+- The token mirror carries `data-character`, `data-character-ready`, `-state`, `-clip`,
+  `-team`, `-level` and `-clips` for tests and tooling.
+- The 2D board, other cities and other seats keep the pawns; losing WebGL falls back to the
+  2D board as before.
