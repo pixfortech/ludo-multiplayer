@@ -48,12 +48,15 @@ export const RIVER = {
 } as const;
 
 export const BRIDGE = {
-  /** The deck runs east to west across the river's west arm. */
-  z: 3.1,
-  east: -10.4,
-  west: -18.6,
-  towers: [-11.85, -15.85] as const,
-  towerHeight: 5.4,
+  /** The deck runs east to west across the river's west arm (south of centre: in view below the side panels in 2.5D). */
+  z: 6.6,
+  /** Ends of the anchor arms (on the banks). */
+  east: -10.35,
+  west: -17.35,
+  /** Towers at the water's edge; the main span between them (the real bridge: ~1 : 4.6 anchor to main span). */
+  towers: [-11.4, -16.3] as const,
+  towerHeight: 5.2,
+  /** Deck level above the ground. */
   deckHeight: 0.85,
   /** Half the distance between the two truss planes. */
   halfWidth: 0.62,
@@ -62,15 +65,16 @@ export const BRIDGE = {
 export const LANDMARKS: readonly Landmark[] = [
   { id: "howrah-bridge", name: "Howrah Bridge", seat: null, at: { x: (BRIDGE.east + BRIDGE.west) / 2, z: BRIDGE.z }, box: { minX: BRIDGE.west, maxX: BRIDGE.east, minZ: BRIDGE.z - 0.8, maxZ: BRIDGE.z + 0.8, height: BRIDGE.towerHeight + 0.3 } },
   { id: "hooghly-river", name: "Hooghly riverside", seat: null, at: { x: -13.85, z: -6 }, box: { minX: -16.5, maxX: -11.2, minZ: -19.5, maxZ: 40, height: 0 } },
-  { id: "writers-building", name: "Writers' Building", seat: 0, at: { x: 2.2, z: -12.35 }, box: box(2.2, -12.35, 8.6, 1.9, 2.75) },
+  { id: "writers-building", name: "Writers' Building", seat: 0, at: { x: 2.2, z: -12.35 }, box: { minX: -2.1, maxX: 6.5, minZ: -13.3, maxZ: -10.85, height: 3.0 } },
   { id: "heritage-houses", name: "North Kolkata heritage houses", seat: 0, at: { x: -6.2, z: -12.3 }, box: { minX: -10.4, maxX: -2.4, minZ: -13.6, maxZ: -10.9, height: 3.1 } },
-  { id: "ghats", name: "Riverside ghats", seat: 1, at: { x: 11.5, z: -12.6 }, box: { minX: 7.2, maxX: 16, minZ: -14, maxZ: -11, height: 2.4 } },
+  { id: "ghats", name: "Riverside ghats", seat: 1, at: { x: 11.5, z: -12.6 }, box: { minX: 7.2, maxX: 16, minZ: -15.1, maxZ: -11, height: 2.4 } },
   { id: "shaheed-minar", name: "Shaheed Minar", seat: 1, at: { x: 14.6, z: -6.4 }, box: box(14.6, -6.4, 1.3, 1.3, 7.6) },
-  { id: "victoria-memorial", name: "Victoria Memorial", seat: 2, at: { x: 17.4, z: 2.4 }, box: box(17.4, 2.4, 6.4, 3.8, 5.6) },
-  { id: "book-stalls", name: "College Street book stalls", seat: 2, at: { x: 14.5, z: 13.3 }, box: { minX: 11.2, maxX: 18, minZ: 12.8, maxZ: 13.9, height: 0.75 } },
-  { id: "biswa-bangla-gate", name: "Biswa Bangla Gate", seat: 3, at: { x: -5, z: 15 }, box: box(-5, 15, 5.2, 3.2, 5.3) },
+  { id: "victoria-memorial", name: "Victoria Memorial", seat: 2, at: { x: 17.4, z: 2.4 }, box: { minX: 14.2, maxX: 20.6, minZ: 0.5, maxZ: 5.4, height: 5.6 } },
+  { id: "book-stalls", name: "College Street book stalls", seat: 2, at: { x: 14.5, z: 13.3 }, box: { minX: 11.2, maxX: 18, minZ: 12.8, maxZ: 13.9, height: 0.95 } },
+  { id: "maidan", name: "The Maidan: benches and a tram stop", seat: 2, at: { x: 16.8, z: 2.5 }, box: { minX: 11.3, maxX: 20.9, minZ: -2.3, maxZ: 7.3, height: 0.9 } },
+  { id: "biswa-bangla-gate", name: "Biswa Bangla Gate", seat: 3, at: { x: -5, z: 15 }, box: box(-5, 15, 5.2, 4.6, 5.3) },
   { id: "contemporary-towers", name: "Contemporary Kolkata", seat: 3, at: { x: -6, z: 18 }, box: { minX: -10.9, maxX: 2.2, minZ: 12.4, maxZ: 24, height: 6.2 } },
-  { id: "howrah-station", name: "Howrah Station", seat: null, at: { x: -22.2, z: 1.4 }, box: box(-22.2, 1.4, 4.2, 5.6, 3.6) },
+  { id: "howrah-station", name: "Howrah Station", seat: null, at: { x: -22.2, z: 3.2 }, box: box(-22.2, 3.2, 4.2, 5.6, 3.6) },
   { id: "tea-stall", name: "Tea stall and adda", seat: 0, at: { x: -9.6, z: -11.05 }, box: box(-9.6, -11.05, 1.1, 0.7, 0.9) },
 ];
 
@@ -98,7 +102,7 @@ export const TRAM_LOOP: Loop = { id: "tram", minX: 12.3, maxX: 22, minZ: -9.6, m
 /** Ferries up and down the west arm (under the bridge) and along the north arm. */
 export const FERRY_LOOPS: readonly Loop[] = [
   { id: "ferry-west", minX: -15.1, maxX: -12.6, minZ: -16.6, maxZ: 30, radius: 1.2, y: WATER_Y, direction: 1 },
-  { id: "ferry-north", minX: -12, maxX: 34, minZ: -18.4, maxZ: -15.2, radius: 1.5, y: WATER_Y, direction: -1 },
+  { id: "ferry-north", minX: -12, maxX: 34, minZ: -18.8, maxZ: -15.8, radius: 1.5, y: WATER_Y, direction: -1 },
 ];
 /** Walkers: the riverside promenade, the ghats, the Maidan paths and the south plaza. */
 export const WALK_LOOPS: readonly Loop[] = [
@@ -178,7 +182,7 @@ export const TREES: readonly { x: number; z: number; scale: number }[] = [
     [-1.2, 12.6],
     [-10.4, 12.4],
     [-19.6, -6.8],
-    [-21.4, 7.8],
+    [-21.4, 10.6],
     [-24.6, -2.6],
     [-19.4, 12.2],
     [16.8, -11.2],
@@ -188,7 +192,7 @@ export const TREES: readonly { x: number; z: number; scale: number }[] = [
 
 /** Lamp posts: the riverside railing, the ghats and the Maidan paths. */
 export const LAMPS: readonly { x: number; z: number }[] = [
-  ...[-8.6, -5.8, -0.4, 6.4, 8.8].map((z) => ({ x: -11.05, z })),
+  ...[-8.6, -5.4, -2.2, 1.0, 4.2, 9.2].map((z) => ({ x: -11.05, z })),
   ...[7.6, 10.4, 13.2, 15.8].map((x) => ({ x, z: -10.85 })),
   ...[
     [13.1, -0.8],

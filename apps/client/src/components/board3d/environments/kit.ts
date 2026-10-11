@@ -5,7 +5,7 @@
 // InstancedMesh. Nothing here is interactive: environments never handle
 // pointer events, so they can never take a click meant for a token.
 
-import { BoxGeometry, BufferAttribute, Color, ConeGeometry, CylinderGeometry, Euler, Matrix4, Quaternion, SphereGeometry, TorusGeometry, Vector3, type BufferGeometry } from "three";
+import { BoxGeometry, BufferAttribute, BufferGeometry, Color, ConeGeometry, CylinderGeometry, Euler, Matrix4, Quaternion, SphereGeometry, TorusGeometry, Vector3 } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 export type V3 = [number, number, number];
@@ -58,6 +58,42 @@ export class Builder {
 
   torus(at: V3, radius: number, tube: number, colour: string, rotation: V3, segments = 40): this {
     return this.add(new TorusGeometry(radius, tube, 6, segments), colour, at, rotation);
+  }
+
+  /**
+   * A triangular prism (a pediment or a pitched roof): a triangle of base `w` and height `h`,
+   * extruded `length` along x (or along z when `alongZ`), standing on y0, centred on (x, z).
+   */
+  prism(x: number, z: number, w: number, h: number, length: number, y0: number, colour: string, alongZ = false): this {
+    const L = length / 2;
+    // Cross-section corners in (across, up); `axis` runs along the length.
+    const tri = [
+      [-w / 2, 0],
+      [w / 2, 0],
+      [0, h],
+    ] as const;
+    // (across, up, axis) → world, as a rotation (never a mirror) so the faces keep their outward winding.
+    const P = (across: number, up: number, axis: number): V3 => (alongZ ? [x + across, y0 + up, z + axis] : [x + axis, y0 + up, z - across]);
+    const a0 = P(tri[0][0], tri[0][1], -L);
+    const b0 = P(tri[1][0], tri[1][1], -L);
+    const c0 = P(tri[2][0], tri[2][1], -L);
+    const a1 = P(tri[0][0], tri[0][1], L);
+    const b1 = P(tri[1][0], tri[1][1], L);
+    const c1 = P(tri[2][0], tri[2][1], L);
+    const faces: V3[][] = [
+      [a0, c0, b0],
+      [a1, b1, c1],
+      [a0, b0, b1],
+      [a0, b1, a1],
+      [b0, c0, c1],
+      [b0, c1, b1],
+      [c0, a0, a1],
+      [c0, a1, c1],
+    ];
+    const g = new BufferGeometry();
+    g.setAttribute("position", new BufferAttribute(new Float32Array(faces.flat(2)), 3));
+    g.computeVertexNormals();
+    return this.add(g, colour, [0, 0, 0]);
   }
 
   /** A thin beam from a to b (a truss member, a rail, a leg). */

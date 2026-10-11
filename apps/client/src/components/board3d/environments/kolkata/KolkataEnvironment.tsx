@@ -7,7 +7,9 @@ import { useEffect, useRef } from "react";
 import type { Group } from "three";
 import { AmbientClock, ENV_QUALITY } from "../ambient";
 import type { EnvironmentProps } from "../registry";
+import { Foliage } from "./Foliage";
 import { KolkataGround } from "./Ground";
+import { KolkataLandmarks } from "./KolkataLandmarks";
 
 export default function KolkataEnvironment({ quality, reduced, busy, onBuilt }: EnvironmentProps) {
   const q = ENV_QUALITY[quality];
@@ -24,6 +26,8 @@ export default function KolkataEnvironment({ quality, reduced, busy, onBuilt }: 
     <group ref={root} name="kolkata-environment">
       <AmbientClock fps={q.fps} busy={busy} active={!reduced} />
       <KolkataGround quality={q} />
+      <KolkataLandmarks quality={q} />
+      <Foliage quality={q} reduced={reduced} />
     </group>
   );
 }
