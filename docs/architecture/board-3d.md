@@ -118,6 +118,10 @@ writes game state.
 | Contemporary Kolkata (golden, south-west) | The Biswa Bangla Gate's tilted ring over the avenue, glass towers, a plaza with a sculpture |
 | Joining them | The Hooghly's west arm with Howrah Bridge (cantilever truss, towers, anchor arms) to Howrah Station; the riverside promenade with railings and lamps; the ring road round the board; trees; a far skyline and a golden-hour sky |
 
+Street signage is coloured boards with pale bands standing in for lettering (no text textures):
+shop boards, a blue street-name sign, the College Street banner, a tram-stop sign, a ghat
+notice board and a wayfinding totem.
+
 Every model is merged into one geometry per landmark or district (one draw call each), with
 vertex colours and no textures. Lamps and trees are instanced. Static scenery is about 9.7k
 triangles on Low, 15.3k on Medium and 17.8k on High.
