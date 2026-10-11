@@ -1,0 +1,399 @@
+{
+  "characters": {
+    "adda": {
+      "number": 1,
+      "role": "Adda — the storyteller",
+      "idle": "adda",
+      "prop": null,
+      "height": 1.672,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.604
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 1.966
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 30214
+      },
+      "levels": {
+        "high": {
+          "file": "adda.high.glb",
+          "bytes": 372308,
+          "triangles": 30214
+        },
+        "medium": {
+          "file": "adda.medium.glb",
+          "bytes": 299284,
+          "triangles": 16608
+        },
+        "low": {
+          "file": "adda.low.glb",
+          "bytes": 251392,
+          "triangles": 8449
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "tea": {
+      "number": 2,
+      "role": "Cha — the tea lover",
+      "idle": "tea",
+      "prop": "cup",
+      "height": 1.543,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.436
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 1.759
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 32422,
+        "Prop_cup": 104
+      },
+      "levels": {
+        "high": {
+          "file": "tea.high.glb",
+          "bytes": 390816,
+          "triangles": 32526
+        },
+        "medium": {
+          "file": "tea.medium.glb",
+          "bytes": 313444,
+          "triangles": 17875
+        },
+        "low": {
+          "file": "tea.low.glb",
+          "bytes": 261128,
+          "triangles": 9094
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "newspaper": {
+      "number": 3,
+      "role": "Kagoj — the newspaper reader",
+      "idle": "newspaper",
+      "prop": "newspaper",
+      "height": 1.864,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.84
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 2.254
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 30088,
+        "Prop_newspaper": 2
+      },
+      "levels": {
+        "high": {
+          "file": "newspaper.high.glb",
+          "bytes": 377964,
+          "triangles": 30090
+        },
+        "medium": {
+          "file": "newspaper.medium.glb",
+          "bytes": 306212,
+          "triangles": 16541
+        },
+        "low": {
+          "file": "newspaper.low.glb",
+          "bytes": 257416,
+          "triangles": 8417
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "exercise": {
+      "number": 4,
+      "role": "Byayam — the morning runner",
+      "idle": "exercise",
+      "prop": null,
+      "height": 1.725,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.668
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 2.044
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 30150
+      },
+      "levels": {
+        "high": {
+          "file": "exercise.high.glb",
+          "bytes": 374552,
+          "triangles": 30150
+        },
+        "medium": {
+          "file": "exercise.medium.glb",
+          "bytes": 301464,
+          "triangles": 16574
+        },
+        "low": {
+          "file": "exercise.low.glb",
+          "bytes": 253292,
+          "triangles": 8453
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    }
+  },
+  "fps": 30
+}
