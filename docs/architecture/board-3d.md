@@ -138,12 +138,14 @@ and the plaza; trees sway on Medium and High. One instanced mesh per kind. Count
 - The ambient clock asks for frames at a capped rate (Low 12, Medium 20, High 30 a second),
   halves it while tokens move, stops while the tab is hidden, and never runs under reduced
   motion (everything stands still).
-- The governor: after a 2.5 s warm-up it measures the frames it asked for (main-thread work
-  and, when frames arrive late, the interval between them). If ambient frames would take more
-  than about a third of the device's time it lowers the rate ("eased"), or stops the city
-  ("resting") below 3 frames a second. It decides once per build and never raises the rate
-  mid-game. On software WebGL (headless Chromium) the city rests after a few seconds.
-- The board's root element reports `data-ambient` (`live`, `eased`, `resting`, `still`),
+- The governor: after a 1 s warm-up it counts the frames delivered in a 2 s window against those
+  it asked for, and the main-thread work of each. If fewer than three-quarters arrive, a frame's
+  cost is taken as the window over the frames delivered (a GPU-bound device). If ambient frames
+  would take more than about a third of the device's time it lowers the rate ("eased"), or stops
+  the city ("resting") below 3 frames a second. Tokens moving or a hidden tab restart the window.
+  It decides once per build and never raises the rate mid-game. On software WebGL (headless
+  Chromium) the city rests about 3 s after it is built.
+- The board's root element reports `data-ambient` (`measuring`, `live`, `eased`, `resting`, `still`),
   `data-ambient-fps` and `data-frames` (frames drawn) for tests and tooling.
 
 ### Placement rules (unit tested)

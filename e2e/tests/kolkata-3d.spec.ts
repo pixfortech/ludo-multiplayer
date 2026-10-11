@@ -26,8 +26,10 @@ const close = async (players: Player[]) => {
   for (const p of players) await p.context.close();
 };
 
-async function kolkataGame(browser: Browser, views: [BoardView, BoardView], devices: [Device, Device], reduced: [boolean, boolean] = [false, false]) {
+async function kolkataGame(browser: Browser, views: [BoardView, BoardView], devices: [Device, Device], reduced: [boolean, boolean] = [false, false], amanQuality?: "low" | "medium" | "high") {
   const aman = await openPlayer(browser, "Aman", devices[0], { board: views[0], reducedMotion: reduced[0] });
+  // A fixed graphics level, where a test is not about the automatic one (its steps rebuild the canvas).
+  if (amanQuality) await aman.context.addInitScript(([mode, q]) => localStorage.setItem("ludo.board-view.v1", JSON.stringify({ mode, quality: q })), [views[0], amanQuality] as const);
   const ben = await openPlayer(browser, "Ben", devices[1], { board: views[1], reducedMotion: reduced[1] });
   const code = await createRoom(aman, { players: 2, city: "Kolkata" });
   await joinRoom(ben, code);
@@ -108,7 +110,7 @@ async function expectCellsClear(page: Page, where: string) {
 }
 
 test("Kolkata surrounds the board: landmarks and life are built round it, cells stay clear, and only tokens take a click or tap", async ({ browser }) => {
-  const { aman, ben, table, A, B } = await kolkataGame(browser, ["2.5d", "3d"], ["wide", "phone"]);
+  const { aman, ben, table, A, B } = await kolkataGame(browser, ["2.5d", "3d"], ["wide", "phone"], [false, false], "medium");
 
   // Aman's wide screen, in 2.5D: Kolkata fills the window behind the game.
   await expectBoard3d(aman.page);
@@ -141,6 +143,11 @@ test("Kolkata surrounds the board: landmarks and life are built round it, cells 
   console.log(`3D phone landmarks in view: ${benEnv.anchors.filter((a) => a.inView).map((a) => a.id).join(", ")}`);
   // The phone's square canvas frames the board closely: the nearest landmarks show (the river, Writers' Building).
   expect(benEnv.anchors.filter((a) => a.inView && (LANDMARKS as readonly string[]).includes(a.id)).length, "landmarks in the phone's 3D overview").toBeGreaterThanOrEqual(2);
+
+  // The city measures what this device can afford in its first seconds, and decides quickly where frames are slow.
+  const t0 = Date.now();
+  await expect.poll(() => aman.page.getByTestId("game-board").getAttribute("data-ambient"), { message: "the city has decided its rate", timeout: 30_000 }).not.toBe("measuring");
+  console.log(`the city decided "${await aman.page.getByTestId("game-board").getAttribute("data-ambient")}" within ${Date.now() - t0} ms of being checked`);
 
   // Aman rolls a six. Clicks on the scenery (each landmark in sight, the river, the ring road's corners) do nothing.
   await table.roll(6);
@@ -199,7 +206,7 @@ test("the city's life moves on its own capped clock, rests when hidden, under re
   await visible(aman.page.getByRole("radio", { name: level === "low" ? "Low" : "Medium" })).click();
   await expect(aman.page.getByTestId("game-board")).toHaveAttribute("data-quality", level);
   await expectKolkataBuilt(aman.page);
-  await expect(aman.page.getByTestId("game-board")).toHaveAttribute("data-ambient", "live");
+  await expect(aman.page.getByTestId("game-board")).toHaveAttribute("data-ambient", "measuring");
   const cells = await boardCells(aman.page);
   // Two pictures apart: the traffic has moved; the board's cells have not changed by a pixel.
   const f0 = await frames(aman.page);

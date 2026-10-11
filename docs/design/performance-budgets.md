@@ -110,29 +110,30 @@ Same machine and method as C.1 (headless Chromium, software WebGL, laptop viewpo
 
 | | 2D | 2.5D Low | 2.5D Medium | 3D Medium | Kolkata 2.5D Low | Kolkata 2.5D Medium | Kolkata 3D Medium |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| First drawn board after a reload | 164 ms | 1,244 ms | 1,619 ms | 1,286 ms | 1,060 ms | 1,359 ms | 2,366 ms |
-| Main thread busy while idle, first seconds (the city live, measuring) | 4.0% | 3.4% | 3.6% | 3.6% | 32.7% | 112% | 24.6% |
-| Main thread busy while idle, once the city has settled | — | — | — | — | 4.4% | 4.3% | 4.6% |
+| First drawn board after a reload | 183 ms | 1,782 ms | 1,601 ms | 1,304 ms | 1,235 ms | 1,569 ms | 1,515 ms |
+| Main thread busy while idle (the city settled about 3 s after loading) | 4.2% | 4.0% | 3.8% | 3.5% | 4.5% | 4.2% | 4.2% |
 | Ambient state once settled (this renderer) | — | — | — | — | resting | resting | resting |
-| Frames drawn in 1.5 s while a token moves | 63 | 38 | 45 | 46 | 48 | 24 | 34 |
-| Worst frame during a move | 50 ms | 200 ms | 167 ms | 150 ms | 200 ms | 417 ms | 317 ms |
-| Main-thread work per drawn frame | — | — | — | — | 24 ms | 31 ms | 23 ms |
-| Tap to move request leaving the page | 0.4 ms | 1.1 ms | 0.8 ms | 1.1 ms | 0.8 ms | 1.2 ms | 0.9 ms |
-| GPU geometries / textures | — | 20 / 4 | 20 / 4 | 20 / 4 | 45 / 4 | 45 / 4 | 45 / 4 |
+| Frames drawn in 1.5 s while a token moves | 66 | 52 | 44 | 43 | 35 | 39 | 35 |
+| Worst frame during a move | 50 ms | 100 ms | 183 ms | 133 ms | 283 ms | 350 ms | 300 ms |
+| Main thread busy during a move | 6.9% | 47.6% | 64.5% | 56.6% | 82.1% | 91.8% | 95.8% |
+| Tap to move request leaving the page | 0.6 ms | 0.9 ms | 1.1 ms | 1.0 ms | 1.0 ms | 1.3 ms | 0.9 ms |
+| GPU geometries / textures | — | 25 / 8 | 25 / 8 | 25 / 8 | 51 / 8 | 51 / 8 | 50 / 8 |
 | Draw calls / triangles per frame | — | 42 / 29k | 42 / 35k | 42 / 35k | 67 / 47k | 67 / 62k | 67 / 61k |
-| JS heap | 8.1 MB | 12.8 MB | 12.0 MB | 11.9 MB | 11.5 MB | 12.9 MB | 13.6 MB |
+| JS heap | 7.3 MB | 12.3 MB | 13.5 MB | 14.0 MB | 16.5 MB | 11.2 MB | 13.2 MB |
 
-Bundle: the Kolkata scene is its own chunk, 31.5 KB (12.0 KB gzip), loaded only in a Kolkata room with a 3D view; other cities and the 2D board never fetch it. The 3D renderer chunk is unchanged at about 262 KB gzip.
+While the city is live (its first seconds, while the governor measures), this renderer's idle main thread was 25–112% busy across runs. That is what the governor exists to stop. The city's frames cost about 22–34 ms of main-thread work each here.
+
+Bundle: the Kolkata scene is its own chunk, 32.6 KB (12.4 KB gzip), loaded only in a Kolkata room with a 3D view; other cities and the 2D board never fetch it. The 3D renderer chunk is unchanged at about 262 KB gzip.
 
 Bottlenecks found and what was done (Kolkata 2.5D Low, before → after):
 
 - **A blurred header over a live canvas.** The sticky header's `backdrop-filter` re-blurred the city behind it on every ambient frame. Over the stage the header is now solid.
 - **Fill rate.** The scenery switched from Standard to Lambert shading. The ground's overlapping layers are drawn top-first, so lower layers are rejected early. The sky is drawn last, so it is skipped wherever the city covers it, which is everywhere in the aerial view.
-- **Ambient frames the device cannot afford.** The governor measures the city's own frames after a warm-up. It lowers their rate, or rests the city when frames take more than a third of the device's time. On software WebGL it rests after a few seconds.
+- **Ambient frames the device cannot afford.** The governor counts the frames delivered in a 2 s window after a 1 s warm-up. It lowers the rate, or rests the city, when frames would take more than a third of the device's time. On software WebGL it rests about 3 s after loading.
 - **Results:**
-  - frames during a move: 10 → 48 per 1.5 s;
-  - worst frame: 300 → 200 ms;
-  - idle main thread once settled: 120% → 4.4%;
+  - frames during a move: 10 → 33–48 per 1.5 s (across runs);
+  - worst frame: 300 → 200–283 ms;
+  - idle main thread once settled: 120% → about 4.5%;
   - tap to request: about 1 ms throughout.
 - **Shadows.** Scenery never casts or receives shadow maps.
 

@@ -27,28 +27,26 @@ describe("ambient budgets", () => {
 });
 
 describe("affordableFps", () => {
-  it("keeps the rate while frames are cheap and on time (vsync jitter included)", () => {
-    expect(affordableFps(20, [...repeat(6, 50), ...repeat(6, 66.7)], repeat(12, 2))).toBe(20);
-    expect(affordableFps(12, [...repeat(6, 83.3), ...repeat(6, 100)], repeat(12, 4))).toBe(12);
-  });
-
-  it("waits for enough frames before deciding", () => {
-    expect(affordableFps(20, repeat(5, 400), repeat(5, 60))).toBe(20);
+  it("keeps the rate while frames are cheap and arrive as asked", () => {
+    expect(affordableFps(20, 2000, 40, repeat(40, 2))).toBe(20);
+    expect(affordableFps(12, 2000, 22, repeat(22, 4))).toBe(12);
   });
 
   it("slows the city when each frame's main-thread work is heavy", () => {
     // 30 ms of work a frame: a third of the time allows 11 frames a second.
-    expect(affordableFps(20, repeat(12, 50), repeat(12, 30))).toBe(11.1);
+    expect(affordableFps(20, 2000, 40, repeat(40, 30))).toBe(11.1);
   });
 
-  it("slows, then rests, when frames arrive late because the GPU cannot keep up", () => {
-    // Frames every 100 ms when 50 were asked for: each costs about 100 ms, so 3.3 a second.
-    expect(affordableFps(20, repeat(12, 100), repeat(12, 5))).toBe(3.3);
-    // Software WebGL at a quarter of a second a frame: the city stands still rather than hold the device.
-    expect(affordableFps(12, repeat(12, 250), repeat(12, 33))).toBe(0);
+  it("slows, then rests, when fewer frames arrive than were asked for (the GPU cannot keep up)", () => {
+    // 20 asked a second, 10 arrived: each costs about 100 ms, so 3.3 a second.
+    expect(affordableFps(20, 2000, 20, repeat(20, 5))).toBe(3.3);
+    // Software WebGL: 3 frames a second arrived when 12 were asked: the city stands still rather than hold the device.
+    expect(affordableFps(12, 2000, 6, repeat(6, 25))).toBe(0);
+    // A burst of quickly queued, cheap-looking frames cannot hide it: the count over the window decides.
+    expect(affordableFps(12, 2000, 7, repeat(7, 2))).toBe(0);
   });
 
   it("is never asked to run when there is nothing to run", () => {
-    expect(affordableFps(0, repeat(12, 250), repeat(12, 33))).toBe(0);
+    expect(affordableFps(0, 2000, 0, [])).toBe(0);
   });
 });

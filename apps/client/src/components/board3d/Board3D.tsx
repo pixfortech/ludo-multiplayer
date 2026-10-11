@@ -122,6 +122,7 @@ function FrameWatch({ onReady, onFrameStats, host }: { onReady: () => void; onFr
     let total = 0;
     let frames = 0;
     let since = performance.now();
+    let glPublished = 0;
     const before = addEffect(() => {
       start = performance.now();
     });
@@ -139,6 +140,11 @@ function FrameWatch({ onReady, onFrameStats, host }: { onReady: () => void; onFr
         total = 0;
         frames = 0;
         since = now;
+        glPublished = now;
+      } else if (now - glPublished >= 1000) {
+        // GPU counts follow what is drawn (an environment loads after the first frame), at most once a second.
+        publish();
+        glPublished = now;
       }
     });
     return () => {

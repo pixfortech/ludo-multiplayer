@@ -124,7 +124,7 @@ The simulated network loss (Playwright's WebSocket route closing new connections
 
 ## The living Kolkata environment (Batch C.2)
 
-The city round the 3D board is part of the same WebGL scene. Besides the pixels and the token and cell mirrors, the renderer reports which assets it built and where each landmark lands on screen (`environment-mirror`: `data-assets`, and per landmark `data-cx`, `data-cy`, `data-in-view`), how many frames it has drawn (`data-frames` on the board), and the ambient life's state (`data-ambient`: `live`, `eased`, `resting` or `still`, with `data-ambient-fps`).
+The city round the 3D board is part of the same WebGL scene. Besides the pixels and the token and cell mirrors, the renderer reports which assets it built and where each landmark lands on screen (`environment-mirror`: `data-assets`, and per landmark `data-cx`, `data-cy`, `data-in-view`), how many frames it has drawn (`data-frames` on the board), and the ambient life's state (`data-ambient`: `measuring`, `live`, `eased`, `resting` or `still`, with `data-ambient-fps`).
 
 | Spec | Covers |
 | ---- | ------ |
@@ -156,6 +156,7 @@ Headless Chromium renders WebGL in software. There the city's frames cost so muc
 10. **Phase 3C.3, found locally, in the tests and present since 3C.1: a race in the in-sync check.** The check read the server's state once. When it ran right after a click whose move was still committing, it compared the pages with a stale state and timed out. It now re-reads the server's state on every poll.
 11. **Batch C.2, found by the Kolkata fit test: the 3D board's screen-position mirror lagged the picture by a frame.** It read the camera's world matrix before the renderer updated it. Continuous ambient frames had hidden this. Once the city rests on a slow device, no further frame comes, so after a camera move the mirror could stay stale; picks and drawing were unaffected. The mirror now updates the camera's matrix first.
 12. **Batch C.2, found while measuring: the living city saturated software WebGL.** The header's backdrop blur was re-rasterised over the full-window canvas on every ambient frame. Lit scenery added overdraw, and the city's frame rate was fixed. The fixes were a solid header over the stage, Lambert shading, top-first ground layers, the sky drawn last, and the ambient governor. See [performance budgets](../design/performance-budgets.md).
+13. **Batch C.2, found by CI on Windows: while the city measured what the device could afford, a slow GPU stalled the page.** On the Windows runner's software WebGL, the die's reveal took more than 15 s right after a game started. The governor also judged single frame intervals, which a burst of quickly queued frames could make look cheap; once it decided "live at 12 a second" while 3 arrived. It now counts the frames delivered in a 2 s window after a 1 s warm-up. The board also reports `measuring` until it has decided.
 
 ## Not covered here
 

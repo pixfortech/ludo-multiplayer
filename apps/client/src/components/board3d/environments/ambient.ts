@@ -35,42 +35,54 @@ export const ENV_QUALITY: Readonly<Record<QualityLevel, EnvironmentQuality>> = {
 export const ambientTime = (): number => performance.now() / 1000;
 
 /**
- * What the device can afford for ambient frames. Ambient life is decoration:
- * it may use at most about a third of the device's time. Two measures of a
- * frame's cost, taken from frames drawn while only the city was moving: the
- * main-thread work per frame, and, when frames arrive late (the GPU is the
- * bottleneck, as with software WebGL), the interval between them. Returns the
- * asked rate when it is affordable, a lower rate when not, or 0 (the city
- * rests, standing still) below 3 frames a second.
+ * What the device can afford for ambient frames, from a measuring window in
+ * which only the city asked for frames. Ambient life is decoration: it may use
+ * at most about a third of the device's time. A frame's cost is the larger of
+ * its main-thread work and, when fewer frames arrived than were asked for (the
+ * GPU is the bottleneck, as with software WebGL), the window divided by the
+ * frames delivered. Returns the asked rate when affordable, a lower rate when
+ * not, or 0 (the city rests, standing still) below 3 frames a second.
  */
-export function affordableFps(askedFps: number, intervals: readonly number[], workMs: readonly number[]): number {
-  if (askedFps <= 0 || intervals.length < 8) return askedFps;
-  const median = (xs: readonly number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
-  const interval = median(intervals);
-  // Within a frame (vsync) and a quarter of the asked interval: frames arrive on time.
-  const late = interval > (1000 / askedFps) * 1.25 + 17;
-  const cost = Math.max(median(workMs), late ? interval : 0);
+export function affordableFps(askedFps: number, windowMs: number, delivered: number, workMs: readonly number[]): number {
+  if (askedFps <= 0) return 0;
+  if (windowMs <= 0) return askedFps;
+  const asked = (askedFps * windowMs) / 1000;
+  const work = [...workMs].sort((a, b) => a - b)[Math.floor(workMs.length / 2)] ?? 0;
+  // Fewer than three-quarters of the asked frames arrived: each took about the window over the delivered count.
+  const late = delivered < asked * 0.75;
+  const cost = Math.max(work, late ? windowMs / Math.max(1, delivered) : 0);
   if (cost <= 0) return askedFps;
   const affordable = Math.min(askedFps, Math.floor((1000 / 3 / cost) * 10) / 10);
   return affordable >= 3 ? affordable : 0;
 }
 
-/** Ambient life: "live" at its quality's rate, "eased" (slower, the device is slow), "resting" (stopped, the device cannot afford it), "still" (reduced motion). */
-export type AmbientState = "live" | "eased" | "resting" | "still";
+/**
+ * Ambient life: "measuring" (live, while the governor checks what this device can afford), "live" at
+ * its quality's rate, "eased" (slower, the device is slow), "resting" (stopped, the device cannot
+ * afford it), "still" (reduced motion).
+ */
+export type AmbientState = "measuring" | "live" | "eased" | "resting" | "still";
 
 /**
  * Requests frames for the ambient life at the affordable rate (halved while
  * `busy`), only while the tab is visible, and returns that rate (0: the city
- * stands still). After a warm-up it watches the frames it asked for and lowers
- * the rate once if the device cannot keep up; it never raises it again (a
- * quality change or a new game starts afresh).
+ * stands still). After a one-second warm-up it counts the frames delivered in
+ * a two-second window and lowers the rate if the device cannot keep up; it
+ * never raises it again (a quality change or a new game starts afresh).
  */
 export function useAmbientClock({ fps, busy, active, onState }: { fps: number; busy: boolean; active: boolean; onState?: ((state: AmbientState, fps: number) => void) | undefined }): number {
   const invalidate = useThree((s) => s.invalidate);
   const [rate, setRate] = useState(fps);
-  useEffect(() => setRate(fps), [fps]);
+  const [measured, setMeasured] = useState(false);
+  useEffect(() => {
+    setRate(fps);
+    setMeasured(false);
+  }, [fps]);
   const live = active && rate > 0;
-  useEffect(() => onState?.(!active ? "still" : rate === 0 ? "resting" : rate < fps ? "eased" : "live", active ? rate : 0), [active, rate, fps, onState]);
+  useEffect(
+    () => onState?.(!active ? "still" : rate === 0 ? "resting" : rate < fps ? "eased" : measured ? "live" : "measuring", active ? rate : 0),
+    [active, rate, fps, measured, onState],
+  );
 
   // Frame timing, from frames drawn while only the city moves (not while tokens move, not in the warm-up).
   const busyRef = useRef(busy);
@@ -79,27 +91,36 @@ export function useAmbientClock({ fps, busy, active, onState }: { fps: number; b
   }, [busy]);
   useEffect(() => {
     if (!live) return;
-    const since = performance.now();
-    const intervals: number[] = [];
+    // A one-second warm-up skips the first frames (shader compilation, the scene's first upload); then a
+    // two-second window counts the frames delivered against those asked for. Tokens moving or a hidden tab
+    // restart the window (other frames would be counted, or none asked for).
+    const WARM_UP = 1000;
+    const WINDOW = 2000;
+    let windowStart = performance.now() + WARM_UP;
+    let delivered = 0;
     const work: number[] = [];
     let start = 0;
-    let last = 0;
     let decided = false;
+    const restart = () => {
+      windowStart = performance.now();
+      delivered = 0;
+      work.length = 0;
+    };
     const before = addEffect(() => {
       start = performance.now();
     });
     const after = addAfterEffect(() => {
+      if (decided) return;
       const now = performance.now();
-      const measuring = !decided && !busyRef.current && document.visibilityState !== "hidden" && now - since > 2500;
-      if (measuring && last > 0) {
-        intervals.push(now - last);
-        work.push(now - start);
-      }
-      last = measuring ? now : 0;
-      if (intervals.length >= 12) {
+      if (busyRef.current || document.visibilityState === "hidden") return restart();
+      if (now < windowStart) return;
+      delivered++;
+      work.push(now - start);
+      if (now - windowStart >= WINDOW) {
         decided = true;
-        const next = affordableFps(rate, intervals, work);
+        const next = affordableFps(rate, now - windowStart, delivered, work);
         if (next < rate) setRate(next);
+        setMeasured(true);
       }
     });
     return () => {
