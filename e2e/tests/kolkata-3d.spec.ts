@@ -251,7 +251,8 @@ test("the city's life moves on its own capped clock, rests when hidden, under re
   const settledRate = ((await frames(aman.page)) - a) / 3;
   console.log(`settled: ${settled} at ${fps} a second; drew ${settledRate.toFixed(1)} frames a second`);
   expect(["live", "eased", "resting"]).toContain(settled);
-  if (settled === "resting") expect(settledRate, "a resting city draws nothing").toBe(0);
+  // A resting city draws nothing of its own; the Crimson team's characters (C.3A) keep a 2 fps pulse so they never freeze.
+  if (settled === "resting") expect(settledRate, "a resting city draws only the characters' pulse").toBeLessThanOrEqual(2.5);
   else expect(settledRate).toBeLessThanOrEqual(fps + 2);
   expect(await readBoard(aman.page)).toEqual(board);
   expect(aman.sent, "the city sends nothing").toEqual(sent);
@@ -387,7 +388,8 @@ test("switching views and graphics quality mid-turn, a refresh, a lost context a
   console.table(counts);
   // Each level builds a fresh renderer, so its counts cannot carry anything over; they stay bounded, and the
   // second Medium is within what the levels drew (the movable tokens' rings appear once a choice is open).
-  for (const [level, c] of Object.entries(counts)) expect(c.geometries, `${level}: GPU geometries bounded`).toBeLessThan(80);
+  // Under 80 for the city and board, plus the four Crimson characters (C.3A: a few primitives and props each).
+  for (const [level, c] of Object.entries(counts)) expect(c.geometries, `${level}: GPU geometries bounded`).toBeLessThan(130);
   expect(counts["Medium (again)"]!.geometries).toBeLessThanOrEqual(Math.max(...Object.values(counts).map((c) => c.geometries)));
   expect(counts.Low!.triangles, "Low draws less than High").toBeLessThan(counts.High!.triangles);
   // On a software GPU under load the WebGL context can be lost (seen once on the Windows runner); the board then
