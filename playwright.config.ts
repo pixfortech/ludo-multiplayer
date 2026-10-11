@@ -27,8 +27,9 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${CLIENT_PORT}`,
     browserName: "chromium",
     // The 3D board renders with WebGL. CI machines have no GPU: opt in to Chromium's software renderer
-    // (SwiftShader) explicitly, as the implicit fallback is deprecated.
-    launchOptions: { args: ["--enable-unsafe-swiftshader"] },
+    // (SwiftShader) explicitly, as the implicit fallback is deprecated. E2E_GPU=1 (npm run perf:gpu) uses
+    // the installed Chrome, headed, on the machine's real GPU instead.
+    ...(process.env.E2E_GPU ? { channel: process.env.E2E_GPU_CHANNEL ?? "chrome", headless: false, launchOptions: { args: ["--ignore-gpu-blocklist"] } } : { launchOptions: { args: ["--enable-unsafe-swiftshader"] } }),
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },

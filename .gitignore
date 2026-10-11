@@ -22,4 +22,6 @@ apps/server/data/
 
 # Playwright output
 e2e/test-results/
+# Local GPU performance runs (npm run perf:gpu)
+perf-results/
 playwright-report/

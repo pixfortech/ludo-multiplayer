@@ -6,7 +6,8 @@
 // rate, its chunk, and what it adds to every number above).
 // Headless Chromium renders WebGL in software (SwiftShader) on the CPU: these
 // are comparisons on one machine, not device frame rates. E2E_PERF_OUT saves
-// the numbers as JSON.
+// the numbers as JSON. On a machine with a GPU, `npm run perf:gpu` runs this in
+// the installed Chrome on the real GPU (docs/qa/gpu-performance.md).
 import { writeFileSync } from "node:fs";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { boardTokens, expectBoard3d } from "../support/board3d";
@@ -15,6 +16,11 @@ import { createRoom, joinRoom, openPlayer, seatTable, startGame, visible, type B
 
 interface Sample {
   view: string;
+  /** The renderer WebGL reports (a software renderer, or the GPU and driver). */
+  gpu: string | null;
+  /** Display frames a second while idle and while a token moves (requestAnimationFrame). */
+  idleFps: number;
+  moveFps: number;
   firstFrameMs: number;
   chunkKb: number | null;
   cityChunkKb: number | null;
@@ -165,10 +171,18 @@ async function measure(browser: Browser, view: Exclude<BoardView, "default">, qu
     return { glGeometries: n(el.dataset.glGeometries), glTextures: n(el.dataset.glTextures), glCalls: n(el.dataset.glCalls), glTriangles: n(el.dataset.glTriangles) };
   });
   const heapMb = Math.round(((await metric()).JSHeapUsedSize! / 1024 / 1024) * 10) / 10;
+  const gpu = await aman.page.evaluate(() => {
+    const gl = document.createElement("canvas").getContext("webgl2");
+    const info = gl?.getExtension("WEBGL_debug_renderer_info");
+    return gl && info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : null;
+  });
   await aman.context.close();
   await ben.context.close();
   return {
     view: `${city ? `${city} ` : ""}${quality ? `${view} (${quality})` : view}`,
+    gpu,
+    idleFps: Math.round((idle.count / 3) * 10) / 10,
+    moveFps: Math.round((moving.count / 1.5) * 10) / 10,
     firstFrameMs: Math.round(firstFrameMs),
     chunkKb,
     cityChunkKb,
