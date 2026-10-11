@@ -270,7 +270,7 @@ test("switching views never restarts the game; refresh, reconnect and full scree
   await expect(aman.page.getByTestId("game-board")).toHaveAttribute("data-camera", "overview");
   expect(await readBoard(aman.page)).toEqual(board);
   // The 3D camera: orbit by dragging, follow the token, back to the overview. The camera never moves a token.
-  const canvas = (await aman.page.locator('[data-testid="game-board"] canvas').boundingBox())!;
+  const canvas = (await aman.page.locator('canvas[data-board-gl]').boundingBox())!;
   await aman.page.mouse.move(canvas.x + canvas.width * 0.3, canvas.y + canvas.height * 0.8);
   await aman.page.mouse.down();
   await aman.page.mouse.move(canvas.x + canvas.width * 0.6, canvas.y + canvas.height * 0.7, { steps: 8 });
@@ -312,7 +312,7 @@ test("switching views never restarts the game; refresh, reconnect and full scree
   await visible(aman.page.getByRole("button", { name: "Full screen" })).click();
   await expect.poll(() => aman.page.evaluate(() => Boolean(document.fullscreenElement))).toBe(true);
   await expectBoard3d(aman.page);
-  const fs = (await aman.page.locator('[data-testid="game-board"] canvas').boundingBox())!;
+  const fs = (await aman.page.locator('canvas[data-board-gl]').boundingBox())!;
   const vp = aman.page.viewportSize()!;
   expect(fs.y + fs.height).toBeLessThanOrEqual(vp.height + 1);
   await visible(aman.page.getByRole("button", { name: "Exit full screen" })).click();
@@ -345,7 +345,7 @@ test("without WebGL, or when the 3D board loses its context, the game continues 
   // Ben's 3D board loses its WebGL context mid-game: the 2D board takes over, and play continues.
   await expectBoard3d(ben.page);
   await ben.page.evaluate(() => {
-    const canvas = document.querySelector('[data-testid="game-board"] canvas') as HTMLCanvasElement;
+    const canvas = document.querySelector('canvas[data-board-gl]') as HTMLCanvasElement;
     (canvas.getContext("webgl2")!.getExtension("WEBGL_lose_context") as { loseContext: () => void }).loseContext();
   });
   await expect(ben.page.locator('svg[data-testid="game-board"]')).toBeVisible();
@@ -377,7 +377,7 @@ test("the 2.5D board fits every supported screen: whole board and all tokens in 
       await expectBoard3d(p.page, mode);
       await p.page.waitForTimeout(500);
       const where = `${mode} at ${size.label}`;
-      const canvas = (await p.page.locator('[data-testid="game-board"] canvas').boundingBox())!;
+      const canvas = (await p.page.locator('canvas[data-board-gl]').boundingBox())!;
       expect(canvas.x, where).toBeGreaterThanOrEqual(0);
       expect(canvas.x + canvas.width, where).toBeLessThanOrEqual(size.width + 0.5);
       expect(canvas.y + canvas.height, where).toBeLessThanOrEqual(size.height + 0.5);

@@ -9,10 +9,11 @@
 // immersive camera preview. Rendering is on demand: frames are drawn only
 // while something changes or moves.
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
+import { memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { addAfterEffect, addEffect, Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { PCFShadowMap, PCFSoftShadowMap, Vector3, type Group, type DirectionalLight } from "three";
-import type { BoardMaterial2d } from "@ludo/city-themes";
+import type { BoardMaterial2d, CityThemeId } from "@ludo/city-themes";
 import type { WorldPoint } from "@ludo/board-layouts";
 import type { ClassicBoardProps } from "../board/ClassicBoard";
 import { CELL, svgToWorld } from "../board/geometry";
@@ -26,6 +27,8 @@ import { Effects3D, MovePreview3D } from "./Overlays3D";
 import { TextureCache } from "./textures";
 import { Token3D, TokenKit, floorFor, type Token3DInput } from "./Tokens3D";
 import type { QualityLevel } from "./capabilities";
+import { environmentFor } from "./environments/registry";
+import type { StageViewport } from "./CameraRig";
 
 export interface Board3DProps extends ClassicBoardProps {
   mode: "2.5d" | "3d";
@@ -39,16 +42,27 @@ export interface Board3DProps extends ClassicBoardProps {
   onReady: () => void;
   /** The renderer cannot continue (lost context, no first frame): the game screen falls back to 2D. */
   onFailure: (reason: string) => void;
-  /** Average frame time (ms) over a stretch of continuous rendering. */
+  /** Average work per drawn frame (ms: scene update and draw submission), over stretches of rendering. */
   onFrameStats?: (ms: number) => void;
+  /** The city whose 3D environment surrounds the board (null: none, the board alone). */
+  environment: CityThemeId | null;
+  /**
+   * The stage: on wide screens, a city environment is drawn on one canvas behind the whole game screen
+   * (this element), with the board kept exactly in its layout slot. Null: the canvas is the board's size.
+   */
+  stageHost: HTMLElement | null;
+  /** A stage is wanted (the canvas waits for its host element). */
+  stage: boolean;
+  /** Tokens are moving: the city's ambient life eases off. */
+  busy: boolean;
 }
 
 /** Graphics presets (performance-budgets.md § Rendering): gameplay accuracy never changes, only cost. */
 const QUALITY = {
-  low: { dpr: 1, antialias: false, shadows: false as const, shadowMap: 0, detail: DETAIL.low, physical: false },
+  low: { stageDpr: 1, dpr: 1, antialias: false, shadows: false as const, shadowMap: 0, detail: DETAIL.low, physical: false },
   // Medium: soft contact shadows under the tokens (no shadow map pass); High adds real-time shadow maps.
-  medium: { dpr: 1.5, antialias: true, shadows: false as const, shadowMap: 0, detail: DETAIL.medium, physical: true },
-  high: { dpr: 2, antialias: true, shadows: "soft" as const, shadowMap: 2048, detail: DETAIL.high, physical: true },
+  medium: { stageDpr: 1.25, dpr: 1.5, antialias: true, shadows: false as const, shadowMap: 0, detail: DETAIL.medium, physical: true },
+  high: { stageDpr: 1.5, dpr: 2, antialias: true, shadows: "soft" as const, shadowMap: 2048, detail: DETAIL.high, physical: true },
 };
 
 function Lights({ shadows, mapSize }: { shadows: boolean; mapSize: number }) {
@@ -80,38 +94,59 @@ function Lights({ shadows, mapSize }: { shadows: boolean; mapSize: number }) {
   );
 }
 
-/** Reports the first frame, and the average frame time over stretches of continuous rendering. */
-function FrameWatch({ onReady, onFrameStats }: { onReady: () => void; onFrameStats?: ((ms: number) => void) | undefined }) {
+/**
+ * Reports the first frame, and the average work per frame: the time from the
+ * start of a frame's updates to the end of its draw submission. (Frame
+ * intervals would mislead: the city asks for frames at a capped rate, so its
+ * intervals are long by design.) Publishes renderer counters on `host`.
+ */
+function FrameWatch({ onReady, onFrameStats, host }: { onReady: () => void; onFrameStats?: ((ms: number) => void) | undefined; host: React.RefObject<HTMLElement | null> }) {
   const ready = useRef(false);
-  const stats = useRef({ total: 0, frames: 0 });
   const gl = useThree((s) => s.gl);
-  // Renderer counters on the board element (GPU memory objects, draw calls), for tooling and the performance tests.
-  const publish = (frameMs?: number) => {
-    const host = gl.domElement.closest<HTMLElement>('[data-testid="game-board"]');
-    if (!host) return;
-    const { memory, render } = gl.info;
-    host.dataset.glGeometries = String(memory.geometries);
-    host.dataset.glTextures = String(memory.textures);
-    host.dataset.glCalls = String(render.calls);
-    host.dataset.glTriangles = String(render.triangles);
-    if (frameMs !== undefined) host.dataset.frameMs = frameMs.toFixed(1);
-  };
-  useFrame((_, delta) => {
+  const publish = useCallback(
+    (frameMs?: number) => {
+      const el = host.current;
+      if (!el) return;
+      const { memory, render } = gl.info;
+      el.dataset.glGeometries = String(memory.geometries);
+      el.dataset.glTextures = String(memory.textures);
+      el.dataset.glCalls = String(render.calls);
+      el.dataset.glTriangles = String(render.triangles);
+      if (frameMs !== undefined) el.dataset.frameMs = frameMs.toFixed(1);
+    },
+    [gl, host],
+  );
+  useEffect(() => {
+    let start = 0;
+    let total = 0;
+    let frames = 0;
+    let since = performance.now();
+    const before = addEffect(() => {
+      start = performance.now();
+    });
+    const after = addAfterEffect(() => {
+      const now = performance.now();
+      total += now - start;
+      frames++;
+      if (frames >= 20 && now - since >= 2000) {
+        const ms = total / frames;
+        publish(ms);
+        onFrameStats?.(ms);
+        total = 0;
+        frames = 0;
+        since = now;
+      }
+    });
+    return () => {
+      before();
+      after();
+    };
+  }, [publish, onFrameStats]);
+  useFrame(() => {
     if (!ready.current) {
       ready.current = true;
       onReady();
       requestAnimationFrame(() => publish());
-    }
-    // Only consecutive frames count (on-demand rendering idles in between).
-    if (delta > 0.25) return;
-    const w = stats.current;
-    w.total += delta;
-    w.frames++;
-    if (w.total >= 2) {
-      const ms = (w.total / w.frames) * 1000;
-      publish(ms);
-      onFrameStats?.(ms);
-      stats.current = { total: 0, frames: 0 };
     }
   });
   return null;
@@ -162,7 +197,7 @@ function ContextWatch({ onFailure }: { onFailure: (reason: string) => void }) {
  * canvas) to a hidden list after every frame, for tests and tooling (the 2D
  * board exposes the same data on its token elements).
  */
-function Projection({ objects, mirror, cells }: { objects: Map<string, Group>; mirror: React.RefObject<HTMLUListElement | null>; cells: React.RefObject<HTMLOListElement | null> }) {
+function Projection({ objects, mirror, cells, anchors }: { objects: Map<string, Group>; mirror: React.RefObject<HTMLUListElement | null>; cells: React.RefObject<HTMLOListElement | null>; anchors: React.RefObject<HTMLUListElement | null> }) {
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
   const v = useMemo(() => new Vector3(), []);
@@ -170,13 +205,17 @@ function Projection({ objects, mirror, cells }: { objects: Map<string, Group>; m
   useFrame(() => {
     // Board cells move on screen only when the camera or the canvas does.
     const view = `${size.width}x${size.height}:${camera.matrixWorld.elements.join(",")}:${camera.projectionMatrix.elements.join(",")}`;
-    const cellList = cells.current;
-    if (cellList && view !== lastView.current) {
+    if (view !== lastView.current) {
       lastView.current = view;
-      for (const el of cellList.children as HTMLCollectionOf<HTMLElement>) {
-        v.set(Number(el.dataset.x), Number(el.dataset.y), Number(el.dataset.z)).project(camera);
-        el.dataset.cx = (((v.x + 1) / 2) * size.width).toFixed(1);
-        el.dataset.cy = (((1 - v.y) / 2) * size.height).toFixed(1);
+      for (const list of [cells.current, anchors.current]) {
+        if (!list) continue;
+        for (const el of list.children as HTMLCollectionOf<HTMLElement>) {
+          v.set(Number(el.dataset.x), Number(el.dataset.y), Number(el.dataset.z)).project(camera);
+          el.dataset.cx = (((v.x + 1) / 2) * size.width).toFixed(1);
+          el.dataset.cy = (((1 - v.y) / 2) * size.height).toFixed(1);
+          // In front of the camera and inside the canvas.
+          el.dataset.inView = String(v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1);
+        }
       }
     }
     const list = mirror.current;
@@ -220,8 +259,42 @@ function TapCatcher({ candidates, onActivate }: { candidates: readonly { key: st
   );
 }
 
+/**
+ * Where the board's slot is on the stage (the full-window canvas), kept up to
+ * date on resize and scroll: the camera keeps the board exactly in its slot.
+ */
+function useStageViewport(slot: React.RefObject<HTMLElement | null>, host: HTMLElement | null): StageViewport | null {
+  const [viewport, setViewport] = useState<StageViewport | null>(null);
+  useLayoutEffect(() => {
+    if (!host) {
+      setViewport(null);
+      return;
+    }
+    const measure = () => {
+      const el = slot.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const h = host.getBoundingClientRect();
+      const next = { x: r.left - h.left, y: r.top - h.top, size: r.width, width: h.width, height: h.height };
+      setViewport((cur) => (cur && Math.abs(cur.x - next.x) < 0.5 && Math.abs(cur.y - next.y) < 0.5 && Math.abs(cur.size - next.size) < 0.5 && cur.width === next.width && cur.height === next.height ? cur : next));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (slot.current) observer.observe(slot.current);
+    observer.observe(host);
+    globalThis.addEventListener("resize", measure);
+    globalThis.addEventListener("scroll", measure, true);
+    return () => {
+      observer.disconnect();
+      globalThis.removeEventListener("resize", measure);
+      globalThis.removeEventListener("scroll", measure, true);
+    };
+  }, [slot, host]);
+  return viewport;
+}
+
 const Board3D = memo(function Board3D(props: Board3DProps) {
-  const { tokens, identityOf, activeSeats, currentSeat, youSeat, states = {}, badges = {}, labels = {}, motion = {}, preview = null, effects = [], onActivate, onPreview, title, dimmed = false, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats } = props;
+  const { tokens, identityOf, activeSeats, currentSeat, youSeat, states = {}, badges = {}, labels = {}, motion = {}, preview = null, effects = [], onActivate, onPreview, title, dimmed = false, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy } = props;
   const q = QUALITY[quality];
   const textures = useMemo(() => new TextureCache(), []);
   const kit = useMemo(() => new TokenKit(q.detail, q.physical), [q.detail, q.physical]);
@@ -274,6 +347,14 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
 
   const mirror = useRef<HTMLUListElement>(null);
   const cellMirror = useRef<HTMLOListElement>(null);
+  const anchorMirror = useRef<HTMLUListElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const viewport = useStageViewport(root, stage ? stageHost : null);
+  const env = environmentFor(environment);
+  const obstacles = useMemo(() => env?.obstacles() ?? [], [env]);
+  const anchors = useMemo(() => env?.anchors() ?? [], [env]);
+  const [builtAssets, setBuiltAssets] = useState<readonly string[]>([]);
+  const onBuilt = useCallback((info: { assets: readonly string[] }) => setBuiltAssets(info.assets), []);
   const [failed, setFailed] = useState(false);
   const fail = useCallback(
     (reason: string) => {
@@ -296,35 +377,60 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
     return () => clearTimeout(timer);
   }, [fail]);
 
+  const staged = stage && stageHost !== null;
+  const canvas =
+    failed || (stage && !viewport) ? null : (
+      <Canvas
+        key={quality}
+        frameloop="demand"
+        flat
+        dpr={[1, staged ? q.stageDpr : q.dpr]}
+        shadows={q.shadows ? { enabled: true, type: q.shadows === "soft" ? PCFSoftShadowMap : PCFShadowMap } : false}
+        gl={{ antialias: q.antialias, alpha: true, powerPreference: "high-performance", preserveDrawingBuffer: false }}
+        style={{ touchAction: mode === "3d" ? "none" : "pan-y pinch-zoom", cursor: mode === "3d" ? "grab" : "default" }}
+        data-testid="board-canvas"
+        onCreated={({ gl }) => {
+          gl.setClearColor(0x000000, 0);
+          gl.domElement.dataset.boardGl = staged ? "stage" : "board";
+        }}
+      >
+        <ContextWatch onFailure={fail} />
+        <RedrawOnResize />
+        <FrameWatch onReady={ready} onFrameStats={onFrameStats} host={root} />
+        <CameraRig mode={mode === "2.5d" ? "aerial" : "immersive"} view={immersiveView} resetKey={resetKey} focus={focus} reduced={reduced} onViewChange={onImmersiveViewChange} viewport={staged ? viewport : null} obstacles={obstacles} />
+        <Lights shadows={Boolean(q.shadows)} mapSize={q.shadowMap} />
+        {env ? (
+          <Suspense fallback={null}>
+            <env.Component quality={quality} reduced={reduced} busy={busy} onBuilt={onBuilt} />
+          </Suspense>
+        ) : null}
+        <BoardMesh3D model={model} material={material} currentSeat={currentSeat} youSeat={youSeat} detail={q.detail} shadows={Boolean(q.shadows)} textures={textures} />
+        {preview ? <MovePreview3D preview={preview} detail={q.detail} /> : null}
+        {items.map((t) => (
+          <Token3D key={t.key} token={t} kit={kit} textures={textures} shadows={Boolean(q.shadows)} reduced={reduced} register={register} {...(t.interactive ? { onActivate, onPreview } : {})} />
+        ))}
+        <TapCatcher candidates={candidates} onActivate={onActivate} />
+        <Effects3D effects={effects} detail={q.detail} />
+        <Projection objects={objects} mirror={mirror} cells={cellMirror} anchors={anchorMirror} />
+      </Canvas>
+    );
+
   return (
-    <div className="relative aspect-square w-full select-none" data-testid="game-board" data-renderer={mode} data-quality={quality} data-camera={mode === "2.5d" ? "aerial" : immersiveView} role="group" aria-label={title} style={{ opacity: dimmed ? 0.92 : 1, transition: "opacity 220ms ease" }}>
-      {failed ? null : (
-        <Canvas
-          key={quality}
-          frameloop="demand"
-          flat
-          dpr={[1, q.dpr]}
-          shadows={q.shadows ? { enabled: true, type: q.shadows === "soft" ? PCFSoftShadowMap : PCFShadowMap } : false}
-          gl={{ antialias: q.antialias, alpha: true, powerPreference: "high-performance", preserveDrawingBuffer: false }}
-          style={{ touchAction: mode === "3d" ? "none" : "pan-y pinch-zoom", cursor: mode === "3d" ? "grab" : "default" }}
-          data-testid="board-canvas"
-          onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
-        >
-          <ContextWatch onFailure={fail} />
-          <RedrawOnResize />
-          <FrameWatch onReady={ready} onFrameStats={onFrameStats} />
-          <CameraRig mode={mode === "2.5d" ? "aerial" : "immersive"} view={immersiveView} resetKey={resetKey} focus={focus} reduced={reduced} onViewChange={onImmersiveViewChange} />
-          <Lights shadows={Boolean(q.shadows)} mapSize={q.shadowMap} />
-          <BoardMesh3D model={model} material={material} currentSeat={currentSeat} youSeat={youSeat} detail={q.detail} shadows={Boolean(q.shadows)} textures={textures} />
-          {preview ? <MovePreview3D preview={preview} detail={q.detail} /> : null}
-          {items.map((t) => (
-            <Token3D key={t.key} token={t} kit={kit} textures={textures} shadows={Boolean(q.shadows)} reduced={reduced} register={register} {...(t.interactive ? { onActivate, onPreview } : {})} />
-          ))}
-          <TapCatcher candidates={candidates} onActivate={onActivate} />
-          <Effects3D effects={effects} detail={q.detail} />
-          <Projection objects={objects} mirror={mirror} cells={cellMirror} />
-        </Canvas>
-      )}
+    <div
+      ref={root}
+      className="relative aspect-square w-full select-none"
+      data-testid="game-board"
+      data-renderer={mode}
+      data-quality={quality}
+      data-camera={mode === "2.5d" ? "aerial" : immersiveView}
+      data-stage={staged ? "" : undefined}
+      data-environment={env ? environment : undefined}
+      role="group"
+      aria-label={title}
+      // On the stage the canvas lies behind the page: the slot lets pointer events through to it.
+      style={{ opacity: dimmed ? 0.92 : 1, transition: "opacity 220ms ease", pointerEvents: staged ? "none" : undefined }}
+    >
+      {canvas && staged ? createPortal(canvas, stageHost) : canvas}
       {/* The board for assistive tech and tests: each token's step and state (the move tray offers the choices). */}
       <ul ref={mirror} className="sr-only" aria-hidden="true" data-testid="board-mirror">
         {items.map((t) => (
@@ -340,6 +446,14 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
           <li key={`s${i}`} data-kind="star" data-colour={st.colour} data-x={st.x} data-y={H.plate + H.tile + H.inlay} data-z={st.z} />
         ))}
       </ol>
+      {/* The city's landmarks: which are built, and where each appears on screen (for tooling and tests). */}
+      {env ? (
+        <ul ref={anchorMirror} className="sr-only" aria-hidden="true" data-testid="environment-mirror" data-city={environment ?? undefined} data-assets={builtAssets.join(" ")}>
+          {anchors.map((a) => (
+            <li key={a.id} data-id={a.id} data-x={a.x} data-y={a.y} data-z={a.z} />
+          ))}
+        </ul>
+      ) : null}
       {preview ? <span className="sr-only" aria-hidden="true" data-testid="move-preview-3d" data-to={preview.to} /> : null}
     </div>
   );

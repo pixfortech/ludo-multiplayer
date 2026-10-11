@@ -100,13 +100,13 @@ export interface Token3D {
 export async function expectBoard3d(page: Page, mode: "2.5d" | "3d" = "2.5d"): Promise<void> {
   const board = page.locator(`[data-testid="game-board"][data-renderer="${mode}"]`);
   await expect(board).toBeVisible({ timeout: 20_000 });
-  await expect(board.locator("canvas")).toBeVisible();
+  await expect(page.locator("canvas[data-board-gl]")).toBeVisible();
   await expect.poll(() => board.locator('[data-testid="board-cells-mirror"] li[data-cx]').count(), { message: "the 3D board has drawn" }).toBeGreaterThan(70);
 }
 
 export async function boardCells(page: Page): Promise<Cell3D[]> {
   return page.evaluate(() => {
-    const canvas = document.querySelector('[data-testid="game-board"] canvas')!.getBoundingClientRect();
+    const canvas = document.querySelector('canvas[data-board-gl]')!.getBoundingClientRect();
     return [...document.querySelectorAll<HTMLElement>('[data-testid="board-cells-mirror"] li')].map((el) => ({
       kind: el.dataset.kind!,
       row: el.dataset.row ? Number(el.dataset.row) : null,
@@ -122,7 +122,7 @@ export async function boardCells(page: Page): Promise<Cell3D[]> {
 
 export async function boardTokens(page: Page): Promise<Token3D[]> {
   return page.evaluate(() => {
-    const canvas = document.querySelector('[data-testid="game-board"] canvas')!.getBoundingClientRect();
+    const canvas = document.querySelector('canvas[data-board-gl]')!.getBoundingClientRect();
     return [...document.querySelectorAll<HTMLElement>('[data-testid="board-mirror"] li')].map((el) => ({
       key: el.dataset.key!,
       step: el.dataset.step!,
@@ -163,7 +163,7 @@ export async function pickDiagnostics(player: Player, key: string): Promise<stri
   const token = (await boardTokens(player.page)).find((t) => t.key === key);
   const extra = await player.page.evaluate(() => ({
     finePointer: matchMedia("(hover: hover) and (pointer: fine)").matches,
-    canvas: document.querySelector('[data-testid="game-board"] canvas')?.getBoundingClientRect().toJSON(),
+    canvas: document.querySelector('canvas[data-board-gl]')?.getBoundingClientRect().toJSON(),
     status: document.querySelector('[data-testid="game-status"]')?.textContent ?? null,
     quality: (document.querySelector('[data-testid="game-board"]') as HTMLElement | null)?.dataset.quality,
     frameMs: (document.querySelector('[data-testid="game-board"]') as HTMLElement | null)?.dataset.frameMs,

@@ -18,3 +18,6 @@ export const usePrefersReducedMotion = (): boolean => useMediaQuery("(prefers-re
 
 /** A mouse or trackpad: hovering previews a move and one click makes it. */
 export const useFinePointer = (): boolean => useMediaQuery("(hover: hover) and (pointer: fine)");
+
+/** Wide layouts (desktop, laptop, tablet landscape): the board sits between side columns, room for a 3D city stage. */
+export const useWideLayout = (): boolean => useMediaQuery("(min-width: 1024px) and (min-height: 541px)");

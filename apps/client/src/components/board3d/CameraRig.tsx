@@ -5,6 +5,10 @@
 //    overview; drag to orbit, pinch or wheel to zoom (within limits), follow
 //    the active token, reset to the overview. Transitions are smooth, and
 //    instant under reduced motion.
+// On the stage (a city environment behind the whole game screen) both cameras
+// keep the board exactly in its layout slot: they are fitted to the slot and
+// the rest of the canvas is a view offset around it. Orbiting never enters a
+// building: the camera rises instead.
 // The camera only looks: it never moves a token or touches game state.
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
@@ -12,6 +16,16 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from "three";
 import type { WorldPoint } from "@ludo/board-layouts";
 import { AERIAL_PITCH, aerialPose, blendPose, fitAerial, fitDistance, focusPose, isometricPose, orbit, poseToPosition, type Pose } from "./cameraMath";
+import { avoidObstacles, type Aabb } from "./sightlines";
+
+/** The board's slot on a full-window canvas (CSS pixels, relative to the canvas). */
+export interface StageViewport {
+  x: number;
+  y: number;
+  size: number;
+  width: number;
+  height: number;
+}
 
 export type CameraMode = "aerial" | "immersive";
 /** Immersive views: the overview, following the active token, or wherever the player orbited to. */
@@ -29,9 +43,19 @@ export interface CameraRigProps {
   focus: WorldPoint | null;
   reduced: boolean;
   onViewChange: (view: ImmersiveView) => void;
+  /** The board's slot on a stage canvas; null when the canvas is the board's size. */
+  viewport: StageViewport | null;
+  /** Buildings an orbiting camera must not enter. */
+  obstacles: readonly Aabb[];
 }
 
-export function CameraRig({ mode, view, resetKey, focus, reduced, onViewChange }: CameraRigProps) {
+/** Fits the camera to the slot: the slot is square, and the rest of the canvas is shown around it. */
+function applyViewport(cam: OrthographicCamera | PerspectiveCamera, viewport: StageViewport | null) {
+  if (viewport) cam.setViewOffset(viewport.size, viewport.size, -viewport.x, -viewport.y, viewport.width, viewport.height);
+  else cam.clearViewOffset();
+}
+
+export function CameraRig({ mode, view, resetKey, focus, reduced, onViewChange, viewport, obstacles }: CameraRigProps) {
   const set = useThree((s) => s.set);
   const size = useThree((s) => s.size);
   const gl = useThree((s) => s.gl);
@@ -44,7 +68,10 @@ export function CameraRig({ mode, view, resetKey, focus, reduced, onViewChange }
     Object.assign(persp, { manual: true });
     return { ortho, persp };
   }, []);
-  const aspect = size.width / Math.max(1, size.height);
+  // On the stage the board's slot is square: frame for it, and show the rest around it.
+  const aspect = viewport ? 1 : size.width / Math.max(1, size.height);
+  const obstaclesRef = useRef(obstacles);
+  obstaclesRef.current = obstacles;
   const pose = useRef<Pose>(aerialPose());
   const transition = useRef<{ from: Pose; to: Pose; start: number } | null>(null);
   const viewRef = useRef(view);
@@ -67,9 +94,10 @@ export function CameraRig({ mode, view, resetKey, focus, reduced, onViewChange }
     cam.up.set(0, 1, 0);
     cam.lookAt(target);
     cam.updateProjectionMatrix();
+    applyViewport(cam, viewport);
     set({ camera: cam });
     invalidate();
-  }, [mode, aspect, cameras, set, invalidate]);
+  }, [mode, aspect, viewport, cameras, set, invalidate]);
 
   const goTo = (to: Pose) => {
     if (reduced) {
@@ -85,6 +113,7 @@ export function CameraRig({ mode, view, resetKey, focus, reduced, onViewChange }
     const cam = cameras.persp;
     cam.aspect = aspect;
     cam.updateProjectionMatrix();
+    applyViewport(cam, viewport);
     pose.current = { ...aerialPose(), distance: fitDistance(FOV_RAD, aspect, AERIAL_PITCH) };
     set({ camera: cam });
     goTo(isometricPose(FOV_RAD, aspect));
@@ -94,8 +123,9 @@ export function CameraRig({ mode, view, resetKey, focus, reduced, onViewChange }
   useEffect(() => {
     cameras.persp.aspect = aspect;
     cameras.persp.updateProjectionMatrix();
+    applyViewport(cameras.persp, viewport);
     invalidate();
-  }, [aspect, cameras, invalidate]);
+  }, [aspect, viewport, cameras, invalidate]);
 
   // Reset (and the overview button) return to the isometric overview.
   useEffect(() => {
@@ -139,13 +169,13 @@ export function CameraRig({ mode, view, resetKey, focus, reduced, onViewChange }
         const dy = now.y - last.y;
         if (Math.abs(dx) + Math.abs(dy) < 1) return;
         toFree();
-        pose.current = orbit(pose.current, dx, dy);
+        pose.current = avoidObstacles(orbit(pose.current, dx, dy), obstaclesRef.current);
       } else if (pointers.size === 2) {
         const [a, b] = [...pointers.values()];
         const d = Math.hypot(a!.x - b!.x, a!.y - b!.y);
         if (pinch > 0 && d > 0) {
           toFree();
-          pose.current = orbit(pose.current, 0, 0, pinch / d);
+          pose.current = avoidObstacles(orbit(pose.current, 0, 0, pinch / d), obstaclesRef.current);
         }
         pinch = d;
       }
@@ -158,7 +188,7 @@ export function CameraRig({ mode, view, resetKey, focus, reduced, onViewChange }
     const wheel = (e: WheelEvent) => {
       e.preventDefault();
       toFree();
-      pose.current = orbit(pose.current, 0, 0, Math.exp(e.deltaY * 0.0015));
+      pose.current = avoidObstacles(orbit(pose.current, 0, 0, Math.exp(e.deltaY * 0.0015)), obstaclesRef.current);
       invalidate();
     };
     el.addEventListener("pointerdown", down);

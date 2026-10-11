@@ -8,7 +8,7 @@
 // board until the server has confirmed it.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { boardMaterial2d, getCityTheme } from "@ludo/city-themes";
+import { boardMaterial2d, environment3dFor, getCityTheme } from "@ludo/city-themes";
 import { PLAYER_IDENTITIES, type PlayerIdentity } from "@ludo/design-tokens";
 import type { GameStateView, RoomView } from "@ludo/shared-types";
 import type { ConnectionState, Notice } from "../../lib/connection";
@@ -16,7 +16,7 @@ import { friendlyError } from "../../lib/errors";
 import { formatRoomCode } from "../../lib/format";
 import { moveOutcomes, moveSummary, ordinal, trayOrder, turnEventFor } from "../../lib/gameText";
 import { identityFor } from "../../lib/identities";
-import { useFinePointer, usePrefersReducedMotion } from "../../lib/media";
+import { useFinePointer, usePrefersReducedMotion, useWideLayout } from "../../lib/media";
 import { Link, paths } from "../../lib/router";
 import { useGame } from "../../state/gameClient";
 import { BoardView } from "../board3d/BoardView";
@@ -118,6 +118,14 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   const quality: QualityLevel = viewPref.quality ?? autoLevel;
   const [immersiveView, setImmersiveView] = useState<ImmersiveView>("overview");
   const [pendingView, setPendingView] = useState<{ quality?: QualityLevel; fallback?: boolean } | null>(null);
+  // A city with a 3D environment surrounds the 3D board. On wide screens it is drawn on a stage: one canvas
+  // behind the whole game screen, with the board held in its slot. On narrow screens the 2.5D board keeps
+  // the 2D city around it, and the 3D view shows the city round the board inside the board's canvas.
+  const wide = useWideLayout();
+  const hasCity3d = environment3dFor(theme.id) !== null;
+  const stage = hasCity3d && boardMode !== "2d" && wide;
+  const environment = hasCity3d && boardMode !== "2d" && (stage || boardMode === "3d") ? theme.id : null;
+  const [stageHost, setStageHost] = useState<HTMLDivElement | null>(null);
   const [cameraReset, setCameraReset] = useState(0);
 
   const [rollPending, setRollPending] = useState(false);
@@ -476,8 +484,12 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   ) : null;
 
   const board = (
-    <div className="relative mx-auto w-[var(--board)] max-w-full">
+    <div className="board-slot relative z-[1] mx-auto w-[var(--board)] max-w-full">
       <BoardView
+        environment={environment}
+        stageHost={stage ? stageHost : null}
+        stage={stage}
+        busy={playback.busy}
         mode={boardMode}
         quality={quality}
         reduced={reduced}
@@ -511,17 +523,18 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   );
 
   return (
-    <div className={`game-layout mx-auto w-full max-w-[1800px] px-4 pb-[calc(var(--action-bar-h,0px)+16px)] pt-3 sm:px-6 phone-landscape:grid phone-landscape:h-[calc(100svh-65px)] phone-landscape:grid-cols-[var(--board)_minmax(0,1fr)] phone-landscape:grid-rows-[minmax(0,1fr)] phone-landscape:gap-3 phone-landscape:py-2 lg:grid lg:h-[calc(100svh-65px)] lg:grid-cols-[var(--board)_300px] lg:grid-rows-[minmax(0,1fr)] lg:justify-center lg:gap-6 lg:py-5 xl:grid-cols-[240px_var(--board)_280px] 2xl:grid-cols-[280px_var(--board)_320px] ${city ? "city-game" : ""}`} data-testid="game-screen" data-city={theme.id} style={city ? cityStyle(theme) : undefined}>
-      <CityBackdrop theme={theme} />
+    <div className={`game-layout mx-auto w-full max-w-[1800px] px-4 pb-[calc(var(--action-bar-h,0px)+16px)] pt-3 sm:px-6 phone-landscape:grid phone-landscape:h-[calc(100svh-65px)] phone-landscape:grid-cols-[var(--board)_minmax(0,1fr)] phone-landscape:grid-rows-[minmax(0,1fr)] phone-landscape:gap-3 phone-landscape:py-2 lg:grid lg:h-[calc(100svh-65px)] lg:grid-cols-[var(--board)_300px] lg:grid-rows-[minmax(0,1fr)] lg:justify-center lg:gap-6 lg:py-5 xl:grid-cols-[240px_var(--board)_280px] 2xl:grid-cols-[280px_var(--board)_320px] ${city ? "city-game" : ""} ${stage ? "board-stage" : ""}`} data-testid="game-screen" data-city={theme.id} style={city ? cityStyle(theme) : undefined}>
+      {/* The 3D city stage replaces the 2D city behind the game screen. */}
+      {stage ? <div ref={setStageHost} className="board-stage-host" data-testid="board-stage" /> : <CityBackdrop theme={theme} />}
       {/* Left column (desktop): players and room. */}
-      <aside className="hidden min-h-0 flex-col gap-4 xl:flex" aria-label="Players and room">
+      <aside className="relative z-[1] hidden min-h-0 flex-col gap-4 xl:flex" aria-label="Players and room">
         {city ? <CitySign theme={theme} /> : null}
         <PlayerPanel players={rows} />
         <div className="city-glass rounded-[var(--radius-card)] bg-surface p-3 shadow-raised">{roomInfo}</div>
       </aside>
 
       {/* Phones and tablet portrait: compact players strip. */}
-      <div className="mb-3 flex items-center justify-between gap-2 phone-landscape:hidden lg:hidden">
+      <div className="relative z-[1] mb-3 flex items-center justify-between gap-2 phone-landscape:hidden lg:hidden">
         <PlayerStrip players={rows} />
         {city ? <CityChip theme={theme} /> : null}
       </div>
@@ -529,7 +542,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       <div className="min-w-0 phone-landscape:self-center lg:self-center">{board}</div>
 
       {/* Right rail (tablet landscape and desktop): turn, die, tray, log. */}
-      <aside className="hidden min-h-0 flex-col gap-4 overflow-y-auto phone-landscape:flex phone-landscape:gap-3 lg:flex" aria-label="Game controls">
+      <aside className="relative z-[1] hidden min-h-0 flex-col gap-4 overflow-y-auto phone-landscape:flex phone-landscape:gap-3 lg:flex" aria-label="Game controls">
         {city ? (
           <div className="phone-landscape:hidden xl:hidden">
             <CitySign theme={theme} />
@@ -552,7 +565,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       </aside>
 
       {/* Below the board on phones and tablet portrait: log and room. */}
-      <div className="mt-4 flex flex-col gap-4 phone-landscape:hidden lg:hidden">
+      <div className="relative z-[1] mt-4 flex flex-col gap-4 phone-landscape:hidden lg:hidden">
         <div className="city-glass rounded-[var(--radius-card)] bg-surface p-3 shadow-raised">
           <GameActionFeed entries={game.recentHistory} revealedSeq={playback.revealedSeq} nameOf={nameOf} limit={8} />
         </div>

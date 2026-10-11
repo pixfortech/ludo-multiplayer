@@ -5,7 +5,7 @@
 // so switching never touches the game.
 
 import { Component, lazy, Suspense, type ReactNode } from "react";
-import type { BoardMaterial2d } from "@ludo/city-themes";
+import type { BoardMaterial2d, CityThemeId } from "@ludo/city-themes";
 import { ClassicBoard, type ClassicBoardProps } from "../board/ClassicBoard";
 import { CityPlinth } from "../city/CityFrame";
 import type { ImmersiveView } from "./CameraRig";
@@ -39,9 +39,16 @@ export interface BoardViewProps {
   onReady: () => void;
   onFailure: (reason: string) => void;
   onFrameStats: (ms: number) => void;
+  /** The city environment around a 3D board (null: none). */
+  environment: CityThemeId | null;
+  /** The full-window stage the city is drawn on (wide screens), and whether one is wanted. */
+  stageHost: HTMLElement | null;
+  stage: boolean;
+  /** Tokens are moving (the city's ambient life eases off). */
+  busy: boolean;
 }
 
-export function BoardView({ board, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats }: BoardViewProps) {
+export function BoardView({ board, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy }: BoardViewProps) {
   const flat = (
     <CityPlinth material={material}>
       <ClassicBoard {...board} material={material} />
@@ -63,6 +70,10 @@ export function BoardView({ board, mode, quality, reduced, material, immersiveVi
           onReady={onReady}
           onFailure={onFailure}
           onFrameStats={onFrameStats}
+          environment={environment}
+          stageHost={stageHost}
+          stage={stage}
+          busy={busy}
         />
       </Suspense>
     </RendererBoundary>

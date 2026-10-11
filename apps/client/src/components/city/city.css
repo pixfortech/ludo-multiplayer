@@ -332,3 +332,24 @@ html[data-city] header {
     inset 0 1px 0 rgba(255, 255, 255, 0.25),
     0 10px 30px -12px rgba(20, 24, 33, 0.35);
 }
+
+/*
+ * The 3D city stage (wide screens, a city with a 3D environment): one canvas
+ * fixed behind the game screen. Panels sit above it; the board's slot lets
+ * pointer events through to the canvas, where the board is drawn in place.
+ */
+.board-stage-host {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+.board-stage-host > div {
+  width: 100% !important;
+  height: 100% !important;
+}
+.board-stage .board-slot {
+  pointer-events: none;
+}
+.board-stage .board-slot [data-testid="paused-overlay"] {
+  pointer-events: auto;
+}
