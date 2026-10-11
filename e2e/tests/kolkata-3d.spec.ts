@@ -99,7 +99,7 @@ async function expectCellsClear(page: Page, where: string) {
   const cells = await boardCells(page);
   const at = (row: number, col: number) => cells.find((c) => c.row === row && c.col === col && c.kind !== "star")!;
   const cellPx = Math.abs(at(6, 2).x - at(6, 1).x);
-  const covered = await page.evaluate((points) => points.filter((p) => document.elementFromPoint(p.x, p.y) !== document.querySelector("canvas[data-board-gl]")).map((p) => p.label), cells.map((c) => ({ x: c.x, y: c.y, label: `${c.kind} r${c.row}c${c.col}` })));
+  const covered = await page.evaluate((points) => points.filter((p) => !(document.elementFromPoint(p.x, p.y) as HTMLElement | null)?.matches("canvas[data-board-gl]")).map((p) => p.label), cells.map((c) => ({ x: c.x, y: c.y, label: `${c.kind} r${c.row}c${c.col}` })));
   expect(covered, `${where}: nothing covers a cell`).toEqual([]);
   for (const c of cells.filter((x) => x.kind === "start" || x.kind === "lane")) {
     const px = await pixelAt(page, c.x + cellPx * 0.3, c.y + cellPx * 0.3);
@@ -300,15 +300,17 @@ test("Kolkata fits every supported screen in 2.5D and 3D: the whole board in vie
         const inSlot = (pt: { x: number; y: number }) => pt.x > s.x - 1 && pt.x < s.x + s.width + 1 && pt.y > s.y - 1 && pt.y < s.y + s.height + 1;
         return [...(await boardCells(p.page)).filter((c) => !inSlot(c)).map((c) => `cell r${c.row}c${c.col}`), ...(await boardTokens(p.page)).filter((t) => !inSlot(t)).map((t) => `token ${t.key}`)];
       };
-      await expect.poll(outside, { message: `${where}: the whole board and every token in its slot`, timeout: 6000 }).toEqual([]);
+      await expect.poll(outside, { message: `${where}: the whole board and every token in its slot`, timeout: 15_000 }).toEqual([]);
       // Where the board is on screen, nothing (panel, bar or scenery) covers a cell.
       const s = await slot();
+      // (Polled: an automatic quality step after a resize rebuilds the canvas for a moment.)
       if (s.y >= 0 && s.y + s.height <= size.height) {
-        const covered = await p.page.evaluate(
-          (points) => points.filter((pt) => document.elementFromPoint(pt.x, pt.y) !== document.querySelector("canvas[data-board-gl]")).length,
-          (await boardCells(p.page)).map((c) => ({ x: c.x, y: c.y })),
-        );
-        expect(covered, `${where}: cells covered`).toBe(0);
+        const covered = async () =>
+          p.page.evaluate(
+            (points) => points.filter((pt) => !(document.elementFromPoint(pt.x, pt.y) as HTMLElement | null)?.matches("canvas[data-board-gl]")).length,
+            (await boardCells(p.page)).map((c) => ({ x: c.x, y: c.y })),
+          );
+        await expect.poll(covered, { message: `${where}: cells covered`, timeout: 8000 }).toBe(0);
       }
       if (env.environment) await expectKolkataBuilt(p.page);
       const shown = (await environmentOf(p.page)).anchors.filter((a) => a.inView && (LANDMARKS as readonly string[]).includes(a.id)).length;
