@@ -141,3 +141,24 @@ describe("3D token motion", () => {
     for (let t = 0; t < 1; t += 0.1) expect(sampleMotion("slide", from, to, t).lift).toBe(0);
   });
 });
+
+describe("sightlines", () => {
+  it("detects a box between the camera and a cell, and ignores boxes beside the line", async () => {
+    const { segmentHitsBox, toAabb } = await import("../sightlines");
+    const wall = toAabb({ minX: -1, maxX: 1, minZ: 9, maxZ: 10, height: 6 }, -0.4);
+    expect(segmentHitsBox({ x: 0, y: 6, z: 20 }, { x: 0, y: 0, z: 0 }, wall)).toBe(true);
+    expect(segmentHitsBox({ x: 6, y: 20, z: 20 }, { x: 6, y: 0, z: 0 }, wall)).toBe(false);
+    expect(segmentHitsBox({ x: 0, y: 40, z: 12 }, { x: 0, y: 0, z: 0 }, wall)).toBe(false);
+  });
+
+  it("lifts an orbiting camera out of a building instead of letting it pass through", async () => {
+    const { avoidObstacles, inside, toAabb } = await import("../sightlines");
+    const tower = toAabb({ minX: 10, maxX: 14, minZ: -2, maxZ: 2, height: 9 }, -0.4);
+    const pose = { target: { x: 0, y: 0, z: 0 }, yaw: Math.PI / 2, pitch: (26 * Math.PI) / 180, distance: 14 };
+    expect(inside(poseToPosition(pose), tower)).toBe(true);
+    const safe = avoidObstacles(pose, [tower]);
+    expect(inside(poseToPosition(safe), tower)).toBe(false);
+    expect(safe.pitch).toBeGreaterThan(pose.pitch);
+    expect(safe.distance).toBe(pose.distance);
+  });
+});

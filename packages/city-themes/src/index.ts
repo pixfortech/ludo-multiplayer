@@ -7,3 +7,4 @@ export * from "./cityAssetManifest.js";
 export * from "./cityThemeRegistry.js";
 export * from "./themeRenderer2d.js";
 export * from "./themeRenderer3d.js";
+export * from "./environment3d.js";
