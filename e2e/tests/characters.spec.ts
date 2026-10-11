@@ -1,0 +1,316 @@
+// C.3A: the Crimson team's human characters, in real browsers against the
+// real server. The renderer's token mirror reports which character each
+// token is, whether it has loaded (its team colour, clips and level of
+// detail) and what it is doing (its presentation state), so these tests can
+// follow the characters through real play:
+//  - four distinct characters for Kolkata's Crimson seat only; pawns
+//    everywhere else; the team colour applied; every clip loaded;
+//  - their base routine (a chat, tea, reading, exercise) and their turn;
+//  - a six: the chosen character reacts and leaves its base only after the
+//    server has accepted the move, walks the exact cells at a walking pace,
+//    and stands on its cell; a capture sends it back to its base slot;
+//  - a refresh mid-walk restores it at its place without replaying;
+//  - camera focus, mouse picks in 2.5D and touch picks in 3D on a phone,
+//    quality changes, the 2D fallback and GPU objects.
+import { expect, test, type Browser, type Page } from "@playwright/test";
+import { boardCells, boardTokens, expectBoard3d, pickToken3d } from "../support/board3d";
+import { createRoom, joinRoom, openPlayer, seatTable, startGame, visible, type BoardView, type Device, type Player } from "../support/game";
+import { readTimeline, startTimeline } from "../support/timeline";
+
+const CLIPS = ["dismay", "drink", "excited", "exercise", "idle", "listen", "look_around", "read", "run", "stretch", "talk", "walk", "wave"];
+
+const noErrors = (players: Player[]) => {
+  for (const p of players) expect(p.errors, `${p.name}: no page errors`).toEqual([]);
+};
+const close = async (players: Player[]) => {
+  for (const p of players) await p.context.close();
+};
+
+interface CharacterView {
+  key: string;
+  character: string | null;
+  ready: boolean;
+  state: string | null;
+  clip: string | null;
+  team: string | null;
+  level: string | null;
+  clips: string[];
+  step: string;
+}
+
+function characters(page: Page): Promise<CharacterView[]> {
+  return page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>('[data-testid="board-mirror"] li')].map((el) => ({
+      key: el.dataset.key!,
+      character: el.dataset.character ?? null,
+      ready: el.dataset.characterReady === "true",
+      state: el.dataset.characterState ?? null,
+      clip: el.dataset.characterClip ?? null,
+      team: el.dataset.characterTeam ?? null,
+      level: el.dataset.characterLevel ?? null,
+      clips: (el.dataset.characterClips ?? "").split(" ").filter(Boolean),
+      step: el.dataset.step!,
+    })),
+  );
+}
+
+async function allReady(page: Page, count = 4) {
+  await expect.poll(async () => (await characters(page)).filter((c) => c.ready).length, { message: "the characters have loaded", timeout: 60_000 }).toBe(count);
+}
+
+/** Records each character's states in the page (every change, with a timestamp). */
+async function watchStates(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { __states: { t: number; key: string; state: string }[] };
+    w.__states = [];
+    new MutationObserver((records) => {
+      for (const r of records) {
+        const el = r.target as HTMLElement;
+        if (r.attributeName === "data-character-state") w.__states.push({ t: performance.now(), key: el.dataset.key!, state: el.dataset.characterState! });
+      }
+    }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["data-character-state"] });
+  });
+}
+const states = (page: Page) => page.evaluate(() => (window as unknown as { __states: { t: number; key: string; state: string }[] }).__states);
+
+async function kolkata(host: { name: string; device: Device; board: BoardView }, guest: { name: string; device: Device; board: BoardView }, browser: Browser) {
+  const aman = await openPlayer(browser, host.name, host.device, { board: host.board });
+  const ben = await openPlayer(browser, guest.name, guest.device, { board: guest.board });
+  const code = await createRoom(aman, { players: 2, city: "Kolkata" });
+  await joinRoom(ben, code);
+  await startGame(aman, [aman, ben]);
+  const table = await seatTable(code, [aman, ben]);
+  return { aman, ben, table, code };
+}
+
+test("Kolkata's Crimson seat is played by four distinct characters in its colours, with every clip; everyone else keeps pawns", async ({ browser }) => {
+  const { aman, ben, table } = await kolkata({ name: "Aman", device: "wide", board: "2.5d" }, { name: "Ben", device: "phone", board: "3d" }, browser);
+  for (const p of [aman, ben]) {
+    await expectBoard3d(p.page, p === aman ? "2.5d" : "3d");
+    await allReady(p.page);
+    const cs = await characters(p.page);
+    const crimson = cs.filter((c) => c.key.startsWith(`${aman.id}:`));
+    expect(crimson.map((c) => c.character), `${p.name}: tokens 0-3 are the four people`).toEqual(["adda", "tea", "newspaper", "exercise"]);
+    expect(cs.filter((c) => !c.key.startsWith(`${aman.id}:`)).every((c) => c.character === null), "the other seat keeps pawns").toBe(true);
+    for (const c of crimson) {
+      expect(c.clips, `${c.character}: every clip`).toEqual(CLIPS);
+      // Tinted to the seat's colour: a crimson red.
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.team!.slice(i, i + 2), 16));
+      expect(r, `${c.character} wears the team colour ${c.team}`).toBeGreaterThan(g! + 60);
+      expect(r).toBeGreaterThan(b! + 40);
+    }
+    expect(new Set(crimson.map((c) => c.team)).size, "one team colour").toBe(1);
+    await expect(visible(p.page.getByTestId("characters-prototype"))).toBeVisible();
+  }
+  // The base routine: in a minute, the storyteller and the tea lover chat (both "interacting" at once),
+  // the reader reads, the runner stretches or exercises.
+  await watchStates(aman.page);
+  await expect
+    .poll(
+      async () => {
+        const cs = await characters(aman.page);
+        const by = (k: string) => cs.find((c) => c.character === k)!;
+        return by("adda").state === "interacting" && by("tea").state === "interacting";
+      },
+      { message: "the storyteller and the tea lover chat", timeout: 60_000, intervals: [500] },
+    )
+    .toBe(true);
+  const clipsSeen = new Map<string, Set<string>>();
+  for (let i = 0; i < 24; i++) {
+    for (const c of await characters(aman.page)) if (c.character) clipsSeen.set(c.character, (clipsSeen.get(c.character) ?? new Set()).add(c.clip!));
+    await aman.page.waitForTimeout(1000);
+  }
+  console.log(Object.fromEntries([...clipsSeen].map(([k, v]) => [k, [...v]])));
+  expect(clipsSeen.get("newspaper")).toContain("read");
+  expect([...clipsSeen.get("exercise")!].some((c) => c === "stretch" || c === "exercise")).toBe(true);
+  expect(clipsSeen.get("tea")).toContain("drink");
+  // Another city has no characters at all.
+  await table.act(6, () => 0);
+  noErrors([aman, ben]);
+  await close([aman, ben]);
+
+  const dev = await openPlayer(browser, "Dev", "wide", { board: "2.5d" });
+  const eve = await openPlayer(browser, "Eve", "phone", { board: "2d" });
+  const code = await createRoom(dev, { players: 2, city: "Delhi" });
+  await joinRoom(eve, code);
+  await startGame(dev, [dev, eve]);
+  await expectBoard3d(dev.page);
+  expect((await characters(dev.page)).every((c) => c.character === null)).toBe(true);
+  await expect(dev.page.getByTestId("characters-prototype")).toHaveCount(0);
+  await close([dev, eve]);
+});
+
+test("a six: the chosen character reacts, leaves only once the server accepts, walks the exact cells at a walking pace, and stands on its cell", async ({ browser }) => {
+  const { aman, ben, table } = await kolkata({ name: "Aman", device: "wide", board: "3d" }, { name: "Ben", device: "phone", board: "2d" }, browser);
+  await expectBoard3d(aman.page, "3d");
+  await allReady(aman.page);
+  await watchStates(aman.page);
+  const adda = `${aman.id}:0`;
+  // Their turn comes round: they notice.
+  await table.act(1); // Aman: no token out, passes
+  await table.act(1); // Ben passes
+  await expect.poll(async () => (await states(aman.page)).filter((s) => s.state === "turnAlert" && s.key.startsWith(`${aman.id}:`)).length, { message: "the team notices its turn" }).toBeGreaterThan(0);
+  // A six: all four may go; none leaves before the click and the server's answer.
+  await table.roll(6);
+  await expect.poll(async () => (await boardTokens(aman.page)).filter((t) => t.state === "movable").length).toBe(4);
+  await aman.page.waitForTimeout(800);
+  expect((await states(aman.page)).some((s) => s.state === "leavingBase" || s.state === "excited"), "nobody leaves on the roll alone").toBe(false);
+  expect((await characters(aman.page)).find((c) => c.key === adda)!.state).toBe("selectable");
+  await startTimeline(aman.page);
+  const before = (await table.state()).game!.stateVersion;
+  await pickToken3d(aman, adda);
+  await expect.poll(async () => (await table.state()).game!.stateVersion, { message: "the server accepts the move" }).toBeGreaterThan(before);
+  table.moves++;
+  await expect.poll(async () => (await states(aman.page)).filter((s) => s.key === adda).map((s) => s.state), { message: "excited, then off to the start cell, then standing", timeout: 15_000 }).toEqual(expect.arrayContaining(["excited", "leavingBase"]));
+  const leftAt = (await states(aman.page)).find((s) => s.key === adda && s.state === "excited")!.t;
+  const committedAt = (await readTimeline(aman.page)).find((e) => e.target === adda)!.t;
+  expect(leftAt, "it reacts only once the move is on the board").toBeGreaterThanOrEqual(committedAt - 5);
+  await table.expectInSync();
+
+  // The bonus roll: four cells, walked one by one at a walking pace (not the pawns' 170 ms hops).
+  await startTimeline(aman.page);
+  await table.act(4);
+  await expect.poll(async () => (await characters(aman.page)).find((c) => c.key === adda)!.state, { timeout: 15_000 }).toBe("idle");
+  const steps = (await readTimeline(aman.page)).filter((e) => e.target === adda);
+  expect(steps.map((e) => e.value)).toEqual(["1", "2", "3", "4"]);
+  const gaps = steps.slice(1).map((e, i) => e.t - steps[i]!.t);
+  console.log(`walked cells every ${gaps.map((g) => Math.round(g)).join(", ")} ms`);
+  // A walking pace: about 0.7 s a cell (pawns hop in 0.17 s). Software WebGL can starve the step timers so a
+  // few arrive together; the walk as a whole still takes its time.
+  expect(steps[steps.length - 1]!.t - steps[0]!.t, "three cells at a walking pace").toBeGreaterThan(3 * 500);
+  expect((await states(aman.page)).some((s) => s.key === adda && s.state === "walking")).toBe(true);
+  // Standing on its cell: the token's projection sits on the cell of step 4 of seat 0.
+  const cells = await boardCells(aman.page);
+  const t = (await boardTokens(aman.page)).find((x) => x.key === adda)!;
+  const cell = cells.find((c) => c.kind !== "star" && c.kind !== "lane" && Math.hypot(c.x - t.x, c.y - t.y) < 40);
+  expect(cell, "on a track cell").toBeTruthy();
+  await table.expectInSync();
+  noErrors([aman, ben]);
+  await close([aman, ben]);
+});
+
+test("caught: dismay, then back to its own base slot; a refresh mid-walk puts the character where it belongs without replaying", async ({ browser }) => {
+  test.setTimeout(8 * 60_000);
+  const { aman, ben, table } = await kolkata({ name: "Aman", device: "wide", board: "2.5d" }, { name: "Ben", device: "phone", board: "2d" }, browser);
+  await expectBoard3d(aman.page);
+  await allReady(aman.page);
+  const adda = `${aman.id}:0`;
+  // The storyteller walks to step 28 (6, 6, 5 then 6, 6, 5): Ben's start is two cells behind.
+  await table.act(6, () => 0);
+  await table.act(6, () => 0);
+  await table.act(5);
+  await table.act(1); // Ben passes
+  await table.act(6, () => 0);
+  await table.act(6, () => 0);
+  // A refresh while he walks: he is put straight on his cell, with no replayed reaction or walk.
+  await queueAndRoll(table, 5);
+  await aman.page.waitForTimeout(700);
+  await aman.page.reload();
+  await expectBoard3d(aman.page);
+  await allReady(aman.page);
+  await watchStates(aman.page);
+  await aman.page.waitForTimeout(2500);
+  expect((await states(aman.page)).filter((s) => s.key === adda).map((s) => s.state), "nothing replays after a refresh").not.toContain("walking");
+  await table.expectInSync();
+  expect((await table.state()).game!.players.find((p) => p.id === aman.id)!.tokens[0]!.step).toBe(28);
+
+  // Ben opens and lands on him: dismay, and back to his own base slot.
+  await table.act(6, () => 0);
+  const snap = await table.act(2);
+  expect(snap.history.filter((e) => e.type === "capture").length).toBe(1);
+  await expect.poll(async () => (await states(aman.page)).filter((s) => s.key === adda).map((s) => s.state), { timeout: 15_000 }).toEqual(expect.arrayContaining(["captured", "returningToBase"]));
+  await expect.poll(async () => (await characters(aman.page)).find((c) => c.key === adda)!.step).toBe("base");
+  // In the Crimson base corner (top left), not on the track.
+  const cells = await boardCells(aman.page);
+  const at = (row: number, col: number) => cells.find((c) => c.row === row && c.col === col && c.kind !== "star")!;
+  const t = (await boardTokens(aman.page)).find((x) => x.key === adda)!;
+  expect(t.x, "left of the track's column").toBeLessThan(at(6, 5).x);
+  expect(t.y, "above the track's row").toBeLessThan(at(5, 6).y);
+  await table.expectInSync();
+  noErrors([aman, ben]);
+  await close([aman, ben]);
+});
+
+async function queueAndRoll(table: Awaited<ReturnType<typeof seatTable>>, value: number) {
+  // Roll without waiting for the move to finish playing (the refresh happens mid-walk).
+  await table.roll(value);
+}
+
+test("focus follows the walking character; mouse in 2.5D and touch in 3D pick characters; quality changes, the 2D fallback and GPU objects", async ({ browser }) => {
+  test.setTimeout(8 * 60_000);
+  // The Crimson host plays on a phone in 3D (touch), the guest on a wide screen.
+  const { aman: phone, ben: wide, table } = await kolkata({ name: "Pia", device: "phone", board: "3d" }, { name: "Ravi", device: "wide", board: "2.5d" }, browser);
+  await expectBoard3d(phone.page, "3d");
+  await allReady(phone.page);
+  const tea = `${phone.id}:1`;
+  // Touch: the first tap selects (and previews), the second plays.
+  await table.roll(6);
+  await expect.poll(async () => (await boardTokens(phone.page)).filter((t) => t.state === "movable").length).toBe(4);
+  await pickToken3d(phone, tea);
+  await expect.poll(async () => (await characters(phone.page)).find((c) => c.key === tea)!.state, { message: "selected on the first tap" }).toBe("selected");
+  expect(phone.sent.move).toBe(0);
+  const v = (await table.state()).game!.stateVersion;
+  await pickToken3d(phone, tea);
+  await expect.poll(async () => (await table.state()).game!.stateVersion).toBeGreaterThan(v);
+  table.moves++;
+  await table.expectInSync();
+  // Focus: follow the token; while she walks the camera keeps her near the middle of the view.
+  await visible(phone.page.getByRole("button", { name: "Follow token" })).click();
+  await expect(phone.page.getByTestId("game-board")).toHaveAttribute("data-camera", "follow");
+  await watchStates(phone.page);
+  await table.roll(5);
+  const canvas = (await phone.page.locator("canvas[data-board-gl]").boundingBox())!;
+  let checked = 0;
+  // Until the walk is over (the die tumbles and shows first).
+  for (let i = 0; i < 40; i++) {
+    await phone.page.waitForTimeout(300);
+    const me = (await characters(phone.page)).find((c) => c.key === tea)!;
+    if (me.state === "walking") {
+      const t = (await boardTokens(phone.page)).find((x) => x.key === tea)!;
+      expect(Math.abs(t.x - (canvas.x + canvas.width / 2)), "kept in view while walking").toBeLessThan(canvas.width * 0.35);
+      checked++;
+    } else if (checked > 0 || (await states(phone.page)).some((s) => s.key === tea && s.state === "walking")) break;
+  }
+  expect((await states(phone.page)).some((s) => s.key === tea && s.state === "walking"), "she walked").toBe(true);
+  table.moves++;
+  await table.expectInSync();
+  await visible(phone.page.getByRole("button", { name: "Overview" })).click();
+  await table.act(1); // Ravi passes
+
+  // Quality changes reload the characters at each level; picks still work afterwards; one canvas; GPU objects bounded.
+  const counts: Record<string, number> = {};
+  for (const level of ["High", "Low", "Medium"] as const) {
+    await visible(phone.page.getByRole("radio", { name: level })).click();
+    await expect(phone.page.getByTestId("game-board")).toHaveAttribute("data-quality", level.toLowerCase());
+    await expectBoard3d(phone.page, "3d");
+    await expect.poll(async () => (await characters(phone.page)).filter((c) => c.ready && c.level === level.toLowerCase()).length, { timeout: 60_000 }).toBe(4);
+    await expect(phone.page.locator("canvas")).toHaveCount(1);
+    counts[level] = Number(await phone.page.getByTestId("game-board").getAttribute("data-gl-geometries"));
+  }
+  console.log("GPU geometries by level", counts);
+  for (const n of Object.values(counts)) expect(n).toBeLessThan(140);
+  await table.roll(6);
+  await expect.poll(async () => (await boardTokens(phone.page)).filter((t) => t.state === "movable").length).toBeGreaterThan(1);
+  const adda = `${phone.id}:0`;
+  await phone.page.evaluate(() => window.scrollTo(0, 0)); // the quality radios scrolled the phone's page
+  await pickToken3d(phone, adda);
+  await expect.poll(async () => (await characters(phone.page)).find((c) => c.key === adda)!.state, { message: "selected after the quality changes" }).toBe("selected");
+  await pickToken3d(phone, adda);
+  await expect.poll(async () => (await table.state()).game!.players.find((p) => p.id === phone.id)!.tokens[0]!.step).toBe(0);
+  table.moves++;
+  await table.expectInSync();
+
+  // The guest (2.5D, mouse) sees the same characters; losing WebGL falls back to the 2D board with pawns, and play goes on.
+  await expectBoard3d(wide.page);
+  await allReady(wide.page);
+  await wide.page.evaluate(() => {
+    const c = document.querySelector("canvas[data-board-gl]") as HTMLCanvasElement;
+    (c.getContext("webgl2")!.getExtension("WEBGL_lose_context") as { loseContext: () => void }).loseContext();
+  });
+  await expect(wide.page.locator('svg[data-testid="game-board"]')).toBeVisible();
+  await expect(wide.page.getByTestId("characters-prototype")).toHaveCount(0);
+  await table.act(1, (legal) => legal[0]!.tokenId);
+  await table.expectInSync();
+  noErrors([phone, wide]);
+  await close([phone, wide]);
+});

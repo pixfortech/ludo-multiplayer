@@ -28,8 +28,11 @@ import { TextureCache } from "./textures";
 import { Token3D, TokenKit, floorFor, type Token3DInput } from "./Tokens3D";
 import type { QualityLevel } from "./capabilities";
 import { environmentFor } from "./environments/registry";
-import type { AmbientState } from "./environments/ambient";
+import { useAmbientClock, type AmbientState } from "./environments/ambient";
 import type { StageViewport } from "./CameraRig";
+import type { IdleBehaviour } from "./characters/brain";
+import { CHARACTERS, characterFor } from "./characters/catalog";
+import { characterWork } from "./characters/CharacterBody";
 
 export interface Board3DProps extends ClassicBoardProps {
   mode: "2.5d" | "3d";
@@ -56,6 +59,8 @@ export interface Board3DProps extends ClassicBoardProps {
   stage: boolean;
   /** Tokens are moving: the city's ambient life eases off. */
   busy: boolean;
+  /** The city whose human characters play for their seats (C.3A: Kolkata's Crimson team), or null: pawns. */
+  characterCity?: CityThemeId | null;
 }
 
 /** Graphics presets (performance-budgets.md § Rendering): gameplay accuracy never changes, only cost. */
@@ -101,6 +106,17 @@ function Lights({ shadows, mapSize }: { shadows: boolean; mapSize: number }) {
  * intervals would mislead: the city asks for frames at a capped rate, so its
  * intervals are long by design.) Publishes renderer counters on `host`.
  */
+/**
+ * The characters' own clock (C.3A): their idle life is part of the game, not decoration, so it keeps a
+ * minimum of 2 frames a second where the city's ambient life would rest; otherwise the same governor
+ * (never under reduced motion or in a hidden tab).
+ */
+const CHARACTER_FPS: Record<QualityLevel, number> = { low: 8, medium: 12, high: 20 };
+function CharacterClock({ quality, busy, active }: { quality: QualityLevel; busy: boolean; active: boolean }) {
+  useAmbientClock({ fps: CHARACTER_FPS[quality], busy, active, floor: 2 });
+  return null;
+}
+
 function FrameWatch({ onReady, onFrameStats, host }: { onReady: () => void; onFrameStats?: ((ms: number) => void) | undefined; host: React.RefObject<HTMLElement | null> }) {
   const ready = useRef(false);
   const gl = useThree((s) => s.gl);
@@ -136,6 +152,9 @@ function FrameWatch({ onReady, onFrameStats, host }: { onReady: () => void; onFr
       if (frames >= 20 && now - since >= 2000) {
         const ms = total / frames;
         publish(ms);
+        // Of which animating the characters (their mixers), per frame.
+        if (el) el.dataset.characterMs = (characterWork.ms / frames).toFixed(2);
+        characterWork.ms = 0;
         onFrameStats?.(ms);
         total = 0;
         frames = 0;
@@ -236,6 +255,18 @@ function Projection({ objects, mirror, cells, anchors }: { objects: Map<string, 
     for (const el of list.children as HTMLCollectionOf<HTMLElement>) {
       const obj = objects.get(el.dataset.key ?? "");
       if (!obj) continue;
+      const u = obj.userData;
+      if (u.characterReady) {
+        const put = (name: string, value: string) => {
+          if (el.dataset[name] !== value) el.dataset[name] = value;
+        };
+        put("characterReady", "true");
+        put("characterState", String(u.characterState ?? ""));
+        put("characterClip", String(u.characterClip ?? ""));
+        put("characterTeam", String(u.characterTeam));
+        put("characterLevel", String(u.characterLevel));
+        put("characterClips", (u.characterClips as string[]).join(" "));
+      }
       obj.getWorldPosition(v);
       v.y += 0.3;
       v.project(camera);
@@ -307,7 +338,7 @@ function useStageViewport(slot: React.RefObject<HTMLElement | null>, host: HTMLE
 }
 
 const Board3D = memo(function Board3D(props: Board3DProps) {
-  const { tokens, identityOf, activeSeats, currentSeat, youSeat, states = {}, badges = {}, labels = {}, motion = {}, preview = null, effects = [], onActivate, onPreview, title, dimmed = false, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy } = props;
+  const { tokens, identityOf, activeSeats, currentSeat, youSeat, states = {}, badges = {}, labels = {}, motion = {}, preview = null, effects = [], onActivate, onPreview, title, dimmed = false, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy, characterCity = null } = props;
   const q = QUALITY[quality];
   const textures = useMemo(() => new TextureCache(), []);
   const kit = useMemo(() => new TokenKit(q.detail, q.physical), [q.detail, q.physical]);
@@ -327,11 +358,32 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
   const placements = useMemo(() => placeTokens(tokens), [tokens]);
   const seatsKey = [...activeSeats].sort().join(",");
   const model: BoardModel = useMemo(() => buildBoardModel(material, seatsKey ? seatsKey.split(",").map(Number) : []), [material, seatsKey]);
+  // Human characters (C.3A): which token is which person, where each team stands, and when its turn began.
+  const turnStartedAt = useMemo(() => (currentSeat === null ? null : performance.now()), [currentSeat]);
+  const cast = useMemo(() => {
+    const byKey = new Map<string, { key: string; behaviour: IdleBehaviour; seat: number }>();
+    for (const p of placements) {
+      const key = characterFor(characterCity, p.seat, p.tokenId);
+      if (key) byKey.set(p.key, { key, behaviour: CHARACTERS[key]!.idle, seat: p.seat });
+    }
+    const partners = new Map<number, Partial<Record<IdleBehaviour, WorldPoint>>>();
+    for (const p of placements) {
+      const c = byKey.get(p.key);
+      if (!c) continue;
+      const team = partners.get(c.seat) ?? {};
+      team[c.behaviour] = svgToWorld(p);
+      partners.set(c.seat, team);
+    }
+    return { byKey, partners };
+  }, [placements, characterCity]);
   const items: Token3DInput[] = useMemo(
     () =>
       placements.map((p) => {
         const state: BoardTokenState = p.finished ? "finished" : (states[p.key] ?? "idle");
+        const c = cast.byKey.get(p.key);
+        const character = c ? { key: c.key, behaviour: c.behaviour, quality, partners: cast.partners.get(c.seat) ?? {}, turnStartedAt: currentSeat === c.seat ? turnStartedAt : null } : null;
         return {
+          character,
           key: p.key,
           identity: identityOf(p.playerId),
           step: p.step,
@@ -344,7 +396,7 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
           interactive: Boolean(onActivate) && (state === "movable" || state === "selected"),
         };
       }),
-    [placements, states, identityOf, motion, badges, onActivate],
+    [placements, states, identityOf, motion, badges, onActivate, cast, quality, currentSeat, turnStartedAt],
   );
   const candidates = useMemo(() => items.filter((t) => t.interactive).map((t) => ({ key: t.key, at: t.at })), [items]);
 
@@ -413,6 +465,7 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
         }}
       >
         <ContextWatch onFailure={fail} />
+        <CharacterClock quality={quality} busy={busy} active={cast.byKey.size > 0 && !reduced} />
         <RedrawOnResize />
         <FrameWatch onReady={ready} onFrameStats={onFrameStats} host={root} />
         <CameraRig mode={mode === "2.5d" ? "aerial" : "immersive"} view={immersiveView} resetKey={resetKey} focus={focus} reduced={reduced} onViewChange={onImmersiveViewChange} viewport={staged ? viewport : null} obstacles={obstacles} />
@@ -454,7 +507,7 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
       {/* The board for assistive tech and tests: each token's step and state (the move tray offers the choices). */}
       <ul ref={mirror} className="sr-only" aria-hidden="true" data-testid="board-mirror">
         {items.map((t) => (
-          <li key={t.key} data-key={t.key} data-testid={`token-${t.key}`} data-step={t.step === null ? "base" : t.step} data-state={t.state} data-floor={floorFor(t.step)} data-label={labels[t.key]} />
+          <li key={t.key} data-key={t.key} data-character={t.character?.key} data-testid={`token-${t.key}`} data-step={t.step === null ? "base" : t.step} data-state={t.state} data-floor={floorFor(t.step)} data-label={labels[t.key]} />
         ))}
       </ul>
       {/* The board's cells with their drawn colours and on-screen centres (tests check the pixels against the layout). */}

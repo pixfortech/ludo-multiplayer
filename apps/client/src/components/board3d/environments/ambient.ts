@@ -43,7 +43,7 @@ export const ambientTime = (): number => performance.now() / 1000;
  * frames delivered. Returns the asked rate when affordable, a lower rate when
  * not, or 0 (the city rests, standing still) below 3 frames a second.
  */
-export function affordableFps(askedFps: number, windowMs: number, delivered: number, workMs: readonly number[]): number {
+export function affordableFps(askedFps: number, windowMs: number, delivered: number, workMs: readonly number[], floor = 0): number {
   if (askedFps <= 0) return 0;
   if (windowMs <= 0) return askedFps;
   const asked = (askedFps * windowMs) / 1000;
@@ -53,7 +53,7 @@ export function affordableFps(askedFps: number, windowMs: number, delivered: num
   const cost = Math.max(work, late ? windowMs / Math.max(1, delivered) : 0);
   if (cost <= 0) return askedFps;
   const affordable = Math.min(askedFps, Math.floor((1000 / 3 / cost) * 10) / 10);
-  return affordable >= 3 ? affordable : 0;
+  return affordable >= 3 ? affordable : Math.min(askedFps, floor);
 }
 
 /**
@@ -70,7 +70,7 @@ export type AmbientState = "measuring" | "live" | "eased" | "resting" | "still";
  * a two-second window and lowers the rate if the device cannot keep up; it
  * never raises it again (a quality change or a new game starts afresh).
  */
-export function useAmbientClock({ fps, busy, active, onState }: { fps: number; busy: boolean; active: boolean; onState?: ((state: AmbientState, fps: number) => void) | undefined }): number {
+export function useAmbientClock({ fps, busy, active, onState, floor = 0 }: { fps: number; busy: boolean; active: boolean; onState?: ((state: AmbientState, fps: number) => void) | undefined; floor?: number }): number {
   const invalidate = useThree((s) => s.invalidate);
   const [rate, setRate] = useState(fps);
   const [measured, setMeasured] = useState(false);
@@ -118,7 +118,7 @@ export function useAmbientClock({ fps, busy, active, onState }: { fps: number; b
       work.push(now - start);
       if (now - windowStart >= WINDOW) {
         decided = true;
-        const next = affordableFps(rate, now - windowStart, delivered, work);
+        const next = affordableFps(rate, now - windowStart, delivered, work, floor);
         if (next < rate) setRate(next);
         setMeasured(true);
       }
@@ -127,7 +127,7 @@ export function useAmbientClock({ fps, busy, active, onState }: { fps: number; b
       before();
       after();
     };
-  }, [live, rate]);
+  }, [live, rate, floor]);
 
   useEffect(() => {
     if (!live) return;

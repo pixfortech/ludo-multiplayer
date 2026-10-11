@@ -44,11 +44,13 @@ export interface BoardViewProps {
   /** The full-window stage the city is drawn on (wide screens), and whether one is wanted. */
   stageHost: HTMLElement | null;
   stage: boolean;
+  /** The city whose human characters replace the pawns of their seats (null: pawns). */
+  characterCity?: CityThemeId | null;
   /** Tokens are moving (the city's ambient life eases off). */
   busy: boolean;
 }
 
-export function BoardView({ board, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy }: BoardViewProps) {
+export function BoardView({ board, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy, characterCity = null }: BoardViewProps) {
   const flat = (
     <CityPlinth material={material}>
       <ClassicBoard {...board} material={material} />
@@ -71,6 +73,7 @@ export function BoardView({ board, mode, quality, reduced, material, immersiveVi
           onFailure={onFailure}
           onFrameStats={onFrameStats}
           environment={environment}
+          characterCity={characterCity}
           stageHost={stageHost}
           stage={stage}
           busy={busy}

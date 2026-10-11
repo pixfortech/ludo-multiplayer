@@ -17,9 +17,11 @@ export interface BoardViewControlsProps {
   onQuality: (quality: QualityLevel | "auto") => void;
   onOverview: () => void;
   onFollow: () => void;
+  /** Human characters are shown (a prototype, C.3A): say so. */
+  characters?: boolean;
 }
 
-export function BoardViewControls({ mode, unavailable, quality, immersiveView, onMode, onQuality, onOverview, onFollow }: BoardViewControlsProps) {
+export function BoardViewControls({ mode, unavailable, quality, immersiveView, onMode, onQuality, onOverview, onFollow, characters = false }: BoardViewControlsProps) {
   return (
     <div className="flex flex-col gap-2" data-testid="board-view-controls">
       <Segmented
@@ -33,6 +35,11 @@ export function BoardViewControls({ mode, unavailable, quality, immersiveView, o
         ]}
       />
       {unavailable ? <p className="text-[12px] text-ink-muted">{unavailable}</p> : null}
+      {characters && mode !== "2d" ? (
+        <p className="text-[12px] text-ink-muted" data-testid="characters-prototype">
+          Prototype characters: the Crimson team is played by four Kolkata people.
+        </p>
+      ) : null}
       {mode !== "2d" ? (
         <Segmented
           label="Graphics"

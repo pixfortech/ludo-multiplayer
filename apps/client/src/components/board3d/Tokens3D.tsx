@@ -12,7 +12,7 @@
 // rules: it receives the token's identity and state; Token3D places it,
 // scales it and moves it along the motion sample.
 
-import { memo, useEffect, useLayoutEffect, useRef } from "react";
+import { Suspense, memo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import type { Group} from "three";
 import { CylinderGeometry, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, SpriteMaterial, type BufferGeometry, type Material } from "three";
@@ -24,6 +24,24 @@ import { TOKEN_FLOOR } from "./BoardMesh3D";
 import { PAWN, discGeometry, pawnGeometry, ringGeometry, type Detail } from "./geometry3d";
 import { sampleMotion, type MotionSample } from "./motion3d";
 import type { TextureCache } from "./textures";
+import type { QualityLevel } from "./capabilities";
+import { decide, groundSpeed, turnToward, walkPosition, yawToward, type CharacterPose, type IdleBehaviour } from "./characters/brain";
+import { CharacterBody, type CharacterController } from "./characters/CharacterBody";
+import { CHARACTERS, characterScale } from "./characters/catalog";
+
+/** A token shown as a human character (C.3A). */
+export interface TokenCharacter {
+  key: string;
+  behaviour: IdleBehaviour;
+  quality: QualityLevel;
+  /** Where the rest of the team stands (for facing a partner in a chat). */
+  partners: Partial<Record<IdleBehaviour, WorldPoint>>;
+  /** When this seat's turn began (performance.now), or null when it is not this seat's turn. */
+  turnStartedAt: number | null;
+}
+
+/** A character's plinth (world units). */
+export const PLINTH = { radius: 0.3, height: 0.05 } as const;
 
 export interface Token3DInput {
   key: string;
@@ -37,6 +55,8 @@ export interface Token3DInput {
   badge: number | null;
   count: number | null;
   interactive: boolean;
+  /** Shown as a human character instead of a pawn. */
+  character?: TokenCharacter | null;
 }
 
 /** The floor a token stands on for a step: raised bases, the cells, the centre. */
@@ -55,6 +75,9 @@ export class TokenKit {
   readonly halo: BufferGeometry;
   readonly blob: BufferGeometry;
   readonly hit: BufferGeometry;
+  /** The plinth a character stands on (a miniature's base, in the seat colour). */
+  readonly plinth: BufferGeometry;
+  readonly plinthRim: BufferGeometry;
   readonly hitMaterial = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false });
   readonly blobMaterial = new MeshBasicMaterial({ color: "#1B1712", transparent: true, opacity: 0.2, depthWrite: false });
   readonly darkRing = new MeshBasicMaterial({ color: INK.dark });
@@ -72,6 +95,8 @@ export class TokenKit {
     this.halo = ringGeometry(0.53, 0.6, detail);
     this.blob = ringGeometry(0, 0.36, detail);
     this.hit = new CylinderGeometry(0.5, 0.5, 1, 16).translate(0, 0.5, 0);
+    this.plinth = new CylinderGeometry(PLINTH.radius, PLINTH.radius * 1.06, PLINTH.height, detail.radial).translate(0, PLINTH.height / 2, 0);
+    this.plinthRim = new CylinderGeometry(PLINTH.radius * 1.075, PLINTH.radius * 1.1, PLINTH.height * 0.45, detail.radial).translate(0, PLINTH.height * 0.225, 0);
   }
 
   private cached<T extends Material>(key: string, make: () => T): T {
@@ -107,7 +132,7 @@ export class TokenKit {
   }
 
   dispose(): void {
-    for (const g of [this.pawn, this.cap, this.ring, this.ringInner, this.halo, this.blob, this.hit]) g.dispose();
+    for (const g of [this.pawn, this.cap, this.ring, this.ringInner, this.halo, this.blob, this.hit, this.plinth, this.plinthRim]) g.dispose();
     for (const m of [this.hitMaterial, this.blobMaterial, this.darkRing, this.whiteRing, ...this.materials.values()]) m.dispose();
     this.materials.clear();
   }
@@ -162,7 +187,22 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
   const floor = floorFor(token.step);
   const previous = useRef({ at: token.at, floor });
   const travel = useRef<Travel | null>(null);
+  // A character still walking a cell when the next arrives walks that one after it: never a skipped cell or a jump.
+  const queued = useRef<Travel[]>([]);
   const played = useRef<number | null>(null);
+  const character = token.character ?? null;
+  const isCharacter = character !== null;
+  const controller = useRef<CharacterController | null>(null);
+  const yaw = useRef<number | null>(null);
+  const lastPose = useRef<CharacterPose | null>(null);
+  const onCharacterReady = useCallback(
+    (info: { team: string; clips: string[]; level: string }) => {
+      // The token mirror reports it (data-character-ready): the person has replaced the pawn.
+      if (group.current) Object.assign(group.current.userData, { characterReady: true, characterTeam: info.team, characterClips: info.clips, characterLevel: info.level });
+      invalidate();
+    },
+    [invalidate],
+  );
 
   // A new placement: travel there if the playback says how, otherwise jump.
   useLayoutEffect(() => {
@@ -173,12 +213,19 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
     const m = token.motion;
     if (!m || m.id === played.current) {
       travel.current = null;
+      queued.current = [];
     } else {
       played.current = m.id;
-      travel.current = { from: from.at, to: token.at, fromFloor: from.floor, toFloor: floor, kind: m.kind, ms: m.ms, start: performance.now() };
+      const next: Travel = { from: from.at, to: token.at, fromFloor: from.floor, toFloor: floor, kind: m.kind, ms: m.ms, start: performance.now() };
+      const walking = travel.current;
+      if (isCharacter && walking && walking.kind !== "capture" && next.kind !== "capture" && performance.now() - walking.start < walking.ms) queued.current.push(next);
+      else {
+        travel.current = next;
+        queued.current = [];
+      }
     }
     invalidate();
-  }, [token.at, floor, token.motion, invalidate]);
+  }, [token.at, floor, token.motion, isCharacter, invalidate]);
 
   useEffect(() => {
     register(token.key, group.current);
@@ -188,22 +235,66 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
   const lifted = token.state === "selected" ? 0.08 : 0;
   const pulse = token.state === "movable" && !reduced;
 
-  useFrame(() => {
+  useFrame((state, delta) => {
     const g = group.current;
     const b = body.current;
     if (!g || !b) return;
     let s: MotionSample = { ...token.at, lift: 0, scale: 1, squash: 1, tilt: 0, opacity: 1 };
     let y = floor;
-    const t = travel.current;
+    let t = travel.current;
+    if (t && queued.current.length > 0 && performance.now() - t.start >= t.ms) {
+      // On to the next cell, one cell a frame at most if the walk has fallen behind.
+      const next = queued.current.shift()!;
+      next.start = t.start + t.ms;
+      t = travel.current = next;
+    }
+    let progress = 1;
     if (t) {
-      const p = (performance.now() - t.start) / Math.max(1, t.ms);
-      s = sampleMotion(t.kind, t.from, t.to, p);
-      y = t.fromFloor + (t.toFloor - t.fromFloor) * Math.min(1, Math.max(0, p));
-      if (p >= 1) travel.current = null;
+      progress = (performance.now() - t.start) / Math.max(1, t.ms);
+      s = sampleMotion(t.kind, t.from, t.to, progress);
+      y = t.fromFloor + (t.toFloor - t.fromFloor) * Math.min(1, Math.max(0, progress));
+      if (progress >= 1 && queued.current.length === 0) travel.current = null;
       else invalidate();
     }
+    if (character && controller.current) {
+      // A person walks: straight from cell to cell at a steady pace (no hop, no squash), turning to face the way.
+      const live = t && progress < 1 ? t : null;
+      if (live && live.kind !== "capture") {
+        const w = walkPosition(live.kind, live.from, live.to, progress);
+        s = { ...s, ...w, lift: 0, scale: 1, squash: 1, tilt: 0 };
+      } else if (!live || live.kind !== "capture") {
+        s = { ...s, lift: 0, scale: 1, squash: 1, tilt: 0 };
+      }
+      const entry = CHARACTERS[character.key];
+      const pose = decide(
+        {
+          behaviour: character.behaviour,
+          where: token.step === null ? "base" : token.step === 56 ? "home" : "board",
+          token: token.state === "finished" ? "finished" : token.state === "movable" ? "movable" : token.state === "selected" ? "selected" : token.state === "unmovable" ? "unmovable" : "idle",
+          travel: live ? { kind: live.kind, progress, groundSpeed: groundSpeed(live.kind, live.from, live.to, live.ms) } : null,
+          turnAge: character.turnStartedAt === null ? null : (performance.now() - character.turnStartedAt) / 1000,
+          time: performance.now() / 1000,
+        },
+        { walkSpeed: entry?.clips.walk?.speed ?? 1.6, runSpeed: entry?.clips.run?.speed ?? 3, scale: characterScale(character.key) },
+      );
+      const here = { x: s.x, z: s.z };
+      let target: number | null = null;
+      if (pose.face === "travel" && live) target = yawToward(live.from, live.to);
+      else if (pose.face === "partner" && pose.partner && character.partners[pose.partner]) target = yawToward(here, character.partners[pose.partner]!);
+      else if (pose.face === "centre") target = yawToward(here, { x: 0, z: 0 });
+      if (yaw.current === null) yaw.current = target ?? 0;
+      if (target !== null) yaw.current = reduced ? target : turnToward(yaw.current, target, Math.max(0.05, delta) * 7);
+      controller.current.root.rotation.y = yaw.current;
+      controller.current.update(pose, delta);
+      // One-off reactions play at full rate even when the city's ambient life is resting.
+      if (["turnAlert", "excited", "celebrating", "captured", "returningToBase", "leavingBase", "reachingHome", "walking"].includes(pose.state) || (target !== null && Math.abs(target - yaw.current) > 0.01)) invalidate();
+      lastPose.current = pose;
+      // For the token mirror (tests and tooling): what the character is doing.
+      g.userData.characterState = pose.state;
+      g.userData.characterClip = pose.clip;
+    }
     g.position.set(s.x, y, s.z);
-    b.position.y = s.lift + lifted;
+    b.position.y = s.lift + (character ? 0 : lifted);
     b.scale.set(token.scale * s.scale, token.scale * s.scale * s.squash, token.scale * s.scale);
     b.rotation.z = s.tilt;
     if (ring.current) {
@@ -242,7 +333,18 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
         </group>
       ) : null}
       <group ref={body}>
-        <PawnBody identity={token.identity} state={token.state} kit={kit} textures={textures} shadows={shadows} />
+        {character ? (
+          <Suspense fallback={<PawnBody identity={token.identity} state={token.state} kit={kit} textures={textures} shadows={shadows} />}>
+            {/* A miniature on its plinth: the seat colour reads from any camera, and the base is the obvious thing to pick. */}
+            <mesh geometry={kit.plinth} material={kit.body(token.identity, token.state === "unmovable")} dispose={null} />
+            <mesh geometry={kit.plinthRim} material={kit.whiteRing} dispose={null} />
+            <group position={[0, PLINTH.height, 0]}>
+              <CharacterBody ref={controller} characterKey={character.key} quality={character.quality} teamColour={token.identity.body} onReady={onCharacterReady} />
+            </group>
+          </Suspense>
+        ) : (
+          <PawnBody identity={token.identity} state={token.state} kit={kit} textures={textures} shadows={shadows} />
+        )}
       </group>
       {token.badge !== null ? (
         <sprite position={[0.32 * token.scale, 0.95, -0.32 * token.scale]} scale={0.34} material={kit.badge(String(token.badge), false, textures)} dispose={null} />

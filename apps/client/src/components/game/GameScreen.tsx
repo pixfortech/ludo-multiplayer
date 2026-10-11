@@ -21,6 +21,7 @@ import { Link, paths } from "../../lib/router";
 import { useGame } from "../../state/gameClient";
 import { BoardView } from "../board3d/BoardView";
 import { BoardViewControls } from "../board3d/BoardViewControls";
+import { characterSeats } from "../board3d/characters/catalog";
 import type { ImmersiveView } from "../board3d/CameraRig";
 import { autoQuality, deviceClass, hasWebGL2, useViewPreference, type BoardViewMode, type QualityLevel } from "../board3d/capabilities";
 import { CityBackdrop, cityStyle, useCityDocument } from "../city/CityBackdrop";
@@ -97,8 +98,6 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   const { room, game } = state;
   const reduced = usePrefersReducedMotion();
   const finePointer = useFinePointer();
-  const playback = useBoardPlayback(game, reduced, state.room.status === "paused");
-  const shown = playback.game ?? game;
   const me = state.seat?.playerId ?? null;
   const fullscreen = useFullscreen();
   // The room's city (presentation only): every player in the room sees the same one.
@@ -114,6 +113,12 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   const [failure3d, setFailure3d] = useState<string | null>(null);
   const requestedView: BoardViewMode = viewPref.mode ?? "2.5d";
   const boardMode: BoardViewMode = !webgl || failure3d ? "2d" : requestedView;
+  // Human characters (C.3A prototype: Kolkata's Crimson team) take the place of pawns on the 3D board; their
+  // seat's moves are paced for walking (presentation only).
+  const characterCity = boardMode !== "2d" ? theme.id : null;
+  const walkingSeats = useMemo(() => characterSeats(characterCity), [characterCity]);
+  const playback = useBoardPlayback(game, reduced, state.room.status === "paused", { characterSeats: walkingSeats });
+  const shown = playback.game ?? game;
   const [autoLevel, setAutoLevel] = useState<QualityLevel>(() => autoQuality(deviceClass()));
   const quality: QualityLevel = viewPref.quality ?? autoLevel;
   const [immersiveView, setImmersiveView] = useState<ImmersiveView>("overview");
@@ -428,6 +433,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   const viewControls = (
     <BoardViewControls
       mode={boardMode}
+      characters={walkingSeats.size > 0}
       unavailable={!webgl ? "3D needs WebGL, which this browser does not offer." : failure3d && failure3d !== "slow" ? "The 3D board stopped on this device; choose a 3D view to try again." : null}
       quality={viewPref.quality ?? "auto"}
       immersiveView={immersiveView}
@@ -487,6 +493,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
     <div className="board-slot relative z-[1] mx-auto w-[var(--board)] max-w-full">
       <BoardView
         environment={environment}
+        characterCity={characterCity}
         stageHost={stage ? stageHost : null}
         stage={stage}
         busy={playback.busy}

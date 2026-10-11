@@ -19,6 +19,7 @@
 // action is seen live: a refresh or reconnect never replays one.
 
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { MOTION } from "@ludo/design-tokens";
 import type { GameHistoryEntry, GameStateView } from "@ludo/shared-types";
 import { hopSteps, piecePosition } from "../board/geometry";
@@ -34,6 +35,29 @@ const REDUCED_REVEAL_MS = 120;
 const NO_MOVE_HOLD_MS = 600;
 /** Stagger between tokens captured together. */
 const CAPTURE_STAGGER_MS = 60;
+
+/**
+ * Pacing for seats shown as walking characters (the 3D board, C.3): a person covers a cell at a walking
+ * pace, not in a pawn's 170 ms hop, so their moves take longer here (presentation only: the server, the
+ * rules and every other player are unaffected, and a newer state still fast-forwards).
+ */
+export const CHARACTER_PACE = {
+  /** A walked cell; the first cells of a long move, and every cell of a short one. */
+  walkMs: 700,
+  /** A run cell, once a long move (more than 6 cells) is under way. */
+  runMs: 420,
+  /** Leaving base: the excited reaction, then the walk to the start cell. */
+  openMs: 1500,
+  /** Into the centre, with a short celebration. */
+  homeMs: 1300,
+  /** Caught: dismay where it stands, then back to base. */
+  captureMs: 1300,
+} as const;
+
+export interface PlaybackOptions {
+  /** Seats shown as walking characters: their moves are paced for walking. */
+  characterSeats?: ReadonlySet<number>;
+}
 
 export interface DieView {
   value: number | null;
@@ -119,7 +143,8 @@ function withStep(view: Playback, key: string, step: number | null, kind: Motion
 /**
  * @param paused While the room is paused nothing plays: any running action fast-forwards to the server's state.
  */
-export function useBoardPlayback(game: GameStateView | null, reduced: boolean, paused = false): Playback {
+export function useBoardPlayback(game: GameStateView | null, reduced: boolean, paused = false, options: PlaybackOptions = {}): Playback {
+  const characterSeats = options.characterSeats;
   const [view, setView] = useState<Playback>(() => (game ? snapshot(game) : emptyPlayback()));
   const shown = useRef<GameStateView | null>(game);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -139,6 +164,9 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean, p
     const seatOf = new Map(game.players.map((p) => [p.id, p.seat]));
     let t = 0;
     const at = (delay: number, update: (v: Playback) => Playback) => timers.current.push(setTimeout(() => setView(update), delay));
+    // A walking character's cells each get their own render, even when a busy page runs two timers back to
+    // back (React would otherwise batch them and the character would never be told about the cell between).
+    const atOwnRender = (delay: number, update: (v: Playback) => Playback) => timers.current.push(setTimeout(() => flushSync(() => setView(update)), delay));
 
     // Start from the previous authoritative position (fast-forwarding anything still running).
     setView((v) => ({ ...snapshot(previous, v), playing: game.stateVersion, busy: true, revealedSeq: lastSeq(previous) }));
@@ -159,13 +187,30 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean, p
     for (const entry of entries) {
       if (entry.type === "move" || entry.type === "auto-move") {
         const key = tokenKey(entry.playerId, entry.tokenId);
+        const walking = !reduced && (characterSeats?.has(seatOf.get(entry.playerId) ?? -1) ?? false);
         // Cell by cell along the seat's own path (track, then its own lane): never a shortcut.
         const hops = reduced ? [entry.to] : hopSteps(entry.from, entry.to);
         hops.forEach((step, i) => {
           const last = i === hops.length - 1;
           const kind: MotionKind = reduced ? "slide" : entry.from === null ? "open" : step === 56 ? "home" : last ? "land" : "hop";
-          const ms = reduced ? REDUCED_SLIDE_MS : kind === "open" ? OPEN_MS : kind === "home" ? D.homeEntry : hops.length > 8 && i >= 4 && !last ? FAST_HOP_MS : D.hopPerCell;
-          at(t, (v) => withStep(v, key, step, kind, ms));
+          const ms = reduced
+            ? REDUCED_SLIDE_MS
+            : walking
+              ? kind === "open"
+                ? CHARACTER_PACE.openMs
+                : kind === "home"
+                  ? CHARACTER_PACE.homeMs
+                  : hops.length > 6 && i >= 2 && i < hops.length - 2
+                    ? CHARACTER_PACE.runMs
+                    : CHARACTER_PACE.walkMs
+              : kind === "open"
+                ? OPEN_MS
+                : kind === "home"
+                  ? D.homeEntry
+                  : hops.length > 8 && i >= 4 && !last
+                    ? FAST_HOP_MS
+                    : D.hopPerCell;
+          (walking ? atOwnRender : at)(t, (v) => withStep(v, key, step, kind, ms));
           t += ms;
         });
       } else if (entry.type === "capture") {
@@ -175,7 +220,8 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean, p
         const attackerSeat = seatOf.get(entry.playerId) ?? 0;
         const mover = entries.find((e) => (e.type === "move" || e.type === "auto-move") && e.playerId === entry.playerId && e.tokenId === entry.tokenId);
         const where = piecePosition(attackerSeat, mover && (mover.type === "move" || mover.type === "auto-move") ? mover.to : null);
-        const ms = reduced ? REDUCED_REVEAL_MS : CAPTURE_IMPACT_MS + D.capture;
+        const victimWalks = !reduced && group.some((e) => e.type === "capture" && (characterSeats?.has(seatOf.get(e.victimPlayerId) ?? -1) ?? false));
+        const ms = reduced ? REDUCED_REVEAL_MS : CAPTURE_IMPACT_MS + (victimWalks ? CHARACTER_PACE.captureMs : D.capture);
         group.forEach((victimEntry, i) => {
           if (victimEntry.type !== "capture") return;
           const victim = tokenKey(victimEntry.victimPlayerId, victimEntry.victimTokenId);
@@ -199,7 +245,7 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean, p
     const over = entries.some((e) => e.type === "game-over");
     at(t, (v) => ({ ...snapshot(game, v), callouts: entries, calloutKey: v.calloutKey + 1, ...(over ? { celebrate: { key: (v.celebrate?.key ?? 0) + 1 } } : {}) }));
     at(t + 900, (v) => ({ ...v, effects: [] }));
-  }, [game, reduced]);
+  }, [game, reduced, characterSeats]);
 
   // A pause (or anything else that stops play) fast-forwards whatever is still playing.
   useEffect(() => {
