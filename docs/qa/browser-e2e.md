@@ -1,4 +1,4 @@
-# Browser end-to-end tests (Phases 3C.1–3C.3)
+# Browser end-to-end tests (Phases 3C.1–3C.3, Batches B–C.2)
 
 Real Chromium players play complete games through the real UI. They connect to the production client build (`vite preview`), the real Socket.IO server and an isolated PostgreSQL.
 
@@ -121,6 +121,17 @@ The 3D board is a WebGL canvas (software-rendered in headless Chromium). `e2e/su
 | `board3d-performance.spec.ts` | 2D against 2.5D (Low, Medium) and the 3D preview: first frame, the lazy chunk, frames and main-thread time idle and during a move, GPU object counts, tap-to-request latency |
 
 The simulated network loss (Playwright's WebSocket route closing new connections) leaves one connection attempt hanging until socket.io's 20-second connect timeout; a real network failure ends attempts at once. Tests that drop the network wait for "Reconnected" (up to 45 s) before comparing boards.
+
+## The living Kolkata environment (Batch C.2)
+
+The city round the 3D board is part of the same WebGL scene. Besides the pixels and the token and cell mirrors, the renderer reports which assets it built and where each landmark lands on screen (`environment-mirror`: `data-assets`, and per landmark `data-cx`, `data-cy`, `data-in-view`), how many frames it has drawn (`data-frames` on the board), and the ambient life's state (`data-ambient`: `live`, `eased`, `resting` or `still`, with `data-ambient-fps`).
+
+| Spec | Covers |
+| ---- | ------ |
+| `kolkata-3d.spec.ts` | Every landmark and the ambient life built; on wide screens the city fills the window on a fixed stage behind the panels, the board's cells stay inside its slot, nothing covers a cell and each cell is drawn in its own colour; landmarks seen beside the panels; clicks on the scenery (landmarks, river, road) send nothing and leave the choice open, then mouse (2.5D, stage) and touch (3D, phone) picks play; the city moves during its live window while the board's cells do not change by a pixel and nothing is sent; no frames while the tab is hidden; frames again when visible; afterwards the city keeps its capped rate, slows down or rests; reduced motion keeps it still; eight screen sizes (1920 × 1080 to 740 × 360) in 2.5D and 3D: stage only where there is room, the 2D Kolkata backdrop in 2.5D elsewhere, the whole board in its slot and uncovered, landmarks in the 3D view; switching 2.5D, 3D and 2D; graphics quality changed while a choice is open (the city rebuilds at each level, no GPU geometries leak, the pick afterwards plays); refresh; a lost WebGL context falls back to the 2D board with its Kolkata backdrop; a Delhi room has no 3D city, no stage, and never fetches the Kolkata chunk |
+| `board3d-performance.spec.ts` | Adds Kolkata (2.5D Low and Medium, 3D Medium, on the stage) to the 2D and classic 2.5D/3D measurements: the city's chunk, ambient frames per second once settled and its state, main-thread time while the city settles and once settled, frames and worst frame during a move, GPU objects and tap-to-request latency |
+
+Headless Chromium renders WebGL in software. There the city's frames cost so much that the governor rests it after its first seconds, so the motion checks run in the live window right after a (re)build; the rest of the suite holds whatever the device decides.
 
 ## Bugs found and fixed
 

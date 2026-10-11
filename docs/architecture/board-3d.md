@@ -86,3 +86,90 @@ The camera never changes a token's position or any game state.
   or tap tokens where they appear.
 
 See [3d-readiness.md](3d-readiness.md) for the full 3D plan and what comes next.
+
+## The living Kolkata environment (Batch C.2)
+
+A semi-stylised, procedural Kolkata round the board: not an open world, with no characters
+to steer. It is decoration: it never covers a cell, never takes a click, and never reads or
+writes game state.
+
+### Where it lives
+
+- `packages/city-themes/src/environment3d.ts`: which cities have a 3D environment and its
+  asset list (Kolkata only). Other cities keep their 2D environment round the 3D board, and
+  never download the Kolkata chunk.
+- `apps/client/src/components/board3d/environments/`: `registry.ts` (lazy `Component`,
+  camera obstacles, landmark anchors per city), `kit.ts` (the `Builder` that merges coloured
+  parts into one vertex-coloured geometry; `noRaycast`), `ambient.ts` (budgets, the ambient
+  clock and its governor).
+- `environments/kolkata/`: `layout.ts` (pure data: landmark footprints, routes, trees and
+  lamps, all tested), `landmarks.ts` and `districts.ts` (the models), `Ground.tsx` (ground,
+  river, embankments, tram track and wire, skyline, sky, haze), `KolkataLandmarks.tsx`,
+  `Foliage.tsx`, `movers.ts` and `KolkataAmbient.tsx` (the ambient life),
+  `KolkataEnvironment.tsx` (the lazily loaded chunk that composes them).
+
+### The city
+
+| District (seat corner) | What is there |
+| --- | --- |
+| North Kolkata heritage (crimson, north-west) | Bengali houses with shuttered windows, balconies and parapets; a courtyard; a tea stall with benches for adda; Writers' Building (red brick, white bands, pedimented portico) |
+| Hooghly riverside (royal blue, north-east) | Ghats stepping into the river, a small temple, a jetty, moored boats; the Shaheed Minar |
+| Cultural Kolkata (emerald, south-east) | The Maidan with its lawns, paths, benches, tram stop and tram loop under an overhead wire; the Victoria Memorial with its reflecting pool; College Street book stalls |
+| Contemporary Kolkata (golden, south-west) | The Biswa Bangla Gate's tilted ring over the avenue, glass towers, a plaza with a sculpture |
+| Joining them | The Hooghly's west arm with Howrah Bridge (cantilever truss, towers, anchor arms) to Howrah Station; the riverside promenade with railings and lamps; the ring road round the board; trees; a far skyline and a golden-hour sky |
+
+Every model is merged into one geometry per landmark or district (one draw call each), with
+vertex colours and no textures. Lamps and trees are instanced. Static scenery is about 9.7k
+triangles on Low, 15.3k on Medium and 17.8k on High.
+
+### Life
+
+Yellow Ambassador taxis on two ring-road lanes (opposite directions), blue-and-white trams
+round the Maidan, ferries on the Hooghly, and people on the promenade, the ghats, the Maidan
+and the plaza; trees sway on Medium and High. One instanced mesh per kind. Counts per quality
+(`ENV_QUALITY`): taxis 2 / 5 / 8, trams 1 / 2 / 3, ferries 1 / 2 / 3, people 4 / 12 / 22.
+
+- Positions are a pure function of time along closed routes (`loopPoint`), so a dropped or
+  throttled frame never makes anything jump, and nothing accumulates state.
+- The ambient clock asks for frames at a capped rate (Low 12, Medium 20, High 30 a second),
+  halves it while tokens move, stops while the tab is hidden, and never runs under reduced
+  motion (everything stands still).
+- The governor: after a 2.5 s warm-up it measures the frames it asked for (main-thread work
+  and, when frames arrive late, the interval between them). If ambient frames would take more
+  than about a third of the device's time it lowers the rate ("eased"), or stops the city
+  ("resting") below 3 frames a second. It decides once per build and never raises the rate
+  mid-game. On software WebGL (headless Chromium) the city rests after a few seconds.
+- The board's root element reports `data-ambient` (`live`, `eased`, `resting`, `still`),
+  `data-ambient-fps` and `data-frames` (frames drawn) for tests and tooling.
+
+### Placement rules (unit tested)
+
+- Every landmark footprint, tree and lamp is off the board and its border; every model's
+  triangles stay inside its declared footprint and height, and off the board.
+- No landmark hides a cell from the 2.5D aerial camera or from the 3D overview at any screen
+  shape, or the followed token wherever it is; the orbiting camera is pushed up out of any
+  building (`sightlines.ts`: `segmentHitsBox`, `avoidObstacles`).
+- Each district's landmarks lie in its seat's corner.
+- Every route is a closed loop off the board; boats stay on the water and everything else on
+  land; over a full lap no mover passes through any triangle of any model, a lamp or a tree;
+  no two vehicles ever meet (rotated footprints, ten minutes simulated).
+
+### The stage
+
+On wide screens (at least 1024 × 541) in 2.5D or 3D, the Kolkata canvas is portalled into a
+fixed full-window layer behind the game screen (`.board-stage-host`, z-index 0), so the city
+fills the window around the panels. Both cameras still fit the board to its square slot and
+then shift the view with `setViewOffset`, so the board sits exactly in its slot. The slot
+lets pointer events through to the canvas; panels sit above it. On narrower screens the 3D
+view draws the city inside the board's canvas, and 2.5D keeps the 2D Kolkata backdrop. Over
+the live stage the header is solid rather than backdrop-blurred (a blur would be recomputed
+for every city frame).
+
+### Rendering
+
+- Scenery uses Lambert shading (no specular term), the water and glass Standard; no scenery
+  casts or receives shadow maps (only the board does, on High).
+- The ground's layers are stored top-first so overlapping layers are rejected early; the sky
+  is drawn last, where nothing covers it.
+- Fog starts well beyond the board, so the board's colours never change.
+- Everything is disposed on unmount and on quality changes (the canvas is rebuilt per quality).

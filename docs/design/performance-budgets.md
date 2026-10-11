@@ -103,3 +103,46 @@ Bundle (gzip): the main bundle is 151.2 KB (+2.0 KB for the view switch and cont
 
 Reading: at rest the 3D board costs nothing (on-demand rendering); taps reach the server request in about a millisecond; during movement, software rendering is expensive, which is what the automatic quality steps and the 2D fallback are for. Measured on the way: Medium uses contact shadows instead of a shadow-map pass (worst frame 333 → 217 ms), and small pieces use fewer segments (58k → 35k triangles).
 
+
+### The living Kolkata environment (Batch C.2, 2026-10-11)
+
+Same machine and method as C.1 (headless Chromium, software WebGL, laptop viewport 1366 × 768, a live two-player game, `e2e/tests/board3d-performance.spec.ts`). Kolkata is drawn on the stage (the window-sized canvas). These compare builds and views on one machine; they are not device frame rates. No GPU device has been measured, so no frame rate on real hardware is claimed.
+
+| | 2D | 2.5D Low | 2.5D Medium | 3D Medium | Kolkata 2.5D Low | Kolkata 2.5D Medium | Kolkata 3D Medium |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| First drawn board after a reload | 164 ms | 1,244 ms | 1,619 ms | 1,286 ms | 1,060 ms | 1,359 ms | 2,366 ms |
+| Main thread busy while idle, first seconds (the city live, measuring) | 4.0% | 3.4% | 3.6% | 3.6% | 32.7% | 112% | 24.6% |
+| Main thread busy while idle, once the city has settled | — | — | — | — | 4.4% | 4.3% | 4.6% |
+| Ambient state once settled (this renderer) | — | — | — | — | resting | resting | resting |
+| Frames drawn in 1.5 s while a token moves | 63 | 38 | 45 | 46 | 48 | 24 | 34 |
+| Worst frame during a move | 50 ms | 200 ms | 167 ms | 150 ms | 200 ms | 417 ms | 317 ms |
+| Main-thread work per drawn frame | — | — | — | — | 24 ms | 31 ms | 23 ms |
+| Tap to move request leaving the page | 0.4 ms | 1.1 ms | 0.8 ms | 1.1 ms | 0.8 ms | 1.2 ms | 0.9 ms |
+| GPU geometries / textures | — | 20 / 4 | 20 / 4 | 20 / 4 | 45 / 4 | 45 / 4 | 45 / 4 |
+| Draw calls / triangles per frame | — | 42 / 29k | 42 / 35k | 42 / 35k | 67 / 47k | 67 / 62k | 67 / 61k |
+| JS heap | 8.1 MB | 12.8 MB | 12.0 MB | 11.9 MB | 11.5 MB | 12.9 MB | 13.6 MB |
+
+Bundle: the Kolkata scene is its own chunk, 31.5 KB (12.0 KB gzip), loaded only in a Kolkata room with a 3D view; other cities and the 2D board never fetch it. The 3D renderer chunk is unchanged at about 262 KB gzip.
+
+Bottlenecks found and what was done (Kolkata 2.5D Low, before → after):
+
+- **A blurred header over a live canvas.** The sticky header's `backdrop-filter` re-blurred the city behind it on every ambient frame. Over the stage the header is now solid.
+- **Fill rate.** The scenery switched from Standard to Lambert shading. The ground's overlapping layers are drawn top-first, so lower layers are rejected early. The sky is drawn last, so it is skipped wherever the city covers it, which is everywhere in the aerial view.
+- **Ambient frames the device cannot afford.** The governor measures the city's own frames after a warm-up. It lowers their rate, or rests the city when frames take more than a third of the device's time. On software WebGL it rests after a few seconds.
+- **Results:**
+  - frames during a move: 10 → 48 per 1.5 s;
+  - worst frame: 300 → 200 ms;
+  - idle main thread once settled: 120% → 4.4%;
+  - tap to request: about 1 ms throughout.
+- **Shadows.** Scenery never casts or receives shadow maps.
+
+Budgets for the environment (per quality):
+
+| | Low | Medium | High |
+| --- | --- | --- | --- |
+| Static scenery triangles (tested) | ≈ 9.7k | ≈ 15.3k | ≈ 17.8k (< 60k) |
+| Taxis / trams / ferries / people | 2 / 1 / 1 / 4 | 5 / 2 / 2 / 12 | 8 / 3 / 3 / 22 |
+| Ambient frames a second (cap; halved while tokens move) | 12 | 20 | 30 |
+| Stage pixel ratio cap | 1.0 | 1.25 | 1.5 |
+| Tree sway | off | on | on |
+| Scenery draw calls | ≈ 25 (one per landmark or district, one per instanced kind) | same | same |
