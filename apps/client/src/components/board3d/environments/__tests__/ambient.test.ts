@@ -46,6 +46,18 @@ describe("affordableFps", () => {
     expect(affordableFps(12, 2000, 7, repeat(7, 2))).toBe(0);
   });
 
+  it("keeps a floor's slow pulse instead of resting, within a tenth of the device's time", () => {
+    // Software WebGL: frames arrive every 250-330 ms, so the pulse is a frame every 2.5-3.3 s, not the floor's 2 a second.
+    expect(affordableFps(12, 2000, 8, repeat(8, 40), 2)).toBe(0.4);
+    expect(affordableFps(12, 2000, 6, repeat(6, 25), 2)).toBe(0.3);
+    // 150 ms of work a frame: 0.66 a second.
+    expect(affordableFps(8, 2000, 50, repeat(50, 150), 2)).toBe(0.66);
+    // A smaller floor wins.
+    expect(affordableFps(8, 2000, 50, repeat(50, 150), 0.5)).toBe(0.5);
+    // Affordable rates are not limited by the floor.
+    expect(affordableFps(8, 2000, 16, repeat(16, 2), 2)).toBe(8);
+  });
+
   it("is never asked to run when there is nothing to run", () => {
     expect(affordableFps(0, 2000, 0, [])).toBe(0);
   });

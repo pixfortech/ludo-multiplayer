@@ -248,7 +248,7 @@ test("the 2.5D board, and the living Kolkata city: load, frames, main-thread tim
     expect(s.ambientFps, `${s.view}: ambient frames capped`).toBeLessThanOrEqual(22);
     const [state, fps] = (s.ambient ?? "").split(" ");
     expect(["live", "eased", "resting"], `${s.view}: ambient state`).toContain(state);
-    // A resting city draws nothing of its own; the characters keep a slow pulse (2 frames a second) so they never freeze.
+    // A resting city draws nothing of its own; the characters keep a slow pulse (at most 2 frames a second and a tenth of the device's time) so they never freeze.
     if (state === "resting") expect(s.ambientFps, `${s.view}: a resting city draws only the characters' slow pulse`).toBeLessThan(2.6);
     else expect(s.ambientFps, `${s.view}: the city is alive`).toBeGreaterThan(Number(fps) * 0.25);
     expect(s.charactersReadyMs, `${s.view}: the characters load`).not.toBeNull();

@@ -107,9 +107,9 @@ function Lights({ shadows, mapSize }: { shadows: boolean; mapSize: number }) {
  * intervals are long by design.) Publishes renderer counters on `host`.
  */
 /**
- * The characters' own clock (C.3A): their idle life is part of the game, not decoration, so it keeps a
- * minimum of 2 frames a second where the city's ambient life would rest; otherwise the same governor
- * (never under reduced motion or in a hidden tab).
+ * The characters' own clock (C.3A): their idle life is part of the game, not decoration, so where the
+ * city's ambient life would rest they keep a slow pulse (at most 2 frames a second, and at most a tenth of
+ * the device's time); otherwise the same governor (never under reduced motion or in a hidden tab).
  */
 const CHARACTER_FPS: Record<QualityLevel, number> = { low: 8, medium: 12, high: 20 };
 function CharacterClock({ quality, busy, active }: { quality: QualityLevel; busy: boolean; active: boolean }) {

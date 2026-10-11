@@ -42,6 +42,10 @@ export const ambientTime = (): number => performance.now() / 1000;
  * GPU is the bottleneck, as with software WebGL), the window divided by the
  * frames delivered. Returns the asked rate when affordable, a lower rate when
  * not, or 0 (the city rests, standing still) below 3 frames a second.
+ *
+ * `floor` keeps a slow pulse instead of resting (the characters' idles), but
+ * never more than a tenth of the device's time: frames that cost 300 ms (a
+ * software renderer) get a frame every 3 seconds, not 2 a second.
  */
 export function affordableFps(askedFps: number, windowMs: number, delivered: number, workMs: readonly number[], floor = 0): number {
   if (askedFps <= 0) return 0;
@@ -53,7 +57,8 @@ export function affordableFps(askedFps: number, windowMs: number, delivered: num
   const cost = Math.max(work, late ? windowMs / Math.max(1, delivered) : 0);
   if (cost <= 0) return askedFps;
   const affordable = Math.min(askedFps, Math.floor((1000 / 3 / cost) * 10) / 10);
-  return affordable >= 3 ? affordable : Math.min(askedFps, floor);
+  if (affordable >= 3) return affordable;
+  return Math.min(askedFps, floor, Math.floor((1000 / 10 / cost) * 100) / 100);
 }
 
 /**

@@ -11,7 +11,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo } from "react";
 import { useLoader } from "@react-three/fiber";
-import { AnimationMixer, Color, LoopOnce, LoopRepeat, type AnimationAction, type Group, type Material, type Mesh, type Object3D } from "three";
+import { AnimationMixer, Color, LoopOnce, LoopRepeat, type AnimationAction, type Group, type Material, type Mesh, type Object3D, type Skeleton, type SkinnedMesh } from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -42,6 +42,24 @@ const FADE = 0.25;
 /** Main-thread time spent animating characters (skinning poses), for the board's frame statistics. */
 export const characterWork = { ms: 0 };
 
+/**
+ * One skeleton per character. A character is one skinned mesh with a primitive per material, and
+ * SkeletonUtils.clone gives each primitive its own copy of the skeleton: each would compute its bone
+ * matrices and upload its own bone texture every frame. The copies drive the same bones, so they are
+ * bound to one. Returns the skeletons in use (to dispose with the character).
+ */
+export function shareSkeletons(root: Object3D): Skeleton[] {
+  const kept: Skeleton[] = [];
+  root.traverse((o) => {
+    const mesh = o as SkinnedMesh;
+    if (!mesh.isSkinnedMesh) return;
+    const same = kept.find((k) => k.bones.length === mesh.skeleton.bones.length && k.bones.every((b, i) => b === mesh.skeleton.bones[i]));
+    if (same) mesh.bind(same, mesh.bindMatrix);
+    else kept.push(mesh.skeleton);
+  });
+  return kept;
+}
+
 export const CharacterBody = forwardRef<CharacterController, CharacterBodyProps>(function CharacterBody({ characterKey, quality, teamColour, onReady }, ref) {
   const gltf = useLoader(GLTFLoader, characterUrl(characterKey, quality), (loader) => {
     loader.setMeshoptDecoder(MeshoptDecoder);
@@ -71,11 +89,12 @@ export const CharacterBody = forwardRef<CharacterController, CharacterBodyProps>
       });
       mesh.material = Array.isArray(mesh.material) ? next : next[0]!;
     });
+    const skeletons = shareSkeletons(root);
     const mixer = new AnimationMixer(root);
     const actions = new Map<string, AnimationAction>();
     for (const clip of gltf.animations) actions.set(clip.name, mixer.clipAction(clip));
     const props = ["Prop_cup", "Prop_newspaper"].map((n) => root.getObjectByName(n)).filter((o): o is Object3D => Boolean(o));
-    return { root, mixer, actions, owned, props };
+    return { root, mixer, actions, owned, props, skeletons };
   }, [gltf, characterKey, teamColour]);
 
   useEffect(() => onReady?.({ team: `#${new Color(teamColour).getHexString()}`, clips: [...rig.actions.keys()].sort(), level: quality }), [rig, onReady, teamColour, quality]);
@@ -84,6 +103,8 @@ export const CharacterBody = forwardRef<CharacterController, CharacterBodyProps>
       rig.mixer.stopAllAction();
       rig.mixer.uncacheRoot(rig.root);
       for (const m of rig.owned) m.dispose();
+      // The bone textures are this character's own (geometry and textures are shared with the loader's cache).
+      for (const s of rig.skeletons) s.dispose();
     },
     [rig],
   );

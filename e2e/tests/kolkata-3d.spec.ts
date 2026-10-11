@@ -251,7 +251,7 @@ test("the city's life moves on its own capped clock, rests when hidden, under re
   const settledRate = ((await frames(aman.page)) - a) / 3;
   console.log(`settled: ${settled} at ${fps} a second; drew ${settledRate.toFixed(1)} frames a second`);
   expect(["live", "eased", "resting"]).toContain(settled);
-  // A resting city draws nothing of its own; the Crimson team's characters (C.3A) keep a 2 fps pulse so they never freeze.
+  // A resting city draws nothing of its own; the Crimson team's characters (C.3A) keep a slow pulse (at most 2 a second) so they never freeze.
   if (settled === "resting") expect(settledRate, "a resting city draws only the characters' pulse").toBeLessThanOrEqual(2.5);
   else expect(settledRate).toBeLessThanOrEqual(fps + 2);
   expect(await readBoard(aman.page)).toEqual(board);
