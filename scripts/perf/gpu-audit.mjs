@@ -43,6 +43,8 @@ console.table(
     "main thread move %": s.moveBusyPct,
     "tap → request ms": s.tapToRequestMs,
     ambient: s.ambient ?? "",
+    "characters ready ms": s.charactersReadyMs ?? "",
+    "character anim ms/frame": s.characterMs ?? "",
     "draw calls": s.glCalls ?? "",
     triangles: s.glTriangles ?? "",
   })),

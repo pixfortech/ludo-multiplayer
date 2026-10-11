@@ -28,6 +28,10 @@ interface Sample {
   ambientFps: number | null;
   /** Average main-thread time per drawn frame (React Three Fiber's update and render), ms. */
   frameWorkMs: number | null;
+  /** Of which animating the human characters (Kolkata's Crimson team), ms per frame. */
+  characterMs: number | null;
+  /** From the reload to all four characters loaded (Kolkata), ms. */
+  charactersReadyMs: number | null;
   /** The city's ambient life once settled: live, eased (slowed for this device), resting (stopped for this device) or still, with its rate. */
   ambient: string | null;
   /** Main-thread busy while idle once the city has settled, %. */
@@ -99,6 +103,18 @@ async function measure(browser: Browser, view: Exclude<BoardView, "default">, qu
       }),
     view !== "2d",
   );
+  const charactersReadyMs = city
+    ? await aman.page.evaluate(
+        () =>
+          new Promise<number>((resolve) => {
+            const check = () => {
+              if (document.querySelectorAll('[data-testid="board-mirror"] li[data-character-ready="true"]').length === 4) resolve(Math.round(performance.now()));
+              else requestAnimationFrame(check);
+            };
+            check();
+          }),
+      )
+    : null;
   const chunk = (pattern: string) =>
     aman.page.evaluate((p) => {
       const e = performance.getEntriesByType("resource").find((r) => new RegExp(p).test(r.name)) as PerformanceResourceTiming | undefined;
@@ -122,10 +138,11 @@ async function measure(browser: Browser, view: Exclude<BoardView, "default">, qu
   const stats = () =>
     aman.page.evaluate(() => {
       const el = document.querySelector<HTMLElement>('[data-testid="game-board"]')!;
-      return { frames: Number(el.dataset.frames ?? 0), work: el.dataset.frameMs === undefined ? null : Number(el.dataset.frameMs), ambient: el.dataset.ambient ? `${el.dataset.ambient} ${el.dataset.ambientFps}` : null };
+      return { frames: Number(el.dataset.frames ?? 0), work: el.dataset.frameMs === undefined ? null : Number(el.dataset.frameMs), characters: el.dataset.characterMs === undefined ? null : Number(el.dataset.characterMs), ambient: el.dataset.ambient ? `${el.dataset.ambient} ${el.dataset.ambientFps}` : null };
     });
   let ambientFps: number | null = null;
   let frameWorkMs: number | null = null;
+  let characterMs: number | null = null;
   let ambient: string | null = null;
   let settledBusyPct: number | null = null;
   if (view !== "2d") {
@@ -139,6 +156,7 @@ async function measure(browser: Browser, view: Exclude<BoardView, "default">, qu
     const b = await stats();
     ambientFps = Math.round(((b.frames - a.frames) / 4) * 10) / 10;
     frameWorkMs = b.work;
+    characterMs = city ? b.characters : null;
     ambient = b.ambient;
     if (city) settledBusyPct = Math.round((((await metric()).TaskDuration! - before.TaskDuration!) / 4) * 1000) / 10;
   }
@@ -188,6 +206,8 @@ async function measure(browser: Browser, view: Exclude<BoardView, "default">, qu
     cityChunkKb,
     ambientFps,
     frameWorkMs,
+    characterMs,
+    charactersReadyMs,
     ambient,
     settledBusyPct,
     idleFrames: idle.count,
@@ -228,8 +248,10 @@ test("the 2.5D board, and the living Kolkata city: load, frames, main-thread tim
     expect(s.ambientFps, `${s.view}: ambient frames capped`).toBeLessThanOrEqual(22);
     const [state, fps] = (s.ambient ?? "").split(" ");
     expect(["live", "eased", "resting"], `${s.view}: ambient state`).toContain(state);
-    if (state === "resting") expect(s.ambientFps, `${s.view}: a resting city draws nothing`).toBeLessThan(0.5);
+    // A resting city draws nothing of its own; the characters keep a slow pulse (2 frames a second) so they never freeze.
+    if (state === "resting") expect(s.ambientFps, `${s.view}: a resting city draws only the characters' slow pulse`).toBeLessThan(2.6);
     else expect(s.ambientFps, `${s.view}: the city is alive`).toBeGreaterThan(Number(fps) * 0.25);
+    expect(s.charactersReadyMs, `${s.view}: the characters load`).not.toBeNull();
     // Once settled, the city leaves the main thread mostly free (docs/architecture/performance-budgets.md).
     expect(s.settledBusyPct, `${s.view}: main thread busy once the city has settled`).toBeLessThan(45);
     expect(s.glGeometries, `${s.view}: GPU geometries stay bounded`).toBeLessThan(160);
