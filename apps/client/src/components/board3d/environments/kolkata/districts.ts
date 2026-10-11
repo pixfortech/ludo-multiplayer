@@ -21,6 +21,22 @@ const HOUSE_COLOURS = ["#E4B66C", "#E7A79C", "#EFD99F", "#A9C6CE", "#D88E63", "#
 const SHUTTER = "#3E7A55";
 const CORNICE = "#F4ECDD";
 
+/**
+ * A signboard: a coloured panel with pale bands standing in for lettering (no text textures), centred on
+ * (x, y, z). It faces +z (a panel across x) or, with `acrossZ`, +x.
+ */
+function signboard(b: Builder, x: number, y: number, z: number, w: number, h: number, colour: string, acrossZ = false, ink = "#F6EEDC") {
+  const size = (u: number, v: number, t: number): [number, number, number] => (acrossZ ? [t, v, u] : [u, v, t]);
+  const front = (d: number): [number, number, number] => (acrossZ ? [x + d, y, z] : [x, y, z + d]);
+  b.box(size(w, h, 0.03), [x, y, z], colour);
+  const lines = h > 0.14 ? 2 : 1;
+  for (let i = 0; i < lines; i++) {
+    const at = front(0.017);
+    at[1] = y + (lines === 1 ? 0 : (i === 0 ? 0.25 : -0.22) * h);
+    b.box(size(w * (i === 0 ? 0.72 : 0.5), h * 0.16, 0.01), at, ink);
+  }
+}
+
 /** A Bengali heritage house facing +z: floors with shuttered windows, balconies and a parapet. */
 function house(b: Builder, x: number, front: number, w: number, depth: number, floors: number, colour: string, detail: Detail, seed: number) {
   const fh = 0.74;
@@ -50,6 +66,8 @@ function house(b: Builder, x: number, front: number, w: number, depth: number, f
       }
     }
   }
+  // Shop signboards over the doors of some houses.
+  if (seed % 2 === 0) signboard(b, x, G + 0.62, front + 0.03, w * 0.56, 0.1, ["#B5543C", "#2F5F9E", "#3E7A55", "#C9893F"][(seed / 2) % 4]!);
   // The parapet with small pillars.
   const top = G + floors * fh;
   b.box([w + 0.06, 0.16, depth + 0.06], [x, top + 0.08, z], CORNICE);
@@ -83,6 +101,12 @@ export function buildHeritageDistrict(detail: Detail): BufferGeometry {
   for (const sx of [-1, 1]) b.box([0.04, 0.35, 0.04], [t.x + sx * 0.45, G + 0.68, t.z + 0.35], "#5B3A28");
   b.cylinder(t.x + 0.15, t.z + 0.1, 0.06, 0.07, G + 0.5, 0.12, "#B87333", 8);
   for (const sx of [-1, 1]) b.block(t.x + sx * 0.75, t.z + 0.3, 0.55, 0.16, G, 0.18, "#7A5236");
+  signboard(b, t.x, G + 0.95, t.z + 0.05, 0.7, 0.13, "#F2C230", false, "#8C2F1F");
+  // A blue street-name sign on its post at the end of the row.
+  const sx = area.maxX - 0.2;
+  const sz = area.maxZ - 0.12;
+  b.cylinder(sx, sz, 0.018, 0.022, G, 0.95, "#3E3A36", 6);
+  signboard(b, sx, G + 0.86, sz, 0.42, 0.14, "#2F5F9E");
   return b.build();
 }
 
@@ -108,6 +132,9 @@ export function buildRiversideDistrict(detail: Detail): BufferGeometry {
   b.dome(tx, tz, 0.62, G + 0.9, "#C9784A", 0.8, 12);
   b.cone(tx, tz, 0.08, G + 1.4, 0.45, "#B48A3A", 6);
   b.box([0.3, 0.5, 0.05], [tx, G + 0.3, tz + 0.51], "#6E3A2C");
+  // A notice board for the ghat, on two posts by the temple.
+  for (const dx of [-0.2, 0.2]) b.block(tx + 0.75 + dx, -11.62, 0.035, 0.035, G, 0.62, "#5B4632");
+  signboard(b, tx + 0.75, G + 0.52, -11.6, 0.5, 0.2, "#7A2E2A");
   // The jetty: a wooden platform into the river on posts, with a shelter.
   const jx = area.maxX - 1.1;
   b.box([0.9, 0.08, 2.0], [jx, G - 0.02, -14.0], "#8A6A4A");
@@ -140,6 +167,10 @@ export function buildCulturalDistrict(detail: Detail): BufferGeometry {
     const n = detail === "low" ? 4 : 8;
     for (let k = 0; k < n; k++) b.box([0.08, 0.1 + hash01(i * 13 + k) * 0.08, 0.3], [sx - 0.33 + (k * 0.66) / (n - 1), G + 0.47 + hash01(i * 7 + k) * 0.03, sz], books[(i + k) % books.length]!);
   }
+  // The College Street banner on two posts behind the stalls.
+  const bz = area.maxZ - 0.08;
+  for (const px of [area.minX + 0.5, area.maxX - 0.5]) b.block(px, bz, 0.04, 0.04, G, 0.92, "#3E3A36");
+  signboard(b, (area.minX + area.maxX) / 2, G + 0.84, bz, area.maxX - area.minX - 1.2, 0.14, "#8C2F1F");
   return b.build();
 }
 
@@ -161,6 +192,9 @@ export function buildMaidanFurniture(): BufferGeometry {
   // A tram shelter at the stop on the Maidan's west side.
   b.box([0.5, 0.05, 1.3], [11.65, G + 0.82, 5.2], "#3E7A55");
   for (const z of [4.65, 5.75]) b.block(11.65, z, 0.05, 0.05, G, 0.8, "#3E3A36");
+  // The tram stop's sign, on its own post.
+  b.cylinder(11.65, 4.2, 0.018, 0.022, G, 0.84, "#3E3A36", 6);
+  signboard(b, 11.65, G + 0.76, 4.2, 0.26, 0.16, "#F2C230", true, "#2F5F9E");
   return b.build();
 }
 
@@ -191,6 +225,9 @@ export function buildContemporaryDistrict(detail: Detail): { solid: BufferGeomet
   solid.cylinder(-7.4, 11.7, 0.12, 0.18, G, 0.55, "#C9A24A", 8);
   solid.sphere([-7.4, G + 0.75, 11.7], 0.22, "#E0B84A", 10);
   for (const x of [-3.2, -5.3]) solid.block(x, 11.7, 0.5, 0.5, G, 0.25, "#7C9A5B");
+  // A wayfinding totem in the Biswa Bangla colours.
+  solid.block(-8.6, 11.7, 0.16, 0.12, G, 0.72, "#2D3A4A");
+  signboard(solid, -8.6, G + 0.5, 11.77, 0.14, 0.34, "#E9B35A", false, "#2D3A4A");
   return { solid: solid.build(), glass: glass.build() };
 }
 
