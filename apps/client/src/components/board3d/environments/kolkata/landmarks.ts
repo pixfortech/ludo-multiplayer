@@ -105,7 +105,7 @@ export function buildHowrahBridge(detail: Detail): BufferGeometry {
   // The deck, with footways outside the trusses, and the anchorages on the banks.
   b.box([BRIDGE.east - BRIDGE.west + 0.2, 0.12, BRIDGE.halfWidth * 2 + 0.1], [(BRIDGE.east + BRIDGE.west) / 2, deck - 0.06, BRIDGE.z], DECK);
   for (const side of [-1, 1]) b.box([BRIDGE.east - BRIDGE.west, 0.05, 0.22], [(BRIDGE.east + BRIDGE.west) / 2, deck - 0.03, BRIDGE.z + side * (BRIDGE.halfWidth + 0.15)], "#7B746B");
-  for (const x of [BRIDGE.east, BRIDGE.west]) b.block(x, BRIDGE.z, 0.6, BRIDGE.halfWidth * 2 + 0.6, G, BRIDGE.deckHeight, PIER);
+  for (const x of [BRIDGE.east, BRIDGE.west]) b.block(x, BRIDGE.z, 0.4, BRIDGE.halfWidth * 2 + 0.6, G, BRIDGE.deckHeight, PIER);
   return b.build();
 }
 

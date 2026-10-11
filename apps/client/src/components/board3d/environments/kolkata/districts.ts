@@ -190,7 +190,7 @@ export function buildContemporaryDistrict(detail: Detail): { solid: BufferGeomet
   // A sculpture and planters on the plaza.
   solid.cylinder(-7.4, 11.7, 0.12, 0.18, G, 0.55, "#C9A24A", 8);
   solid.sphere([-7.4, G + 0.75, 11.7], 0.22, "#E0B84A", 10);
-  for (const x of [-3.2, -6.6]) solid.block(x, 11.2, 0.5, 0.5, G, 0.25, "#7C9A5B");
+  for (const x of [-3.2, -5.3]) solid.block(x, 11.7, 0.5, 0.5, G, 0.25, "#7C9A5B");
   return { solid: solid.build(), glass: glass.build() };
 }
 

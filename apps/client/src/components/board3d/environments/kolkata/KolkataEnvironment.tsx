@@ -8,6 +8,7 @@ import type { Group } from "three";
 import { AmbientClock, ENV_QUALITY } from "../ambient";
 import type { EnvironmentProps } from "../registry";
 import { Foliage } from "./Foliage";
+import { KolkataAmbient } from "./KolkataAmbient";
 import { KolkataGround } from "./Ground";
 import { KolkataLandmarks } from "./KolkataLandmarks";
 
@@ -28,6 +29,7 @@ export default function KolkataEnvironment({ quality, reduced, busy, onBuilt }: 
       <KolkataGround quality={q} />
       <KolkataLandmarks quality={q} />
       <Foliage quality={q} reduced={reduced} />
+      <KolkataAmbient quality={q} reduced={reduced} />
     </group>
   );
 }

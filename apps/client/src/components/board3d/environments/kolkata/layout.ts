@@ -51,10 +51,10 @@ export const BRIDGE = {
   /** The deck runs east to west across the river's west arm (south of centre: in view below the side panels in 2.5D). */
   z: 6.6,
   /** Ends of the anchor arms (on the banks). */
-  east: -10.35,
-  west: -17.35,
+  east: -11.25,
+  west: -17.3,
   /** Towers at the water's edge; the main span between them (the real bridge: ~1 : 4.6 anchor to main span). */
-  towers: [-11.4, -16.3] as const,
+  towers: [-12.0, -16.4] as const,
   towerHeight: 5.2,
   /** Deck level above the ground. */
   deckHeight: 0.85,
@@ -101,13 +101,13 @@ export const TAXI_LANES: readonly Loop[] = [
 export const TRAM_LOOP: Loop = { id: "tram", minX: 12.3, maxX: 22, minZ: -9.6, maxZ: 11.4, radius: 1.6, y: GROUND_Y, direction: 1 };
 /** Ferries up and down the west arm (under the bridge) and along the north arm. */
 export const FERRY_LOOPS: readonly Loop[] = [
-  { id: "ferry-west", minX: -15.1, maxX: -12.6, minZ: -16.6, maxZ: 30, radius: 1.2, y: WATER_Y, direction: 1 },
-  { id: "ferry-north", minX: -12, maxX: 34, minZ: -18.8, maxZ: -15.8, radius: 1.5, y: WATER_Y, direction: -1 },
+  { id: "ferry-west", minX: -15.4, maxX: -12.9, minZ: -16.6, maxZ: 30, radius: 1.2, y: WATER_Y, direction: 1 },
+  { id: "ferry-north", minX: -10, maxX: 34, minZ: -18.8, maxZ: -15.8, radius: 1.5, y: WATER_Y, direction: -1 },
 ];
 /** Walkers: the riverside promenade, the ghats, the Maidan paths and the south plaza. */
 export const WALK_LOOPS: readonly Loop[] = [
-  { id: "promenade", minX: -11.05, maxX: -10.75, minZ: -9.5, maxZ: 9.5, radius: 0.12, y: GROUND_Y, direction: 1 },
-  { id: "ghats", minX: 6.8, maxX: 16.2, minZ: -11.25, maxZ: -10.85, radius: 0.15, y: GROUND_Y, direction: -1 },
+  { id: "promenade", minX: -10.9, maxX: -10.8, minZ: -9.5, maxZ: 9.5, radius: 0.05, y: GROUND_Y, direction: 1 },
+  { id: "ghats", minX: 6.8, maxX: 16.2, minZ: -11.3, maxZ: -11.0, radius: 0.15, y: GROUND_Y, direction: -1 },
   { id: "maidan", minX: 13.1, maxX: 21.2, minZ: -0.6, maxZ: 6.2, radius: 0.8, y: GROUND_Y, direction: 1 },
   { id: "plaza", minX: -9.8, maxX: -0.6, minZ: 11.2, maxZ: 12.2, radius: 0.4, y: GROUND_Y, direction: -1 },
 ];
@@ -155,15 +155,15 @@ export function loopPoint(l: Loop, s: number): { x: number; z: number; heading: 
 /** Trees: the Maidan, the heritage courtyards, the south plaza, the far bank. */
 export const TREES: readonly { x: number; z: number; scale: number }[] = [
   ...[
-    [12.9, 6.6],
-    [13.2, 9.4],
+    [13.5, 7.6],
+    [17.0, 9.8],
     [15.8, 8.6],
     [18.6, 9.2],
-    [21.2, 7.4],
+    [20.4, 8.3],
     [20.6, -3.4],
-    [21.3, -7.4],
+    [23.8, -7.2],
     [17.8, -8.4],
-    [12.9, -3.2],
+    [13.9, -3.4],
     [23.6, 0.2],
     [23.8, 6],
     [24.2, 12.8],

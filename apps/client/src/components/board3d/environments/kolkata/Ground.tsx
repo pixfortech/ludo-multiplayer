@@ -6,9 +6,9 @@
 import { useEffect, useMemo } from "react";
 import { useThree } from "@react-three/fiber";
 import { BackSide, BufferAttribute, Color, Fog, MeshBasicMaterial, MeshStandardMaterial, SphereGeometry } from "three";
-import { Builder, hash01, noRaycast } from "../kit";
+import { Builder, hash01, noRaycast, type V3 } from "../kit";
 import type { EnvironmentQuality } from "../ambient";
-import { BOARD_CLEAR, GROUND_Y, RIVER, TAXI_LANES, TRAM_LOOP, WATER_Y } from "./layout";
+import { BOARD_CLEAR, GROUND_Y, RIVER, TAXI_LANES, TRAM_LOOP, WATER_Y, loopLength, loopPoint } from "./layout";
 
 export const KOLKATA_COLOURS = {
   skyTop: "#E79A5B",
@@ -27,9 +27,12 @@ export const KOLKATA_COLOURS = {
   skyline: "#C99A7B",
   skylineFar: "#D8B394",
   rail: "#9C8B6E",
+  wire: "#3B3835",
 } as const;
 
 const ROAD_HALF = 10.75;
+/** The tram's overhead wire, above the ground (the trolley pole reaches it). */
+const WIRE = 0.87;
 
 function groundGeometry() {
   const b = new Builder();
@@ -67,6 +70,40 @@ function groundGeometry() {
     flat(t.minX + t.radius, t.maxX - t.radius, t.maxZ + off - 0.03, t.maxZ + off + 0.03, 0.012, KOLKATA_COLOURS.rail);
     flat(t.minX + off - 0.03, t.minX + off + 0.03, t.minZ + t.radius, t.maxZ - t.radius, 0.012, KOLKATA_COLOURS.rail);
     flat(t.maxX + off - 0.03, t.maxX + off + 0.03, t.minZ + t.radius, t.maxZ - t.radius, 0.012, KOLKATA_COLOURS.rail);
+  }
+  // Round the corners the rails and the overhead wire follow the loop in short pieces.
+  const L = loopLength(t);
+  const straight = (p: { x: number; z: number }) => (p.x > t.minX + t.radius && p.x < t.maxX - t.radius) || (p.z > t.minZ + t.radius && p.z < t.maxZ - t.radius);
+  const at = (s: number, side: number, y: number): V3 => {
+    const p = loopPoint(t, s);
+    // Across the track: perpendicular to the heading (which faces (cos θ, −sin θ)).
+    return [p.x + Math.sin(p.heading) * side, y, p.z + Math.cos(p.heading) * side];
+  };
+  for (let s = 0; s < L; s += 0.25) {
+    if (straight(loopPoint(t, s + 0.125))) continue;
+    for (const side of [-0.18, 0.18]) b.beam(at(s, side, y + 0.006), at(Math.min(s + 0.25, L), side, y + 0.006), 0.04, KOLKATA_COLOURS.rail);
+    b.beam(at(s, 0, y + WIRE), at(Math.min(s + 0.25, L), 0, y + WIRE), 0.012, KOLKATA_COLOURS.wire);
+  }
+  // The overhead wire along the straights, on poles outside the track (none by the tram stop's shelter).
+  for (const [x0, z0, x1, z1] of [
+    [t.minX + t.radius, t.minZ, t.maxX - t.radius, t.minZ],
+    [t.minX + t.radius, t.maxZ, t.maxX - t.radius, t.maxZ],
+    [t.minX, t.minZ + t.radius, t.minX, t.maxZ - t.radius],
+    [t.maxX, t.minZ + t.radius, t.maxX, t.maxZ - t.radius],
+  ] as const) {
+    b.beam([x0, y + WIRE, z0], [x1, y + WIRE, z1], 0.012, KOLKATA_COLOURS.wire);
+    const length = Math.hypot(x1 - x0, z1 - z0);
+    const poles = Math.max(1, Math.round(length / 3));
+    for (let i = 0; i <= poles; i++) {
+      const x = x0 + ((x1 - x0) * i) / poles;
+      const z = z0 + ((z1 - z0) * i) / poles;
+      if (x0 === x1 && x0 === t.minX && z > 4 && z < 6.4) continue;
+      // Outward from the loop's middle.
+      const ox = x0 === x1 ? Math.sign(x0 - (t.minX + t.maxX) / 2) * 0.45 : 0;
+      const oz = z0 === z1 ? Math.sign(z0 - (t.minZ + t.maxZ) / 2) * 0.45 : 0;
+      b.cylinder(x + ox, z + oz, 0.022, 0.03, y, WIRE + 0.08, KOLKATA_COLOURS.wire, 6);
+      b.beam([x + ox, y + WIRE + 0.04, z + oz], [x, y + WIRE + 0.04, z], 0.02, KOLKATA_COLOURS.wire);
+    }
   }
   return b.build();
 }
