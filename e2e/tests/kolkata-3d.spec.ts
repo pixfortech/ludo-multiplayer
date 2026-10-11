@@ -12,9 +12,9 @@
 //  - switching views and graphics quality mid-turn, a refresh, a lost WebGL
 //    context and a change of city.
 // Set E2E_SHOTS_DIR to save a screenshot of every size and mode.
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Page, type WebSocketRoute } from "@playwright/test";
 import { boardCells, boardTokens, colourDistance, decodePng, expectBoard3d, hexRgb, pickToken3d, pixelAt } from "../support/board3d";
-import { createRoom, joinRoom, openPlayer, readBoard, seatTable, startGame, visible, type BoardView, type Device, type Player } from "../support/game";
+import { createRoom, joinRoom, openPlayer, plan, readBoard, seatTable, startGame, visible, type BoardView, type Device, type Player } from "../support/game";
 
 const LANDMARKS = ["howrah-bridge", "hooghly-river", "victoria-memorial", "writers-building", "shaheed-minar", "biswa-bangla-gate"] as const;
 const LIFE = ["yellow-taxi", "tram", "ferry", "pedestrians", "trees", "lamp-posts", "heritage-houses", "ghats", "book-stalls", "contemporary-towers", "howrah-station", "skyline"] as const;
@@ -413,4 +413,85 @@ test("switching views and graphics quality mid-turn, a refresh, a lost context a
   expect(chunks, "the Kolkata 3D chunk is not loaded for Delhi").toEqual([]);
   noErrors([dev, eve]);
   await close([dev, eve]);
+});
+
+test("gameplay in the living city: captures, bonus turns, home entry, token focus, camera reset and a reconnect, in sync on the stage and on a phone in 3D", async ({ browser }) => {
+  test.setTimeout(8 * 60_000);
+  const aman = await openPlayer(browser, "Aman", "wide", { board: "3d" });
+  const ben = await openPlayer(browser, "Ben", "phone", { board: "3d" });
+  let offline = false;
+  const routes = new Set<WebSocketRoute>();
+  await ben.page.routeWebSocket(/\/socket\.io\//, (ws) => {
+    if (offline) {
+      void ws.close({ code: 1006, reason: "network down" });
+      return;
+    }
+    ws.connectToServer();
+    routes.add(ws);
+  });
+  const code = await createRoom(aman, { players: 2, city: "Kolkata" });
+  await joinRoom(ben, code);
+  await startGame(aman, [aman, ben]);
+  const table = await seatTable(code, [aman, ben]);
+  const A = (id: number) => `${aman.id}:${id}`;
+  const B = (id: number) => `${ben.id}:${id}`;
+  for (const p of [aman, ben]) {
+    await expectBoard3d(p.page, "3d");
+    await expectKolkataBuilt(p.page);
+  }
+  expect((await environmentOf(aman.page)).staged).toBe(true);
+
+  // Bonus turns (sixes) and a double capture, as on the classic 3D board.
+  await table.act(6, () => 0); // Aman opens, rolls again
+  await table.act(1);
+  await table.act(6, () => 0); // Ben opens B0
+  await table.act(6, () => 1); // and B1
+  await table.act(2, () => 0);
+  await table.act(3);
+  await table.act(2, () => 1); // two of Ben's tokens on one cell
+  // Token focus while Aman's runner moves, then back to the overview (camera reset).
+  await visible(aman.page.getByRole("button", { name: "Follow token" })).click();
+  await expect(aman.page.getByTestId("game-board")).toHaveAttribute("data-camera", "follow");
+  await table.act(6, () => 0);
+  await table.act(6, () => 0);
+  await table.act(5);
+  await visible(aman.page.getByRole("button", { name: "Overview" })).click();
+  await expect(aman.page.getByTestId("game-board")).toHaveAttribute("data-camera", "overview");
+  await table.act(6, () => 2);
+  await table.act(6, () => 3);
+  await table.act(6); // a third six: forfeited
+  await table.act(6, () => 0);
+  let snap = await table.act(1); // captures both of Ben's tokens
+  expect(snap.history.filter((e) => e.type === "capture").length).toBe(2);
+  for (const p of [aman, ben]) for (const k of [B(0), B(1)]) expect((await readBoard(p.page))[`token-${k}`], `${p.name}: ${k} back in base`).toBe("base");
+
+  // Ben's network drops and returns: his board, city and all, snaps back to the server's state.
+  offline = true;
+  table.offline.add(ben);
+  for (const ws of routes) void ws.close({ code: 1006, reason: "network down" });
+  routes.clear();
+  await expect(visible(ben.page.getByText(/Reconnecting|Offline/))).toBeVisible();
+  snap = await table.act(snap.game!.currentPlayerId === aman.id ? 3 : 1, (legal) => Math.min(...legal.map((m) => m.tokenId)));
+  offline = false;
+  table.offline.delete(ben);
+  await expect(visible(ben.page.getByText("Reconnected: your seat is back"))).toBeVisible({ timeout: 45_000 });
+  snap = await table.expectInSync();
+  await expectBoard3d(ben.page, "3d");
+  await expectKolkataBuilt(ben.page);
+
+  // Home entry: the runner goes up its lane into the finish.
+  const runner = () => snap.game!.players.find((p) => p.id === aman.id)!.tokens[0]!.step!;
+  while (runner() !== 56) {
+    const g = snap.game!;
+    if (g.currentPlayerId === aman.id) {
+      const next = plan(g, [aman.id]);
+      snap = await table.act(next.value, next.token);
+    } else snap = await table.act(1, (legal) => Math.min(...legal.map((m) => m.tokenId)));
+  }
+  for (const p of [aman, ben]) await expect(p.page.getByTestId(`token-${A(0)}`)).toHaveAttribute("data-state", "finished");
+  await table.expectInSync();
+  // Throughout, the city sent nothing of its own: every gameplay request matches a roll or a move the players made.
+  expect(aman.sent.roll + ben.sent.roll, "rolls sent").toBe(table.rolls);
+  noErrors([aman, ben]);
+  await close([aman, ben]);
 });
