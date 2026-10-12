@@ -200,14 +200,22 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
   const controller = useRef<CharacterController | null>(null);
   const yaw = useRef<number | null>(null);
   const lastPose = useRef<CharacterPose | null>(null);
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
   const onCharacterReady = useCallback(
     (info: { team: string; clips: string[]; level: string }) => {
       // The token mirror reports it (data-character-ready): the person has replaced the pawn.
       if (group.current) Object.assign(group.current.userData, { characterReady: true, characterTeam: info.team, characterClips: info.clips, characterLevel: info.level });
-      onCharacterLoaded?.(token.key, info.level);
       invalidate();
+      // Loaded once its shaders are compiled (in parallel where the driver can): compiling is part of loading,
+      // not a cost of every frame, so the ambient governors measure after it.
+      const loaded = () => onCharacterLoaded?.(token.key, info.level);
+      const root = controller.current?.root;
+      if (!root) return loaded();
+      gl.compileAsync(root, camera, scene).then(loaded, loaded);
     },
-    [invalidate, onCharacterLoaded, token.key],
+    [invalidate, onCharacterLoaded, token.key, gl, camera, scene],
   );
 
   // A new placement: travel there if the playback says how, otherwise jump.
