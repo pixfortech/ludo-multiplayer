@@ -25,3 +25,7 @@ e2e/test-results/
 # Local GPU performance runs (npm run perf:gpu)
 perf-results/
 playwright-report/
+
+# Python bytecode (tools/characters)
+__pycache__/
+*.pyc
