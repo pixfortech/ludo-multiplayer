@@ -212,3 +212,32 @@ For comparison, the same board with no characters (C.2) used 67 draw calls, 50-5
 - Characters outside a close 3D view do not animate until they are back in view.
 
 Per-character budget (unchanged levels): Low about 8.0-9.1k triangles, Medium 15.8-17.9k, High 28.8-32.5k; 5 materials; one skeleton.
+
+### The 3D die and gameplay reactions (Batch C.3C.1, 2026-10-12)
+
+Same machine and method (software WebGL in headless Chromium: comparisons on one machine, not device frame rates). The C.3B build (2cd0dc6) and this one were measured back to back. `e2e/tests/presentation-performance.spec.ts` plays a roll, a six's departure, two walks, a capture and a home entry in a two-player Kolkata room at Low (16 characters' worth of files, 8 on the board); `e2e/tests/board3d-performance.spec.ts` as before.
+
+| Kolkata 2.5D Low, two players | C.3B | C.3C.1 |
+| --- | --- | --- |
+| Roll, click to value shown (test harness) | 2.2 s, 7 board frames | 3.2 s, 18 frames |
+| Roll, click to value shown (in the page) | – | 1.8 s (the server's reply 0.3 s, the throw 1.15 s, timers late by about one frame) |
+| Six: tap to the character settled on its start cell | 2.0 s, 8 frames | 2.8 s, 13 frames |
+| Walk 6 cells (roll, six's reaction, choice, walk) | 7.7 s, 27 frames | 10.8 s, 51 frames |
+| Walk 5 cells | 6.7 s, 26 frames | 7.7 s, 36 frames |
+| Capture (Ben's roll to the victim back in base) | 3.3 s, 11 frames | 4.4 s, 23 frames |
+| Home entry (roll to celebration done) | 6.5 s, 27 frames | 7.1 s, 35 frames |
+| Worst frame during these | 217-433 ms | 250-333 ms |
+| Main thread busy during these | 60-89% | 93-106% |
+| Idle 5 s afterwards: frames drawn, main thread | 2, 11.9% | 2, 12.3% |
+| Click or tap to request | 0.3-1.6 ms | 0.3-1.4 ms |
+| GPU geometries / textures / draw calls (settled) | 99 / 32 / 108 | 101 / 34 / 111 |
+| JS heap after GC, start → end | 15.1 → 17.2 MB | 15.2 → 17.5 MB |
+
+- **The die**: one mesh in one draw call (an atlas texture, no material groups) plus a contact-shadow disc: +2 geometries, +2 textures, +300 triangles at Low (2 bevel segments), +1,000 above (4). It draws frames only while it moves (the lift, the 1.15 s throw, a 0.5 s toss when the turn passes); at rest it costs nothing.
+- **Reactions** play at full rate for their cue's length (1.2-3.2 s), like walking; the characters' clock governs everything else as before.
+- **Where the time goes**: each extra frame costs what any frame of the Kolkata scene costs here (about 250 ms in software); on a real GPU these are a few milliseconds. The longer sequences are mostly by design: the throw is 1.15 s (the 2D tumble was 0.65 s), and a six's reaction holds the choice for 0.5 s. Under software rendering a walk also waits for each cell to be drawn.
+- **Unchanged**: the idle board (no render loop: 2 frames in 5 s), input latency, the worst frame, memory, the city's and characters' governors (no new governor), the auto-quality rule (no change during a choice).
+- **Found and fixed**: a busy page (seen in a recorded run) could fire the reveal and an auto-move's first hop in the same moment, because all of a plan's timers started together. Steps are now timed from when the previous one actually ran, so the value is always on show before anything moves.
+- The CPU-slowdown run (4×) plays every event to its end with the die showing each value before any token moves.
+
+No High or Ultra validation on a real GPU (see the GPU audit page).
