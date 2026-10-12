@@ -282,6 +282,10 @@ test("a capture plays in order and sends the victim to its own base; a home entr
   const captured = await table.act(2);
   expect(captured.history.filter((e) => e.type === "capture")).toHaveLength(1);
   await expect.poll(async () => (await characters(aman.page)).find((c) => c.key === A(0))!.step, { timeout: 20_000 }).toBe("base");
+  // The bonus cue is the last of the sequence (it can come a little after the victim is home on a busy page).
+  await expect
+    .poll(async () => (await since(aman.page, mark)).some((e) => e.type === "cue" && e.kind === "bonus" && e.player === ben.id), { message: "the bonus cue", timeout: 15_000 })
+    .toBe(true);
   const log = await since(aman.page, mark);
   const landed = indexOf(log, (e) => e.type === "die-land" && e.player === ben.id && e.value === "2", "Ben's 2");
   const arrive = indexOf(log, (e) => e.type === "token-move" && e.tokens === B(0) && e.to === "2", "Ben's move");
