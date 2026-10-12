@@ -376,6 +376,12 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
     }
     return { byKey, partners };
   }, [placements, characterCity]);
+  // Until every character has loaded at this level, the scene is busy for the ambient governors: loading
+  // (decoding, first upload) must not count as the frames this device can afford.
+  const [loadedCharacters, setLoadedCharacters] = useState<ReadonlySet<string>>(() => new Set());
+  const onCharacterLoaded = useCallback((key: string, level: string) => setLoadedCharacters((s) => (s.has(`${key}@${level}`) ? s : new Set(s).add(`${key}@${level}`))), []);
+  const charactersLoading = !reduced && [...cast.byKey.keys()].some((k) => !loadedCharacters.has(`${k}@${quality}`));
+  const sceneBusy = busy || charactersLoading;
   const items: Token3DInput[] = useMemo(
     () =>
       placements.map((p) => {
@@ -465,20 +471,20 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
         }}
       >
         <ContextWatch onFailure={fail} />
-        <CharacterClock quality={quality} busy={busy} active={cast.byKey.size > 0 && !reduced} />
+        <CharacterClock quality={quality} busy={sceneBusy} active={cast.byKey.size > 0 && !reduced} />
         <RedrawOnResize />
         <FrameWatch onReady={ready} onFrameStats={onFrameStats} host={root} />
         <CameraRig mode={mode === "2.5d" ? "aerial" : "immersive"} view={immersiveView} resetKey={resetKey} focus={focus} reduced={reduced} onViewChange={onImmersiveViewChange} viewport={staged ? viewport : null} obstacles={obstacles} />
         <Lights shadows={Boolean(q.shadows)} mapSize={q.shadowMap} />
         {env ? (
           <Suspense fallback={null}>
-            <env.Component quality={quality} reduced={reduced} busy={busy} onBuilt={onBuilt} onAmbient={onAmbient} />
+            <env.Component quality={quality} reduced={reduced} busy={sceneBusy} onBuilt={onBuilt} onAmbient={onAmbient} />
           </Suspense>
         ) : null}
         <BoardMesh3D model={model} material={material} currentSeat={currentSeat} youSeat={youSeat} detail={q.detail} shadows={Boolean(q.shadows)} textures={textures} />
         {preview ? <MovePreview3D preview={preview} detail={q.detail} /> : null}
         {items.map((t) => (
-          <Token3D key={t.key} token={t} kit={kit} textures={textures} shadows={Boolean(q.shadows)} reduced={reduced} register={register} {...(t.interactive ? { onActivate, onPreview } : {})} />
+          <Token3D key={t.key} token={t} kit={kit} textures={textures} shadows={Boolean(q.shadows)} reduced={reduced} register={register} onCharacterLoaded={onCharacterLoaded} {...(t.interactive ? { onActivate, onPreview } : {})} />
         ))}
         <TapCatcher candidates={candidates} onActivate={onActivate} />
         <Effects3D effects={effects} detail={q.detail} />

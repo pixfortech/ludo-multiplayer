@@ -157,6 +157,8 @@ export interface Token3DProps {
   register: (key: string, object: Group | null) => void;
   onActivate?: ((key: string) => void) | undefined;
   onPreview?: ((key: string | null) => void) | undefined;
+  /** A character has loaded (its key and level of detail). */
+  onCharacterLoaded?: ((key: string, level: string) => void) | undefined;
 }
 
 /** What a token's visual receives. A GLB character (Batch C.3) implements the same props. */
@@ -179,7 +181,7 @@ export function PawnBody({ identity, state, kit, textures, shadows }: TokenBodyP
   );
 }
 
-export const Token3D = memo(function Token3D({ token, kit, textures, shadows, reduced, register, onActivate, onPreview }: Token3DProps) {
+export const Token3D = memo(function Token3D({ token, kit, textures, shadows, reduced, register, onActivate, onPreview, onCharacterLoaded }: Token3DProps) {
   const group = useRef<Group>(null);
   const body = useRef<Group>(null);
   const ring = useRef<Group>(null);
@@ -199,9 +201,10 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
     (info: { team: string; clips: string[]; level: string }) => {
       // The token mirror reports it (data-character-ready): the person has replaced the pawn.
       if (group.current) Object.assign(group.current.userData, { characterReady: true, characterTeam: info.team, characterClips: info.clips, characterLevel: info.level });
+      onCharacterLoaded?.(token.key, info.level);
       invalidate();
     },
-    [invalidate],
+    [invalidate, onCharacterLoaded, token.key],
   );
 
   // A new placement: travel there if the playback says how, otherwise jump.
