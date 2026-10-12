@@ -10,7 +10,7 @@ building the game never needs Blender.
 | Source | What it gives | Licence |
 | --- | --- | --- |
 | [MakeHuman / MPFB2](https://github.com/makehumancommunity/mpfb2) `src/mpfb/data` | Base mesh with UVs, body and face targets (gender, age, muscle, weight, height, proportions, ancestry blends; nose, mouth, eyes, chin, head), expression units, the 53-bone `game_engine` rig with skin weights, skin detail masks (lips, eyelids, face) | Assets: **CC0 1.0** (MakeHuman's LICENSE.ASSETS). Output from MakeHuman assets carries no restriction. The MPFB2 *code* is GPL and is **not** used or copied: these scripts read the data files only. |
-| [CMU Graphics Lab Motion Capture Database](http://mocap.cs.cmu.edu/), BVH conversion by B. Hahne (cgspeed), mirrored at [una-dinosauria/cmu-mocap](https://github.com/una-dinosauria/cmu-mocap) | Motion capture: walk, run, conversation, drinking, stretching, exercise, waving, jumping, looking around | "Free for use in research and commercial projects worldwide"; no restrictions on the BVH conversion. Acknowledgement requested (see `THIRD_PARTY_NOTICES.md`). |
+| [CMU Graphics Lab Motion Capture Database](http://mocap.cs.cmu.edu/), BVH conversion by B. Hahne (cgspeed), mirrored at [una-dinosauria/cmu-mocap](https://github.com/una-dinosauria/cmu-mocap) | Motion capture: walk, run, conversation, drinking, stretching, exercise, waving, jumping, looking around, cheering, being upset | "Free for use in research and commercial projects worldwide"; no restrictions on the BVH conversion. Acknowledgement requested (see `THIRD_PARTY_NOTICES.md`). |
 | [gltfpack](https://github.com/zeux/meshoptimizer) (npm `gltfpack`, dev dependency) | Mesh simplification for the detail levels, quantisation, meshopt compression | MIT (a tool, nothing of it ships) |
 
 Everything else (clothes, hair, glasses, props, the skin texture, the retargeting,
@@ -26,7 +26,7 @@ git clone --depth 1 https://github.com/makehumancommunity/mpfb2 ../mpfb2
 git clone --depth 1 --filter=blob:none --no-checkout https://github.com/una-dinosauria/cmu-mocap ../cmu-mocap
 git -C ../cmu-mocap checkout HEAD -- data/002/02_03.bvh data/008/08_01.bvh data/013/13_26.bvh \
   data/014/14_06.bvh data/014/14_37.bvh data/018/18_08.bvh data/019/19_08.bvh data/042/42_01.bvh \
-  data/049/49_02.bvh data/077/77_05.bvh
+  data/049/49_02.bvh data/077/77_05.bvh data/079/79_69.bvh data/079/79_74.bvh
 
 # 2. Blender as a Python module (Linux, macOS and Windows wheels)
 python3.11 -m venv .bpy && .bpy/bin/pip install bpy==4.2.23     # Windows: .bpy\Scripts\pip

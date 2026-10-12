@@ -43,6 +43,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -69,21 +77,22 @@
       "levels": {
         "high": {
           "file": "adda.high.glb",
-          "bytes": 368308,
+          "bytes": 382452,
           "triangles": 30214
         },
         "medium": {
           "file": "adda.medium.glb",
-          "bytes": 295780,
+          "bytes": 310004,
           "triangles": 16614
         },
         "low": {
           "file": "adda.low.glb",
-          "bytes": 247588,
+          "bytes": 261836,
           "triangles": 8450
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -95,6 +104,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -142,6 +152,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -169,21 +187,22 @@
       "levels": {
         "high": {
           "file": "tea.high.glb",
-          "bytes": 384324,
+          "bytes": 398556,
           "triangles": 32526
         },
         "medium": {
           "file": "tea.medium.glb",
-          "bytes": 306980,
+          "bytes": 321116,
           "triangles": 17884
         },
         "low": {
           "file": "tea.low.glb",
-          "bytes": 254984,
+          "bytes": 269220,
           "triangles": 9102
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -195,6 +214,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -242,6 +262,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -269,21 +297,22 @@
       "levels": {
         "high": {
           "file": "newspaper.high.glb",
-          "bytes": 371768,
+          "bytes": 385996,
           "triangles": 30090
         },
         "medium": {
           "file": "newspaper.medium.glb",
-          "bytes": 300024,
+          "bytes": 314252,
           "triangles": 16548
         },
         "low": {
           "file": "newspaper.low.glb",
-          "bytes": 251040,
+          "bytes": 265268,
           "triangles": 8416
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -295,6 +324,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -342,6 +372,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -368,21 +406,22 @@
       "levels": {
         "high": {
           "file": "exercise.high.glb",
-          "bytes": 369100,
+          "bytes": 383136,
           "triangles": 30150
         },
         "medium": {
           "file": "exercise.medium.glb",
-          "bytes": 296156,
+          "bytes": 310332,
           "triangles": 16578
         },
         "low": {
           "file": "exercise.low.glb",
-          "bytes": 247680,
+          "bytes": 261832,
           "triangles": 8440
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -394,6 +433,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -441,6 +481,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -467,21 +515,22 @@
       "levels": {
         "high": {
           "file": "dida.high.glb",
-          "bytes": 379760,
+          "bytes": 393908,
           "triangles": 31918
         },
         "medium": {
           "file": "dida.medium.glb",
-          "bytes": 303644,
+          "bytes": 317744,
           "triangles": 17553
         },
         "low": {
           "file": "dida.low.glb",
-          "bytes": 252120,
+          "bytes": 266088,
           "triangles": 8934
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -493,6 +542,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -540,6 +590,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -567,21 +625,22 @@
       "levels": {
         "high": {
           "file": "rickshaw.high.glb",
-          "bytes": 371848,
+          "bytes": 386152,
           "triangles": 30318
         },
         "medium": {
           "file": "rickshaw.medium.glb",
-          "bytes": 299684,
+          "bytes": 313880,
           "triangles": 16670
         },
         "low": {
           "file": "rickshaw.low.glb",
-          "bytes": 251232,
+          "bytes": 265476,
           "triangles": 8483
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -593,6 +652,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -640,6 +700,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -667,21 +735,22 @@
       "levels": {
         "high": {
           "file": "student.high.glb",
-          "bytes": 369600,
+          "bytes": 383908,
           "triangles": 29938
         },
         "medium": {
           "file": "student.medium.glb",
-          "bytes": 298596,
+          "bytes": 312764,
           "triangles": 16464
         },
         "low": {
           "file": "student.low.glb",
-          "bytes": 250144,
+          "bytes": 264268,
           "triangles": 8379
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -693,6 +762,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -740,6 +810,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -766,21 +844,22 @@
       "levels": {
         "high": {
           "file": "footballer.high.glb",
-          "bytes": 368504,
+          "bytes": 382800,
           "triangles": 29258
         },
         "medium": {
           "file": "footballer.medium.glb",
-          "bytes": 296548,
+          "bytes": 310608,
           "triangles": 16088
         },
         "low": {
           "file": "footballer.low.glb",
-          "bytes": 248656,
+          "bytes": 262816,
           "triangles": 8186
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -792,6 +871,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -839,6 +919,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -865,21 +953,22 @@
       "levels": {
         "high": {
           "file": "kaku.high.glb",
-          "bytes": 361948,
+          "bytes": 376176,
           "triangles": 28756
         },
         "medium": {
           "file": "kaku.medium.glb",
-          "bytes": 292440,
+          "bytes": 306676,
           "triangles": 15813
         },
         "low": {
           "file": "kaku.low.glb",
-          "bytes": 245200,
+          "bytes": 259444,
           "triangles": 8046
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -891,6 +980,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -938,6 +1028,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -965,21 +1063,22 @@
       "levels": {
         "high": {
           "file": "didi.high.glb",
-          "bytes": 384260,
+          "bytes": 398380,
           "triangles": 32518
         },
         "medium": {
           "file": "didi.medium.glb",
-          "bytes": 307400,
+          "bytes": 321524,
           "triangles": 17880
         },
         "low": {
           "file": "didi.low.glb",
-          "bytes": 255376,
-          "triangles": 9100
+          "bytes": 269472,
+          "triangles": 9099
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -991,6 +1090,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -1038,6 +1138,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -1065,21 +1173,22 @@
       "levels": {
         "high": {
           "file": "professor.high.glb",
-          "bytes": 379876,
+          "bytes": 393960,
           "triangles": 31768
         },
         "medium": {
           "file": "professor.medium.glb",
-          "bytes": 304600,
+          "bytes": 318780,
           "triangles": 17469
         },
         "low": {
           "file": "professor.low.glb",
-          "bytes": 252276,
-          "triangles": 8891
+          "bytes": 266640,
+          "triangles": 8890
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -1091,6 +1200,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -1138,6 +1248,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -1164,21 +1282,22 @@
       "levels": {
         "high": {
           "file": "yoga.high.glb",
-          "bytes": 368204,
+          "bytes": 382616,
           "triangles": 29978
         },
         "medium": {
           "file": "yoga.medium.glb",
-          "bytes": 295264,
+          "bytes": 309388,
           "triangles": 16483
         },
         "low": {
           "file": "yoga.low.glb",
-          "bytes": 247012,
+          "bytes": 261232,
           "triangles": 8391
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -1190,6 +1309,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -1237,6 +1357,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -1263,21 +1391,22 @@
       "levels": {
         "high": {
           "file": "kobi.high.glb",
-          "bytes": 373196,
+          "bytes": 387360,
           "triangles": 29866
         },
         "medium": {
           "file": "kobi.medium.glb",
-          "bytes": 302784,
+          "bytes": 316908,
           "triangles": 16422
         },
         "low": {
           "file": "kobi.low.glb",
-          "bytes": 253476,
+          "bytes": 267708,
           "triangles": 8360
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -1289,6 +1418,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -1336,6 +1466,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -1363,21 +1501,22 @@
       "levels": {
         "high": {
           "file": "boudi.high.glb",
-          "bytes": 384340,
+          "bytes": 398652,
           "triangles": 32510
         },
         "medium": {
           "file": "boudi.medium.glb",
-          "bytes": 306448,
+          "bytes": 320708,
           "triangles": 17875
         },
         "low": {
           "file": "boudi.low.glb",
-          "bytes": 254672,
-          "triangles": 9099
+          "bytes": 268836,
+          "triangles": 9098
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -1389,6 +1528,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -1436,6 +1576,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -1463,21 +1611,22 @@
       "levels": {
         "high": {
           "file": "dokandar.high.glb",
-          "bytes": 371268,
+          "bytes": 385548,
           "triangles": 30624
         },
         "medium": {
           "file": "dokandar.medium.glb",
-          "bytes": 298208,
+          "bytes": 312432,
           "triangles": 16840
         },
         "low": {
           "file": "dokandar.low.glb",
-          "bytes": 249292,
+          "bytes": 263596,
           "triangles": 8574
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -1489,6 +1638,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]
@@ -1536,6 +1686,14 @@
           "frames": 83,
           "loop": false
         },
+        "cheer": {
+          "frames": 40,
+          "loop": false
+        },
+        "upset": {
+          "frames": 35,
+          "loop": false
+        },
         "walk": {
           "frames": 33,
           "loop": true,
@@ -1562,21 +1720,22 @@
       "levels": {
         "high": {
           "file": "kishore.high.glb",
-          "bytes": 368076,
+          "bytes": 382032,
           "triangles": 29074
         },
         "medium": {
           "file": "kishore.medium.glb",
-          "bytes": 296220,
+          "bytes": 310360,
           "triangles": 15985
         },
         "low": {
           "file": "kishore.low.glb",
-          "bytes": 248684,
+          "bytes": 262888,
           "triangles": 8137
         }
       },
       "animations": [
+        "cheer",
         "dismay",
         "drink",
         "excited",
@@ -1588,6 +1747,7 @@
         "run",
         "stretch",
         "talk",
+        "upset",
         "walk",
         "wave"
       ]

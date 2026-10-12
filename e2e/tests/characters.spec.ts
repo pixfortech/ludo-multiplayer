@@ -17,7 +17,7 @@ import { boardCells, boardTokens, expectBoard3d, pickToken3d } from "../support/
 import { createRoom, joinRoom, openPlayer, seatTable, startGame, visible, type BoardView, type Device, type Player } from "../support/game";
 import { readTimeline, startTimeline } from "../support/timeline";
 
-const CLIPS = ["dismay", "drink", "excited", "exercise", "idle", "listen", "look_around", "read", "run", "stretch", "talk", "walk", "wave"];
+const CLIPS = ["cheer", "dismay", "drink", "excited", "exercise", "idle", "listen", "look_around", "read", "run", "stretch", "talk", "upset", "walk", "wave"];
 
 const noErrors = (players: Player[]) => {
   for (const p of players) expect(p.errors, `${p.name}: no page errors`).toEqual([]);

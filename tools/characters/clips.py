@@ -11,6 +11,10 @@
 #   look_around  turning to look (the turn alert)            77_05 (look around)
 #   wave         a big wave                                  13_26 (direct traffic, wave)
 #   excited      jumping up and down (a six; reaching home)  49_02 (jump up and down)
+#   cheer        both arms raised, a big "yes!" (a capture,  79_69 (very happy)
+#                a teammate home, a win)
+#   upset        arms out, then hands up to the head         79_74 (upset)
+#                (three sixes, no move)
 #   walk         one walking cycle, in place                 08_01 (walk)
 #   run          one jogging cycle, in place (long moves)    02_03 (run/jog)
 #   read         holding a newspaper open, head bowed        idle + IK hands + head aim
@@ -37,6 +41,8 @@ CLIPS = [
     ("look_around", "077/77_05.bvh", 30, 330, "all", False),
     ("wave", "013/13_26.bvh", 430, 640, "all", False),
     ("excited", "049/49_02.bvh", 150, 480, "all", False),
+    ("cheer", "079/79_69.bvh", 350, 510, "all", False),
+    ("upset", "079/79_74.bvh", 400, 540, "all", False),
 ]
 
 
