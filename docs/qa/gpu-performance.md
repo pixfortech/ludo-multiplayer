@@ -27,7 +27,8 @@ For each view it records:
 - the city's ambient state once settled;
 - draw calls, triangles, GPU geometries and textures;
 - the JS heap;
-- the latency from a tap on a token to the move request leaving the page.
+- the latency from a tap on a token to the move request leaving the page;
+- in Kolkata, the time until the four characters (C.3A) have loaded, and the main-thread time their animation takes per frame.
 
 ## Running it on Windows
 

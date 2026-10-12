@@ -147,3 +147,38 @@ Budgets for the environment (per quality):
 | Stage pixel ratio cap | 1.0 | 1.25 | 1.5 |
 | Tree sway | off | on | on |
 | Scenery draw calls | ≈ 25 (one per landmark or district, one per instanced kind) | same | same |
+
+### Human characters (Batch C.3A, 2026-10-12)
+
+Same machine and method as C.2 (headless Chromium, software WebGL through SwiftShader, laptop viewport 1366 × 768, a live two-player game, `e2e/tests/board3d-performance.spec.ts`). "Without" is the same build with the characters switched off, measured the same day; "with" is two runs. These compare builds on one machine. They are not device frame rates, and no GPU has been measured (see [GPU audit](../qa/gpu-performance.md)).
+
+| Kolkata | 2.5D Low without | 2.5D Low with | 2.5D Medium without | 2.5D Medium with | 3D Medium without | 3D Medium with |
+| --- | --- | --- | --- | --- | --- | --- |
+| First drawn board after a reload | 1,467 ms | 1,460–1,539 ms | 3,332 ms | 1,895–2,102 ms | 1,960 ms | 1,555–1,626 ms |
+| All four characters loaded after a reload | — | 5.8–6.0 s | — | 8.3–8.4 s | — | 6.8–8.4 s |
+| Main thread busy once settled | 4.3% | 13–14% | 4.7% | 4–20% | 4.1% | 5–17% |
+| Frames drawn while idle (the city rests here) | 0 | 0–0.3 a second | 0 | 0–0.3 | 0 | 0–0.3 |
+| Worst frame during a move | 367 ms | 317–383 ms | 517 ms | 650 ms | 450 ms | 517–600 ms |
+| Tap to move request leaving the page | 1.8 ms | 1.8–3.2 ms | 1.1 ms | 1.2–3.7 ms | 1.9 ms | 1.3–1.9 ms |
+| GPU geometries / textures | 51 / 8 | 107 / 20 | 50 / 8 | 107 / 20 | 50 / 8 | 107 / 20 |
+| Draw calls / triangles per frame | 67 / 47k | 122 / 79k | 67 / 62k | 119 / 127k | 67 / 61k | 119–122 / 126k |
+| JS heap | 20.4 MB | 16.5–16.8 MB | 12.3 MB | 15.5–15.9 MB | 13.7 MB | 14.9–19.4 MB |
+
+- **Frames during a move are not comparable** between the two columns: a pawn's hop is over in a fraction of the 1.5 s window (the rest are cheap idle frames, 24–28 counted), while a character walks for the whole window (4–7 counted). Drawn frame for drawn frame, the same move with the characters hidden drew 12 frames and with them visible 10: the characters add about 20% to a frame here.
+- **Animating the four characters** (their mixers, skinning poses on the CPU): 0.24–0.31 ms a frame. Skinning itself runs on the GPU.
+- **Downloads**: only the current level of detail is fetched, once per character: 1.0 MB for four at Low, 1.2 MB at Medium, 1.5 MB at High (meshopt-compressed GLB with WebP textures), after the board is drawn.
+- **Found and fixed while measuring** (2.5D Low, before → after):
+  - one skeleton per character instead of one per material (11–16 each): bone textures uploaded each frame 55 → 4, GPU textures 65 → 16;
+  - the characters' slow pulse where the city rests is capped at a tenth of the device's time (it was 2 frames a second whatever a frame cost): main thread once settled 70–190% → 10–24%;
+  - the city's and the characters' governors wait for the characters to load before measuring, so loading never makes a device look slower than it is.
+- On this software renderer the city rests, so the characters are a still picture with a pulse every few seconds; on a GPU that affords the city, they animate at 8, 12 or 20 frames a second (Low, Medium, High) between moves and at the display rate while they move.
+
+Budgets for the characters (per character; 16 characters is the C.3B plan):
+
+| | Low | Medium | High |
+| --- | --- | --- | --- |
+| Triangles | ≈ 8.4k | ≈ 17k | ≈ 30k |
+| File | 246–261 KB | 292–313 KB | 364–391 KB |
+| Draw calls (one per material) | 11–16 | same | same |
+| Skeletons / bone textures | 1 | 1 | 1 |
+| Idle animation rate | 8 a second | 12 | 20 |

@@ -154,7 +154,7 @@ four 3D jobs, four rigging jobs) and a credit cap go through
   written only when they change), and everything owned is disposed on unmount.
 - Built for 16 characters (four seats): level Low is 8.4k triangles each.
 
-Measurements: [`docs/qa/gpu-performance.md`](../qa/gpu-performance.md).
+Measurements: [performance budgets § Human characters](performance-budgets.md#human-characters-batch-c3a-2026-10-12); on a real GPU: [`docs/qa/gpu-performance.md`](../qa/gpu-performance.md).
 
 ## 10. Limitations
 
