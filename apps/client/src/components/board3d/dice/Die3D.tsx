@@ -18,12 +18,12 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { CanvasTexture, CircleGeometry, MeshBasicMaterial, MeshStandardMaterial, Quaternion, SRGBColorSpace, Vector3, type Group, type Mesh } from "three";
-import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { DIE, INK } from "@ludo/design-tokens";
 import type { DieThrow } from "../../game/playbackPlan";
 import { PIPS } from "../../game/Die";
 import { TOKEN_FLOOR } from "../BoardMesh3D";
 import type { StageViewport } from "../CameraRig";
+import { dieGeometry } from "./dieGeometry";
 import { BOX_FACE_VALUES, dieSize, faceUp, handSpot, planThrow, restSpot, sampleThrow, valueUp, type Throw } from "./dieMath";
 
 export interface Die3DState {
@@ -87,24 +87,6 @@ function dieAtlas(cell: number): CanvasTexture {
   tex.colorSpace = SRGBColorSpace;
   tex.anisotropy = 4;
   return tex;
-}
-
-/** A unit rounded cube whose faces map into the atlas; one draw call (no material groups). */
-function dieGeometry(segments: number): RoundedBoxGeometry {
-  const geo = new RoundedBoxGeometry(1, 1, 1, segments, 0.15);
-  const total = segments * 2 + 1;
-  const perFace = (total + 1) * (total + 1);
-  const uv = geo.attributes.uv!;
-  for (let face = 0; face < 6; face++) {
-    const col = face % 3;
-    const row = Math.floor(face / 3);
-    for (let i = face * perFace; i < (face + 1) * perFace; i++) {
-      uv.setXY(i, (col + uv.getX(i)) / 3, 1 - (row + 1) / 2 + uv.getY(i) / 2);
-    }
-  }
-  uv.needsUpdate = true;
-  geo.clearGroups();
-  return geo;
 }
 
 function shadowTexture(): CanvasTexture {

@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { Quaternion, Vector3 } from "three";
 import { baseSlotToWorld, tokenPositionToWorld } from "@ludo/board-layouts";
+import { dieGeometry } from "../dice/dieGeometry";
 import { BOX_FACE_VALUES, FACE_NORMALS, UP, bounceHeight, dieSize, faceUp, handSpot, planThrow, restSpot, sampleThrow, valueUp, variation } from "../dice/dieMath";
 
 const randomQuaternion = (rnd: () => number) => {
@@ -33,6 +34,34 @@ describe("the die's faces", () => {
       }
     }
     expect(() => faceUp(7)).toThrow();
+  });
+});
+
+describe("the die's mesh", () => {
+  it("maps each face onto exactly one atlas cell, and that cell is the one painted with the face's value", () => {
+    for (const segments of [2, 4]) {
+      const geo = dieGeometry(segments);
+      const uv = geo.attributes.uv!;
+      const normal = geo.attributes.normal!;
+      const perFace = uv.count / 6;
+      expect(Number.isInteger(perFace)).toBe(true);
+      for (let face = 0; face < 6; face++) {
+        const [u0, v0] = [(face % 3) / 3, 1 - (Math.floor(face / 3) + 1) / 2];
+        // The direction this face points: the average of its normals.
+        const dir = new Vector3();
+        for (let i = face * perFace; i < (face + 1) * perFace; i++) {
+          expect(uv.getX(i), `segments ${segments}, face ${face}: u inside its cell`).toBeGreaterThanOrEqual(u0 - 1e-6);
+          expect(uv.getX(i)).toBeLessThanOrEqual(u0 + 1 / 3 + 1e-6);
+          expect(uv.getY(i), `segments ${segments}, face ${face}: v inside its cell`).toBeGreaterThanOrEqual(v0 - 1e-6);
+          expect(uv.getY(i)).toBeLessThanOrEqual(v0 + 1 / 2 + 1e-6);
+          dir.add(new Vector3(normal.getX(i), normal.getY(i), normal.getZ(i)));
+        }
+        // Cell `face` is painted with BOX_FACE_VALUES[face]: it must sit on that value's face.
+        const value = BOX_FACE_VALUES[face]!;
+        expect(dir.normalize().dot(FACE_NORMALS[value]!), `segments ${segments}: cell ${face} on the ${value} face`).toBeGreaterThan(0.99);
+      }
+      geo.dispose();
+    }
   });
 });
 
