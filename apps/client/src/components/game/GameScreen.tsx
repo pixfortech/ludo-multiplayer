@@ -43,6 +43,8 @@ import { PlayerToken } from "./PlayerToken";
 import { TurnIndicator, type TurnInfo } from "./TurnIndicator";
 import { useBoardPlayback } from "./useBoardPlayback";
 import { VictoryScreen } from "./VictoryScreen";
+import { PresentationLog } from "./PresentationLog";
+import { CUE_MS, emitPresentationEvent } from "./presentation";
 
 interface GameScreenProps {
   state: ConnectionState & { room: RoomView; game: GameStateView };
@@ -117,7 +119,9 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   // seat's moves are paced for walking (presentation only).
   const characterCity = boardMode !== "2d" ? theme.id : null;
   const walkingSeats = useMemo(() => characterSeats(characterCity), [characterCity]);
-  const playback = useBoardPlayback(game, reduced, state.room.status === "paused", { characterSeats: walkingSeats });
+  // The 3D views throw a 3D die on the board (its throw takes a little longer than the tray's tumble).
+  const die3d = boardMode !== "2d";
+  const playback = useBoardPlayback(game, reduced, state.room.status === "paused", { characterSeats: walkingSeats, die3d });
   const shown = playback.game ?? game;
   const [autoLevel, setAutoLevel] = useState<QualityLevel>(() => autoQuality(deviceClass()));
   const quality: QualityLevel = viewPref.quality ?? autoLevel;
@@ -366,9 +370,16 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   const [celebrated, setCelebrated] = useState(false);
   useEffect(() => {
     if (!over || victory !== "hidden") return;
-    const timer = setTimeout(() => setVictory("open"), celebrateKey ? 700 : 0);
+    // After a live finish the people celebrate first (the win's reaction), then the results open.
+    const timer = setTimeout(
+      () => {
+        setVictory("open");
+        if (celebrateKey) emitPresentationEvent({ type: "victory-screen", playerId: shown.winnerId });
+      },
+      celebrateKey ? (walkingSeats.size > 0 && !reduced ? CUE_MS.win : 700) : 0,
+    );
     return () => clearTimeout(timer);
-  }, [over, victory, celebrateKey]);
+  }, [over, victory, celebrateKey, walkingSeats, reduced, shown.winnerId]);
   const closeVictory = useCallback(() => {
     setVictory("closed");
     setCelebrated(true);
@@ -399,12 +410,15 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
     </div>
   ) : null;
 
+  const shownSeat = over ? null : (shown.players.find((p) => p.id === shown.currentPlayerId)?.seat ?? null);
+  const die3dState = die3d ? { value: playback.die.value, seat: shownSeat, pending: dieRolling, throw: playback.die.throw } : null;
+
   const victoryScreen =
     over && victory === "open" ? (
       <VictoryScreen game={shown} me={me} nameOf={nameOf} identityOf={identityOf} celebrate={celebrateKey > 0 && !celebrated} reduced={reduced} onViewBoard={closeVictory} />
     ) : null;
 
-  const dice = <DicePanel die={playback.die} identity={trayIdentity} canRoll={canRoll} rolling={dieRolling} waitingLabel={waitingLabel} onRoll={() => void roll()} reduced={reduced} active={myTurn} />;
+  const dice = <DicePanel die={playback.die} identity={trayIdentity} canRoll={canRoll} rolling={dieRolling} waitingLabel={waitingLabel} onRoll={() => void roll()} reduced={reduced} active={myTurn} flat={die3d} />;
 
   const quiet = !choosing && !playback.busy;
   useEffect(() => {
@@ -497,6 +511,8 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
         stageHost={stage ? stageHost : null}
         stage={stage}
         busy={playback.busy}
+        die={die3dState}
+        cues={playback.cues}
         mode={boardMode}
         quality={quality}
         reduced={reduced}
@@ -599,11 +615,12 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
             <div className="min-w-0 flex-1">
               <TurnIndicator turn={turn} compact />
             </div>
-            <DicePanel die={playback.die} identity={trayIdentity} canRoll={canRoll} rolling={dieRolling} waitingLabel={waitingLabel} onRoll={() => void roll()} layout="thumb" reduced={reduced} active={myTurn} />
+            <DicePanel die={playback.die} identity={trayIdentity} canRoll={canRoll} rolling={dieRolling} waitingLabel={waitingLabel} onRoll={() => void roll()} layout="thumb" reduced={reduced} active={myTurn} flat={die3d} />
           </div>
         )}
       </MobileActionBar>
       {victoryScreen}
+      <PresentationLog />
     </div>
   );
 }

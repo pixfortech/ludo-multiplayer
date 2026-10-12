@@ -27,6 +27,7 @@ import type { TextureCache } from "./textures";
 import type { QualityLevel } from "./capabilities";
 import { decide, groundSpeed, turnToward, walkPosition, yawToward, type CharacterPose, type IdleBehaviour } from "./characters/brain";
 import type { CharacterController } from "./characters/CharacterBody";
+import type { ChosenReaction } from "./characters/reactions";
 
 // The character code (glTF loader, meshopt decoder, skeleton cloning) is its own chunk: only cities with characters fetch it.
 const CharacterBody = lazy(() => import("./characters/CharacterBody").then((m) => ({ default: m.CharacterBody })));
@@ -45,6 +46,8 @@ export interface TokenCharacter {
   phase: number;
   /** Its file may load now (teams load one after another); until then it stands as a pawn. */
   load: boolean;
+  /** A reaction to a game event (from the playback's cues), or null. */
+  reaction: ChosenReaction | null;
 }
 
 /** A character's plinth (world units). */
@@ -177,6 +180,9 @@ export class Breathing {
 const SLOW_FRAME_S = 0.1;
 const PAUSE_MS = 4000;
 
+/** Character states that play at the display's rate (moves and short reactions). */
+const FULL_RATE = new Set(["turnAlert", "excited", "celebrating", "captured", "returningToBase", "leavingBase", "reachingHome", "walking", "cheering", "upset", "noticing"]);
+
 const viewFrustum = new Frustum();
 const viewMatrix = new Matrix4();
 const viewSphere = new Sphere(new Vector3(), 0.7);
@@ -293,6 +299,13 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
     return () => register(token.key, null);
   }, [register, token.key]);
 
+  // When the player picked this character (it waves back once).
+  const selectedSince = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    selectedSince.current = token.state === "selected" ? performance.now() : null;
+    if (token.state === "selected") invalidate();
+  }, [token.state, invalidate]);
+
   const lifted = token.state === "selected" ? 0.08 : 0;
   const pulse = token.state === "movable" && !reduced;
   const breathe = useRef(new Breathing()).current;
@@ -329,14 +342,19 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
         s = { ...s, lift: 0, scale: 1, squash: 1, tilt: 0 };
       }
       const entry = CHARACTERS[character.key];
+      const now = performance.now();
+      const r = character.reaction;
+      const reaction = r && now - r.at < r.ms ? { kind: r.kind, age: (now - r.at) / 1000 } : null;
       const pose = decide(
         {
           behaviour: character.behaviour,
           where: token.step === null ? "base" : token.step === 56 ? "home" : "board",
           token: token.state === "finished" ? "finished" : token.state === "movable" ? "movable" : token.state === "selected" ? "selected" : token.state === "unmovable" ? "unmovable" : "idle",
           travel: live ? { kind: live.kind, progress, groundSpeed: groundSpeed(live.kind, live.from, live.to, live.ms) } : null,
-          turnAge: character.turnStartedAt === null ? null : (performance.now() - character.turnStartedAt) / 1000,
-          time: performance.now() / 1000 + character.phase,
+          turnAge: character.turnStartedAt === null ? null : (now - character.turnStartedAt) / 1000,
+          time: now / 1000 + character.phase,
+          reaction,
+          selectedAge: selectedSince.current === null ? null : (now - selectedSince.current) / 1000,
         },
         { walkSpeed: entry?.clips.walk?.speed ?? 1.6, runSpeed: entry?.clips.run?.speed ?? 3, scale: characterScale(character.key) },
       );
@@ -350,10 +368,11 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
       controller.current.root.rotation.y = yaw.current;
       // Off screen (a close 3D view), its pose waits: the animation resumes where it was when it comes back into view.
       if (inView(state.camera, s.x, y, s.z)) controller.current.update(pose, delta);
-      // Moves and one-off reactions play at full rate even when the city's ambient life is resting. Turning to a
-      // partner in the base routine does not: it follows the characters' own (possibly slow) clock, so four bases
-      // changing scene never hold a slow device at full rate.
-      if (["turnAlert", "excited", "celebrating", "captured", "returningToBase", "leavingBase", "reachingHome", "walking"].includes(pose.state)) invalidate();
+      // Moves and one-off reactions play at full rate even when the city's ambient life is resting (each is
+      // short: a reaction lasts its cue's time, the wave on selection about a second). Turning to a partner in
+      // the base routine does not: it follows the characters' own (possibly slow) clock, so four bases changing
+      // scene never hold a slow device at full rate.
+      if (FULL_RATE.has(pose.state) || (pose.state === "selected" && pose.clip === "wave")) invalidate();
       lastPose.current = pose;
       // For the token mirror (tests and tooling): what the character is doing.
       g.userData.characterState = pose.state;

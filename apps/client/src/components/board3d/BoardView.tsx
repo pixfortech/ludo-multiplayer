@@ -10,8 +10,11 @@ import { ClassicBoard, type ClassicBoardProps } from "../board/ClassicBoard";
 import { CityPlinth } from "../city/CityFrame";
 import type { ImmersiveView } from "./CameraRig";
 import type { BoardViewMode, QualityLevel } from "./capabilities";
+import type { Die3DState } from "./dice/Die3D";
+import type { PresentationCue } from "../game/presentation";
 
 const Board3D = lazy(() => import("./Board3D"));
+const NO_CUES: readonly PresentationCue[] = [];
 
 class RendererBoundary extends Component<{ fallback: ReactNode; onError: (reason: string) => void; children: ReactNode }, { failed: boolean }> {
   override state = { failed: false };
@@ -48,9 +51,13 @@ export interface BoardViewProps {
   characterCity?: CityThemeId | null;
   /** Tokens are moving (the city's ambient life eases off). */
   busy: boolean;
+  /** The 3D die (the 3D views show it on the board; the 2D board keeps the die in its tray). */
+  die?: Die3DState | null;
+  /** Moments the characters react to (from the playback). */
+  cues?: readonly PresentationCue[];
 }
 
-export function BoardView({ board, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy, characterCity = null }: BoardViewProps) {
+export function BoardView({ board, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy, characterCity = null, die = null, cues = NO_CUES }: BoardViewProps) {
   const flat = (
     <CityPlinth material={material}>
       <ClassicBoard {...board} material={material} />
@@ -77,6 +84,8 @@ export function BoardView({ board, mode, quality, reduced, material, immersiveVi
           stageHost={stageHost}
           stage={stage}
           busy={busy}
+          die={die}
+          cues={cues}
         />
       </Suspense>
     </RendererBoundary>

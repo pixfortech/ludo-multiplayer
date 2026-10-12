@@ -5,7 +5,7 @@
 // listener.
 import { describe, expect, it } from "vitest";
 import { tokenPositionToWorld } from "@ludo/board-layouts";
-import { CAPTURE_DISMAY, HOME_ARRIVE, OPEN_EXCITED, RUN_ABOVE, decide, groundSpeed, sceneAt, turnToward, waiting, walkPosition, yawToward, type CharacterInputs, type Gait } from "../brain";
+import { CAPTURE_DISMAY, HOME_ARRIVE, OPEN_EXCITED, RUN_ABOVE, SELECT_WAVE_SECONDS, decide, groundSpeed, sceneAt, turnToward, waiting, walkPosition, yawToward, type CharacterInputs, type Gait } from "../brain";
 import { CHARACTERS, CHARACTER_HEIGHT, CHARACTER_TEAMS, characterFor, characterScale, characterSeats, loadableSeats, loadOrder, routinePhase } from "../catalog";
 
 const gait: Gait = { walkSpeed: 1.6, runSpeed: 3.0, scale: 0.55 };
@@ -34,7 +34,7 @@ describe("character identities", () => {
   });
 
   it("gives each character its number, its own way of waiting, every clip it needs, and three levels of detail", () => {
-    const needed = ["idle", "talk", "listen", "drink", "stretch", "exercise", "look_around", "wave", "excited", "walk", "run", "read", "dismay"];
+    const needed = ["idle", "talk", "listen", "drink", "stretch", "exercise", "look_around", "wave", "excited", "walk", "run", "read", "dismay", "cheer", "upset"];
     const numbers = new Set<number>();
     const heights: number[] = [];
     for (const key of Object.values(CHARACTER_TEAMS.kolkata!).flatMap((t) => t ?? [])) {
@@ -182,5 +182,28 @@ describe("walking along the board", () => {
     expect(turnToward(3, -3, 0.1)).toBeCloseTo(3.1); // through pi, not the long way
     expect(turnToward(0, 1, 0.25)).toBeCloseTo(0.25);
     expect(turnToward(0, 0.1, 0.25)).toBeCloseTo(0.1);
+  });
+});
+
+describe("reactions to game events", () => {
+  it("plays each reaction's clip as a one-off, facing the board, and waves back once when picked", () => {
+    const expected = { jump: ["cheering", "excited"], cheer: ["cheering", "cheer"], wave: ["cheering", "wave"], look: ["noticing", "look_around"], upset: ["upset", "upset"] } as const;
+    for (const [kind, [state, clip]] of Object.entries(expected)) {
+      expect(decide({ ...base, reaction: { kind: kind as keyof typeof expected, age: 0.2 } }, gait)).toMatchObject({ state, clip, loop: false, face: "centre" });
+    }
+    expect(decide({ ...base, token: "selected", selectedAge: 0.3 }, gait)).toMatchObject({ state: "selected", clip: "wave" });
+    expect(decide({ ...base, token: "selected", selectedAge: SELECT_WAVE_SECONDS + 0.1 }, gait)).toMatchObject({ state: "selected", clip: "idle" });
+  });
+
+  it("never lets a reaction interrupt a move: walking, leaving the base and being caught come first", () => {
+    const walking = decide({ ...base, where: "board", travel: { kind: "hop", progress: 0.5, groundSpeed: 1.4 }, reaction: { kind: "cheer", age: 0.1 } }, gait);
+    expect(walking.state).toBe("walking");
+    const caught = decide({ ...base, where: "board", travel: { kind: "capture", progress: 0.2, groundSpeed: 0 }, reaction: { kind: "cheer", age: 0.1 } }, gait);
+    expect(caught.state).toBe("captured");
+  });
+
+  it("celebrates at home when the player finishes or wins (the reaction comes before standing finished)", () => {
+    expect(decide({ ...base, where: "home", token: "finished", reaction: { kind: "jump", age: 0.5 } }, gait)).toMatchObject({ state: "cheering", clip: "excited" });
+    expect(decide({ ...base, where: "home", token: "finished" }, gait)).toMatchObject({ state: "finished" });
   });
 });

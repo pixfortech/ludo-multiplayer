@@ -12,7 +12,7 @@
 import { useEffect, useId, useLayoutEffect, useRef } from "react";
 import { BOARD_SURFACES, DIE, INK } from "@ludo/design-tokens";
 
-const PIPS: Record<number, readonly (readonly [number, number])[]> = {
+export const PIPS: Record<number, readonly (readonly [number, number])[]> = {
   1: [[50, 50]],
   2: [[30, 30], [70, 70]],
   3: [[28, 28], [50, 50], [72, 72]],

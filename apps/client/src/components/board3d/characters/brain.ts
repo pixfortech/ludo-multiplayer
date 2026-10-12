@@ -4,8 +4,11 @@
 // base or celebrates on its own. Its state comes from the token's placement
 // and state (base, board, home; movable, selected) and from the playback's
 // motions (open, hop, land, home, capture), which only start once the server
-// has accepted a move. Everything here is pure (tested in
-// __tests__/brain.test.ts): given the inputs and the time, the same answer.
+// has accepted a move. Reactions (a six, a capture, a teammate home, a win...)
+// come only from the playback's presentation cues, which come only from the
+// server's committed history; each lasts a fixed time. Everything here is pure
+// (tested in __tests__/brain.test.ts): given the inputs and the time, the same
+// answer.
 
 export type CharacterState =
   | "idle"
@@ -20,10 +23,19 @@ export type CharacterState =
   | "returningToBase"
   | "reachingHome"
   | "celebrating"
-  | "finished";
+  | "finished"
+  /** Reacting to good news: a six, the capture they made, a teammate home, a win. */
+  | "cheering"
+  /** Reacting to bad news: three sixes, no move. */
+  | "upset"
+  /** Looking round at teammates (a six, someone else's bad luck). */
+  | "noticing";
 
 /** The clips every character file carries (tools/characters/clips.py). */
-export type ClipName = "idle" | "talk" | "listen" | "drink" | "stretch" | "exercise" | "look_around" | "wave" | "excited" | "walk" | "run" | "read" | "dismay";
+export type ClipName = "idle" | "talk" | "listen" | "drink" | "stretch" | "exercise" | "look_around" | "wave" | "excited" | "walk" | "run" | "read" | "dismay" | "cheer" | "upset";
+
+/** Short reactions to game events (chosen per character by the board from the playback's cues). */
+export type ReactionKind = "jump" | "cheer" | "wave" | "look" | "upset";
 
 /** Each character's own way of waiting. */
 export type IdleBehaviour = "adda" | "tea" | "newspaper" | "exercise";
@@ -47,7 +59,10 @@ export interface CharacterInputs {
   turnAge: number | null;
   /** Seconds on the shared ambient clock (for the waiting routine). */
   time: number;
-  /** The base scene's partner to face, if any (resolved by the caller to a direction). */
+  /** A reaction to a game event that is playing, and how far into it (seconds). */
+  reaction?: { kind: ReactionKind; age: number } | null;
+  /** Seconds since the player picked this character (null when not selected). */
+  selectedAge?: number | null;
 }
 
 export interface CharacterPose {
@@ -155,10 +170,28 @@ export const HOME_ARRIVE = 0.62;
 /** The share of a capture spent in dismay before being sent back. */
 export const CAPTURE_DISMAY = 0.45;
 
+/** Picked by the player: a quick wave back ("ready!"), then waiting for the server to accept the move. */
+export const SELECT_WAVE_SECONDS = 1.1;
+
+const REACTIONS: Record<ReactionKind, { state: CharacterState; clip: ClipName }> = {
+  jump: { state: "cheering", clip: "excited" },
+  cheer: { state: "cheering", clip: "cheer" },
+  wave: { state: "cheering", clip: "wave" },
+  look: { state: "noticing", clip: "look_around" },
+  upset: { state: "upset", clip: "upset" },
+};
+
 /** The character's pose for this moment. */
 export function decide(i: CharacterInputs, gait: Gait): CharacterPose {
   const moving = travelPose(i, gait);
   if (moving) return moving;
+  if (i.token === "selected" && i.selectedAge !== null && i.selectedAge !== undefined && i.selectedAge < SELECT_WAVE_SECONDS) {
+    return { state: "selected", clip: "wave", timeScale: 1.3, loop: false, face: "keep", partner: null, prop: false };
+  }
+  if (i.reaction) {
+    const r = REACTIONS[i.reaction.kind];
+    return { state: r.state, clip: r.clip, timeScale: 1, loop: false, face: "centre", partner: null, prop: false };
+  }
   if (i.token === "finished" || i.where === "home") return { state: "finished", clip: "idle", timeScale: 1, loop: true, face: "centre", partner: null, prop: false };
   if (i.token === "selected") return { state: "selected", clip: "idle", timeScale: 1, loop: true, face: "keep", partner: null, prop: false };
   if (i.turnAge !== null && i.turnAge < TURN_ALERT_SECONDS) {

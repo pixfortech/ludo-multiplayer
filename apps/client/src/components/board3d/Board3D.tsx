@@ -33,6 +33,9 @@ import type { StageViewport } from "./CameraRig";
 import type { IdleBehaviour } from "./characters/brain";
 import { CHARACTERS, characterFor, loadableSeats, loadOrder, routinePhase } from "./characters/catalog";
 import { characterWork } from "./characters/work";
+import { reactionFor } from "./characters/reactions";
+import { Die3D, type Die3DState } from "./dice/Die3D";
+import type { PresentationCue } from "../game/presentation";
 
 export interface Board3DProps extends ClassicBoardProps {
   mode: "2.5d" | "3d";
@@ -61,7 +64,15 @@ export interface Board3DProps extends ClassicBoardProps {
   busy: boolean;
   /** The city whose human characters play for their seats (C.3A: Kolkata's Crimson team), or null: pawns. */
   characterCity?: CityThemeId | null;
+  /** The 3D die (null: none shown). */
+  die?: Die3DState | null;
+  /** Moments the characters react to (the playback's presentation cues). */
+  cues?: readonly PresentationCue[];
 }
+
+const NO_CUES: readonly PresentationCue[] = [];
+/** How long the follow camera dwells on a capture, a home entry or a win before following play again. */
+const EMPHASIS_MS = 1600;
 
 /** Graphics presets (performance-budgets.md § Rendering): gameplay accuracy never changes, only cost. */
 const QUALITY = {
@@ -341,7 +352,7 @@ function useStageViewport(slot: React.RefObject<HTMLElement | null>, host: HTMLE
 }
 
 const Board3D = memo(function Board3D(props: Board3DProps) {
-  const { tokens, identityOf, activeSeats, currentSeat, youSeat, states = {}, badges = {}, labels = {}, motion = {}, preview = null, effects = [], onActivate, onPreview, title, dimmed = false, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy, characterCity = null } = props;
+  const { tokens, identityOf, activeSeats, currentSeat, youSeat, states = {}, badges = {}, labels = {}, motion = {}, preview = null, effects = [], onActivate, onPreview, title, dimmed = false, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy, characterCity = null, die = null, cues = NO_CUES } = props;
   const q = QUALITY[quality];
   const textures = useMemo(() => new TextureCache(), []);
   const kit = useMemo(() => new TokenKit(q.detail, q.physical), [q.detail, q.physical]);
@@ -364,10 +375,10 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
   // Human characters (C.3A): which token is which person, where each team stands, and when its turn began.
   const turnStartedAt = useMemo(() => (currentSeat === null ? null : performance.now()), [currentSeat]);
   const cast = useMemo(() => {
-    const byKey = new Map<string, { key: string; behaviour: IdleBehaviour; seat: number }>();
+    const byKey = new Map<string, { key: string; behaviour: IdleBehaviour; seat: number; tokenId: number; step: number | null }>();
     for (const p of placements) {
       const key = characterFor(characterCity, p.seat, p.tokenId);
-      if (key) byKey.set(p.key, { key, behaviour: CHARACTERS[key]!.idle, seat: p.seat });
+      if (key) byKey.set(p.key, { key, behaviour: CHARACTERS[key]!.idle, seat: p.seat, tokenId: p.tokenId, step: p.step });
     }
     const partners = new Map<number, Partial<Record<IdleBehaviour, WorldPoint>>>();
     for (const p of placements) {
@@ -392,12 +403,22 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
     return loadableSeats(loadOrder(seats, youSeat), (seat) => keysOf(seat).every((k) => loadedCharacters.has(`${k}@${quality}`)));
   }, [cast, youSeat, loadedCharacters, quality]);
   const items: Token3DInput[] = useMemo(
-    () =>
-      placements.map((p) => {
+    () => {
+      const now = performance.now();
+      return placements.map((p) => {
         const state: BoardTokenState = p.finished ? "finished" : (states[p.key] ?? "idle");
         const c = cast.byKey.get(p.key);
         const character = c
-          ? { key: c.key, behaviour: c.behaviour, quality, partners: cast.partners.get(c.seat) ?? {}, turnStartedAt: currentSeat === c.seat ? turnStartedAt : null, phase: routinePhase(c.seat), load: loadable.has(c.seat) }
+          ? {
+              key: c.key,
+              behaviour: c.behaviour,
+              quality,
+              partners: cast.partners.get(c.seat) ?? {},
+              turnStartedAt: currentSeat === c.seat ? turnStartedAt : null,
+              phase: routinePhase(c.seat),
+              load: loadable.has(c.seat),
+              reaction: reactionFor({ tokenKey: p.key, seat: c.seat, tokenId: c.tokenId, step: c.step }, cues, now),
+            }
           : null;
         return {
           character,
@@ -412,24 +433,43 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
           count: p.stackSize >= 5 && p.stackIndex === p.stackSize - 1 ? p.stackSize : null,
           interactive: Boolean(onActivate) && (state === "movable" || state === "selected"),
         };
-      }),
-    [placements, states, identityOf, motion, badges, onActivate, cast, quality, currentSeat, turnStartedAt, loadable],
+      });
+    },
+    [placements, states, identityOf, motion, badges, onActivate, cast, quality, currentSeat, turnStartedAt, loadable, cues],
   );
   const candidates = useMemo(() => items.filter((t) => t.interactive).map((t) => ({ key: t.key, at: t.at })), [items]);
 
-  // What the immersive camera follows: the token on the move, else the selected or first movable one, else the current base.
+  // A capture, a home entry or a win draws the follow camera for a moment (never the aerial view or an overview
+  // the player chose; a drag or the Overview button takes over at once).
+  const [emphasis, setEmphasis] = useState<{ at: WorldPoint; cue: number } | null>(null);
+  const lastCue = cues.length ? cues[cues.length - 1]! : null;
+  useEffect(() => {
+    if (!lastCue || (lastCue.kind !== "capture" && lastCue.kind !== "home" && lastCue.kind !== "win")) return;
+    const mover = lastCue.tokens[0] ? placements.find((p) => p.key === lastCue.tokens[0]) : undefined;
+    const at = lastCue.kind === "capture" && mover ? svgToWorld(mover) : { x: 0, z: 0 };
+    setEmphasis({ at, cue: lastCue.id });
+    const timer = setTimeout(() => setEmphasis((e) => (e?.cue === lastCue.id ? null : e)), EMPHASIS_MS);
+    return () => clearTimeout(timer);
+    // A new cue (by id) starts its emphasis; later placements do not move it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastCue?.id]);
+
+  // What the immersive camera follows: a moment of emphasis, else the token on the move, else the selected or
+  // first movable one, else the current base.
   const focus: WorldPoint | null = useMemo(() => {
+    if (emphasis) return emphasis.at;
     const active = items.find((t) => motion[t.key] && props.raised?.includes(t.key)) ?? items.find((t) => t.state === "selected") ?? items.find((t) => t.state === "movable");
     if (active) return active.at;
     if (currentSeat === null) return null;
     const own = items.filter((t) => t.step === null && placements.find((p) => p.key === t.key)?.seat === currentSeat);
     if (own.length === 0) return null;
     return { x: own.reduce((s, t) => s + t.at.x, 0) / own.length, z: own.reduce((s, t) => s + t.at.z, 0) / own.length };
-  }, [items, motion, props.raised, currentSeat, placements]);
+  }, [items, motion, props.raised, currentSeat, placements, emphasis]);
 
   const mirror = useRef<HTMLUListElement>(null);
   const cellMirror = useRef<HTMLOListElement>(null);
   const anchorMirror = useRef<HTMLUListElement>(null);
+  const dieMirror = useRef<HTMLSpanElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const viewport = useStageViewport(root, stage ? stageHost : null);
   const env = environmentFor(environment);
@@ -498,6 +538,7 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
           <Token3D key={t.key} token={t} kit={kit} textures={textures} shadows={Boolean(q.shadows)} reduced={reduced} register={register} onCharacterLoaded={onCharacterLoaded} {...(t.interactive ? { onActivate, onPreview } : {})} />
         ))}
         <TapCatcher candidates={candidates} onActivate={onActivate} />
+        {die ? <Die3D die={die} reduced={reduced} segments={quality === "low" ? 2 : 4} viewport={staged ? viewport : null} mirror={dieMirror} /> : null}
         <Effects3D effects={effects} detail={q.detail} />
         <Projection objects={objects} mirror={mirror} cells={cellMirror} anchors={anchorMirror} />
       </Canvas>
@@ -545,6 +586,8 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
         </ul>
       ) : null}
       {preview ? <span className="sr-only" aria-hidden="true" data-testid="move-preview-3d" data-to={preview.to} /> : null}
+      {/* The 3D die: the value its orientation shows on top, its state (rest, lift, throw, toss), seat and screen position. */}
+      {die ? <span ref={dieMirror} className="sr-only" aria-hidden="true" data-testid="die-3d" /> : null}
     </div>
   );
 });
