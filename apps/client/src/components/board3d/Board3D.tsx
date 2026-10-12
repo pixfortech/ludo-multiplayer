@@ -32,7 +32,7 @@ import { useAmbientClock, type AmbientState } from "./environments/ambient";
 import type { StageViewport } from "./CameraRig";
 import type { IdleBehaviour } from "./characters/brain";
 import { CHARACTERS, characterFor } from "./characters/catalog";
-import { characterWork } from "./characters/CharacterBody";
+import { characterWork } from "./characters/work";
 
 export interface Board3DProps extends ClassicBoardProps {
   mode: "2.5d" | "3d";

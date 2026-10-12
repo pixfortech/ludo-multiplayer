@@ -24,6 +24,8 @@ interface Sample {
   firstFrameMs: number;
   chunkKb: number | null;
   cityChunkKb: number | null;
+  /** The characters' chunk (C.3A), fetched only in a city with characters. */
+  characterChunkKb: number | null;
   /** Frames the 3D board drew per second while nothing in the game moved (the city's ambient life). */
   ambientFps: number | null;
   /** Average main-thread time per drawn frame (React Three Fiber's update and render), ms. */
@@ -124,6 +126,7 @@ async function measure(browser: Browser, view: Exclude<BoardView, "default">, qu
   if (view !== "2d") await expectBoard3d(aman.page, view);
   if (city) await expect.poll(() => aman.page.getByTestId("environment-mirror").getAttribute("data-assets"), { timeout: 20_000 }).toContain("yellow-taxi");
   const cityChunkKb = await chunk("KolkataEnvironment-.*\\.js$");
+  const characterChunkKb = await chunk("CharacterBody-.*\\.js$");
   await table.expectInSync();
   await aman.page.waitForTimeout(800);
 
@@ -204,6 +207,7 @@ async function measure(browser: Browser, view: Exclude<BoardView, "default">, qu
     firstFrameMs: Math.round(firstFrameMs),
     chunkKb,
     cityChunkKb,
+    characterChunkKb,
     ambientFps,
     frameWorkMs,
     characterMs,
@@ -266,5 +270,9 @@ test("the 2.5D board, and the living Kolkata city: load, frames, main-thread tim
     expect(s.glTextures, `${s.view}: GPU textures stay bounded`).toBeLessThan(40);
   }
   expect(flat!.chunkKb, "the 2D board never loads the 3D chunk").toBeNull();
-  for (const s of [flat!, ...classic]) expect(s.cityChunkKb, `${s.view}: the classic board never loads the Kolkata chunk`).toBeNull();
+  for (const s of [flat!, ...classic]) {
+    expect(s.cityChunkKb, `${s.view}: the classic board never loads the Kolkata chunk`).toBeNull();
+    expect(s.characterChunkKb, `${s.view}: nor the characters' chunk`).toBeNull();
+  }
+  for (const s of kolkata) expect(s.characterChunkKb, `${s.view}: the characters' chunk`).not.toBeNull();
 });

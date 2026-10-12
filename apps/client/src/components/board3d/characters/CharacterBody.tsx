@@ -18,6 +18,7 @@ import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js
 import type { QualityLevel } from "../capabilities";
 import type { CharacterPose, ClipName } from "./brain";
 import { characterScale, characterUrl } from "./catalog";
+import { characterWork } from "./work";
 
 const noRaycast = (): void => undefined;
 
@@ -39,8 +40,6 @@ export interface CharacterBodyProps {
 
 const FADE = 0.25;
 
-/** Main-thread time spent animating characters (skinning poses), for the board's frame statistics. */
-export const characterWork = { ms: 0 };
 
 /**
  * One skeleton per character. A character is one skinned mesh with a primitive per material, and

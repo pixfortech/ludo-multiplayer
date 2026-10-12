@@ -12,7 +12,7 @@
 // rules: it receives the token's identity and state; Token3D places it,
 // scales it and moves it along the motion sample.
 
-import { Suspense, memo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { Suspense, lazy, memo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import type { Group} from "three";
 import { CylinderGeometry, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, SpriteMaterial, type BufferGeometry, type Material } from "three";
@@ -26,7 +26,10 @@ import { sampleMotion, type MotionSample } from "./motion3d";
 import type { TextureCache } from "./textures";
 import type { QualityLevel } from "./capabilities";
 import { decide, groundSpeed, turnToward, walkPosition, yawToward, type CharacterPose, type IdleBehaviour } from "./characters/brain";
-import { CharacterBody, type CharacterController } from "./characters/CharacterBody";
+import type { CharacterController } from "./characters/CharacterBody";
+
+// The character code (glTF loader, meshopt decoder, skeleton cloning) is its own chunk: only cities with characters fetch it.
+const CharacterBody = lazy(() => import("./characters/CharacterBody").then((m) => ({ default: m.CharacterBody })));
 import { CHARACTERS, characterScale } from "./characters/catalog";
 
 /** A token shown as a human character (C.3A). */

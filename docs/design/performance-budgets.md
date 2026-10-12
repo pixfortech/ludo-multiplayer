@@ -166,6 +166,7 @@ Same machine and method as C.2 (headless Chromium, software WebGL through SwiftS
 
 - **Frames during a move are not comparable** between the two columns: a pawn's hop is over in a fraction of the 1.5 s window (the rest are cheap idle frames, 24–28 counted), while a character walks for the whole window (4–7 counted). Drawn frame for drawn frame, the same move with the characters hidden drew 12 frames and with them visible 10: the characters add about 20% to a frame here.
 - **Animating the four characters** (their mixers, skinning poses on the CPU): 0.24–0.31 ms a frame. Skinning itself runs on the GPU.
+- **Code**: the character code (glTF loader, meshopt decoder, skeleton cloning, the body) is its own chunk, 73 KB (21.9 KB gzip), fetched only where a city has characters; the 3D chunk is 266 KB gzip (262 KB at C.2).
 - **Downloads**: only the current level of detail is fetched, once per character: 1.0 MB for four at Low, 1.2 MB at Medium, 1.5 MB at High (meshopt-compressed GLB with WebP textures), after the board is drawn.
 - **Found and fixed while measuring** (2.5D Low, before → after):
   - one skeleton per character instead of one per material (11–16 each): bone textures uploaded each frame 55 → 4, GPU textures 65 → 16;
