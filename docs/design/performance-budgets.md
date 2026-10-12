@@ -185,3 +185,30 @@ Budgets for the characters (per character; 16 characters is the C.3B plan):
 | Draw calls (one per material) | 11–16 | same | same |
 | Skeletons / bone textures | 1 | 1 | 1 |
 | Idle animation rate | 8 a second | 12 | 20 |
+
+### Sixteen characters (Batch C.3B, 2026-10-12)
+
+Same machine and method (software WebGL, laptop viewport 1366 × 768, `e2e/tests/board3d-performance.spec.ts`). A two-player room now shows two teams (8 characters); the four-player sample shows all sixteen. Not device frame rates; no GPU has validated High or Ultra.
+
+| Kolkata | 2.5D Low, 8 characters | 2.5D Medium, 8 | 3D Medium, 8 | 2.5D Low, 4 players, 16 |
+| --- | --- | --- | --- | --- |
+| First drawn board after a reload | 1,630 ms | 1,968 ms | 1,330 ms | 1,143 ms |
+| The player's own team loaded (it loads first) | 5.2 s | 6.9 s | 5.8 s | 3.8 s |
+| Every character loaded | 6.8 s | 9.4 s | 7.9 s | 8.2 s |
+| Main thread busy once settled | 14.9% | 16.3% | 4.0% | 16.9% |
+| Frames drawn while idle (the city rests here) | 0.5 a second | 0.3 | 0 | 0.5 |
+| Worst frame during a move | 217 ms | 483 ms | 433 ms | 283 ms |
+| Tap to move request | 1.4 ms | 1.8 ms | 1.3 ms | 1.2 ms |
+| GPU geometries / textures | 98 / 32 | 98 / 32 | 98 / 32 | 144 / 58 |
+| Draw calls / triangles per frame | 113 / 112k | 110 / 192k | 110 / 191k | 181 / 182k |
+| Animating the characters (mixers), per frame | 0.40 ms | 0.26 ms | 0.18 ms | 0.45 ms |
+
+For comparison, the same board with no characters (C.2) used 67 draw calls, 50-51 geometries and 8 textures; with C.3A's four characters 119-122 draw calls and 107 geometries.
+
+- **Draw calls**: plain-colour materials now share one (vertex colours), so a character costs about 5 draw calls instead of 11-16: sixteen characters add about 115 calls (181 in all), where eight of the old ones added 128.
+- **Textures**: three per character at most (skin, eyes, the skeleton's bone texture) plus the scene's.
+- **Loading**: only the current level is fetched (all sixteen: 3.9 MB at Low, 4.7 MB at Medium, 5.8 MB at High), one team at a time, the player's own first; tokens stand as pawns until their people arrive. The character code is its own 21.4 KB (gzip) chunk.
+- **Found and fixed**: turning to a chat partner at the base asked for full-rate frames; with four bases changing scene at different moments that held the main thread 40-120% once settled (each software frame costs about 500 ms here). It now follows the characters' clock: 4-17%.
+- Characters outside a close 3D view do not animate until they are back in view.
+
+Per-character budget (unchanged levels): Low about 8.0-9.1k triangles, Medium 15.8-17.9k, High 28.8-32.5k; 5 materials; one skeleton.
