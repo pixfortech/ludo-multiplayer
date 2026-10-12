@@ -65,21 +65,22 @@
       "triangles": {
         "Character": 30214
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "adda.high.glb",
-          "bytes": 372308,
+          "bytes": 368308,
           "triangles": 30214
         },
         "medium": {
           "file": "adda.medium.glb",
-          "bytes": 299284,
-          "triangles": 16608
+          "bytes": 295780,
+          "triangles": 16614
         },
         "low": {
           "file": "adda.low.glb",
-          "bytes": 251392,
-          "triangles": 8449
+          "bytes": 247588,
+          "triangles": 8450
         }
       },
       "animations": [
@@ -164,21 +165,22 @@
         "Character": 32422,
         "Prop_cup": 104
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "tea.high.glb",
-          "bytes": 390816,
+          "bytes": 384324,
           "triangles": 32526
         },
         "medium": {
           "file": "tea.medium.glb",
-          "bytes": 313444,
-          "triangles": 17875
+          "bytes": 306980,
+          "triangles": 17884
         },
         "low": {
           "file": "tea.low.glb",
-          "bytes": 261128,
-          "triangles": 9094
+          "bytes": 254984,
+          "triangles": 9102
         }
       },
       "animations": [
@@ -263,21 +265,22 @@
         "Character": 30088,
         "Prop_newspaper": 2
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "newspaper.high.glb",
-          "bytes": 377964,
+          "bytes": 371768,
           "triangles": 30090
         },
         "medium": {
           "file": "newspaper.medium.glb",
-          "bytes": 306212,
-          "triangles": 16541
+          "bytes": 300024,
+          "triangles": 16548
         },
         "low": {
           "file": "newspaper.low.glb",
-          "bytes": 257416,
-          "triangles": 8417
+          "bytes": 251040,
+          "triangles": 8416
         }
       },
       "animations": [
@@ -361,21 +364,22 @@
       "triangles": {
         "Character": 30150
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "exercise.high.glb",
-          "bytes": 374552,
+          "bytes": 369100,
           "triangles": 30150
         },
         "medium": {
           "file": "exercise.medium.glb",
-          "bytes": 301464,
-          "triangles": 16574
+          "bytes": 296156,
+          "triangles": 16578
         },
         "low": {
           "file": "exercise.low.glb",
-          "bytes": 253292,
-          "triangles": 8453
+          "bytes": 247680,
+          "triangles": 8440
         }
       },
       "animations": [
@@ -459,21 +463,22 @@
       "triangles": {
         "Character": 31918
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "dida.high.glb",
-          "bytes": 386992,
+          "bytes": 379760,
           "triangles": 31918
         },
         "medium": {
           "file": "dida.medium.glb",
-          "bytes": 310468,
-          "triangles": 17543
+          "bytes": 303644,
+          "triangles": 17553
         },
         "low": {
           "file": "dida.low.glb",
-          "bytes": 258896,
-          "triangles": 8928
+          "bytes": 252120,
+          "triangles": 8934
         }
       },
       "animations": [
@@ -558,21 +563,22 @@
         "Character": 30214,
         "Prop_cup": 104
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "rickshaw.high.glb",
-          "bytes": 375468,
+          "bytes": 371848,
           "triangles": 30318
         },
         "medium": {
           "file": "rickshaw.medium.glb",
-          "bytes": 303184,
-          "triangles": 16664
+          "bytes": 299684,
+          "triangles": 16670
         },
         "low": {
           "file": "rickshaw.low.glb",
-          "bytes": 254752,
-          "triangles": 8479
+          "bytes": 251232,
+          "triangles": 8483
         }
       },
       "animations": [
@@ -657,21 +663,22 @@
         "Character": 29936,
         "Prop_newspaper": 2
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "student.high.glb",
-          "bytes": 374460,
+          "bytes": 369600,
           "triangles": 29938
         },
         "medium": {
           "file": "student.medium.glb",
-          "bytes": 302828,
-          "triangles": 16456
+          "bytes": 298596,
+          "triangles": 16464
         },
         "low": {
           "file": "student.low.glb",
-          "bytes": 254688,
-          "triangles": 8372
+          "bytes": 250144,
+          "triangles": 8379
         }
       },
       "animations": [
@@ -755,21 +762,22 @@
       "triangles": {
         "Character": 29258
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "footballer.high.glb",
-          "bytes": 373608,
+          "bytes": 368504,
           "triangles": 29258
         },
         "medium": {
           "file": "footballer.medium.glb",
-          "bytes": 301320,
-          "triangles": 16084
+          "bytes": 296548,
+          "triangles": 16088
         },
         "low": {
           "file": "footballer.low.glb",
-          "bytes": 254084,
-          "triangles": 8194
+          "bytes": 248656,
+          "triangles": 8186
         }
       },
       "animations": [
@@ -853,21 +861,22 @@
       "triangles": {
         "Character": 28756
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "kaku.high.glb",
-          "bytes": 367556,
+          "bytes": 361948,
           "triangles": 28756
         },
         "medium": {
           "file": "kaku.medium.glb",
-          "bytes": 297516,
-          "triangles": 15807
+          "bytes": 292440,
+          "triangles": 15813
         },
         "low": {
           "file": "kaku.low.glb",
-          "bytes": 250372,
-          "triangles": 8038
+          "bytes": 245200,
+          "triangles": 8046
         }
       },
       "animations": [
@@ -952,21 +961,22 @@
         "Character": 32414,
         "Prop_cup": 104
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "didi.high.glb",
-          "bytes": 392380,
+          "bytes": 384260,
           "triangles": 32518
         },
         "medium": {
           "file": "didi.medium.glb",
-          "bytes": 314804,
-          "triangles": 17873
+          "bytes": 307400,
+          "triangles": 17880
         },
         "low": {
           "file": "didi.low.glb",
-          "bytes": 262840,
-          "triangles": 9096
+          "bytes": 255376,
+          "triangles": 9100
         }
       },
       "animations": [
@@ -1051,21 +1061,22 @@
         "Character": 31766,
         "Prop_newspaper": 2
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "professor.high.glb",
-          "bytes": 385608,
+          "bytes": 379876,
           "triangles": 31768
         },
         "medium": {
           "file": "professor.medium.glb",
-          "bytes": 309532,
-          "triangles": 17464
+          "bytes": 304600,
+          "triangles": 17469
         },
         "low": {
           "file": "professor.low.glb",
-          "bytes": 257712,
-          "triangles": 8882
+          "bytes": 252276,
+          "triangles": 8891
         }
       },
       "animations": [
@@ -1149,21 +1160,22 @@
       "triangles": {
         "Character": 29978
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "yoga.high.glb",
-          "bytes": 374500,
+          "bytes": 368204,
           "triangles": 29978
         },
         "medium": {
           "file": "yoga.medium.glb",
-          "bytes": 301296,
-          "triangles": 16480
+          "bytes": 295264,
+          "triangles": 16483
         },
         "low": {
           "file": "yoga.low.glb",
-          "bytes": 253356,
-          "triangles": 8402
+          "bytes": 247012,
+          "triangles": 8391
         }
       },
       "animations": [
@@ -1247,21 +1259,22 @@
       "triangles": {
         "Character": 29866
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "kobi.high.glb",
-          "bytes": 376400,
+          "bytes": 373196,
           "triangles": 29866
         },
         "medium": {
           "file": "kobi.medium.glb",
-          "bytes": 306044,
-          "triangles": 16416
+          "bytes": 302784,
+          "triangles": 16422
         },
         "low": {
           "file": "kobi.low.glb",
-          "bytes": 256920,
-          "triangles": 8356
+          "bytes": 253476,
+          "triangles": 8360
         }
       },
       "animations": [
@@ -1346,21 +1359,22 @@
         "Character": 32406,
         "Prop_cup": 104
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "boudi.high.glb",
-          "bytes": 390852,
+          "bytes": 384340,
           "triangles": 32510
         },
         "medium": {
           "file": "boudi.medium.glb",
-          "bytes": 312880,
-          "triangles": 17867
+          "bytes": 306448,
+          "triangles": 17875
         },
         "low": {
           "file": "boudi.low.glb",
-          "bytes": 260896,
-          "triangles": 9094
+          "bytes": 254672,
+          "triangles": 9099
         }
       },
       "animations": [
@@ -1445,21 +1459,22 @@
         "Character": 30622,
         "Prop_newspaper": 2
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "dokandar.high.glb",
-          "bytes": 376248,
+          "bytes": 371268,
           "triangles": 30624
         },
         "medium": {
           "file": "dokandar.medium.glb",
-          "bytes": 303208,
-          "triangles": 16836
+          "bytes": 298208,
+          "triangles": 16840
         },
         "low": {
           "file": "dokandar.low.glb",
-          "bytes": 254068,
-          "triangles": 8565
+          "bytes": 249292,
+          "triangles": 8574
         }
       },
       "animations": [
@@ -1543,21 +1558,22 @@
       "triangles": {
         "Character": 29074
       },
+      "materials": 5,
       "levels": {
         "high": {
           "file": "kishore.high.glb",
-          "bytes": 371928,
+          "bytes": 368076,
           "triangles": 29074
         },
         "medium": {
           "file": "kishore.medium.glb",
-          "bytes": 299424,
-          "triangles": 15986
+          "bytes": 296220,
+          "triangles": 15985
         },
         "low": {
           "file": "kishore.low.glb",
-          "bytes": 252608,
-          "triangles": 8150
+          "bytes": 248684,
+          "triangles": 8137
         }
       },
       "animations": [
