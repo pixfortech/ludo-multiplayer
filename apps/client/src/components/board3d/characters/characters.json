@@ -393,6 +393,1188 @@
         "walk",
         "wave"
       ]
+    },
+    "dida": {
+      "number": 1,
+      "role": "Dida — the grandmother",
+      "idle": "adda",
+      "prop": null,
+      "height": 1.459,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.318
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 1.615
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 31918
+      },
+      "levels": {
+        "high": {
+          "file": "dida.high.glb",
+          "bytes": 386992,
+          "triangles": 31918
+        },
+        "medium": {
+          "file": "dida.medium.glb",
+          "bytes": 310468,
+          "triangles": 17543
+        },
+        "low": {
+          "file": "dida.low.glb",
+          "bytes": 258896,
+          "triangles": 8928
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "rickshaw": {
+      "number": 2,
+      "role": "Rikshawala — on his tea break",
+      "idle": "tea",
+      "prop": "cup",
+      "height": 1.711,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.655
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 2.027
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 30214,
+        "Prop_cup": 104
+      },
+      "levels": {
+        "high": {
+          "file": "rickshaw.high.glb",
+          "bytes": 375468,
+          "triangles": 30318
+        },
+        "medium": {
+          "file": "rickshaw.medium.glb",
+          "bytes": 303184,
+          "triangles": 16664
+        },
+        "low": {
+          "file": "rickshaw.low.glb",
+          "bytes": 254752,
+          "triangles": 8479
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "student": {
+      "number": 3,
+      "role": "Chhatro — the student",
+      "idle": "newspaper",
+      "prop": "newspaper",
+      "height": 1.774,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.759
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 2.155
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 29936,
+        "Prop_newspaper": 2
+      },
+      "levels": {
+        "high": {
+          "file": "student.high.glb",
+          "bytes": 374460,
+          "triangles": 29938
+        },
+        "medium": {
+          "file": "student.medium.glb",
+          "bytes": 302828,
+          "triangles": 16456
+        },
+        "low": {
+          "file": "student.low.glb",
+          "bytes": 254688,
+          "triangles": 8372
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "footballer": {
+      "number": 4,
+      "role": "Khelowar — the footballer",
+      "idle": "exercise",
+      "prop": null,
+      "height": 1.812,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.802
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 2.208
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 29258
+      },
+      "levels": {
+        "high": {
+          "file": "footballer.high.glb",
+          "bytes": 373608,
+          "triangles": 29258
+        },
+        "medium": {
+          "file": "footballer.medium.glb",
+          "bytes": 301320,
+          "triangles": 16084
+        },
+        "low": {
+          "file": "footballer.low.glb",
+          "bytes": 254084,
+          "triangles": 8194
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "kaku": {
+      "number": 1,
+      "role": "Kaku — the uncle with opinions",
+      "idle": "adda",
+      "prop": null,
+      "height": 1.725,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.661
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 2.035
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 28756
+      },
+      "levels": {
+        "high": {
+          "file": "kaku.high.glb",
+          "bytes": 367556,
+          "triangles": 28756
+        },
+        "medium": {
+          "file": "kaku.medium.glb",
+          "bytes": 297516,
+          "triangles": 15807
+        },
+        "low": {
+          "file": "kaku.low.glb",
+          "bytes": 250372,
+          "triangles": 8038
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "didi": {
+      "number": 2,
+      "role": "Didi — the office-goer",
+      "idle": "tea",
+      "prop": "cup",
+      "height": 1.592,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.494
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 1.83
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 32414,
+        "Prop_cup": 104
+      },
+      "levels": {
+        "high": {
+          "file": "didi.high.glb",
+          "bytes": 392380,
+          "triangles": 32518
+        },
+        "medium": {
+          "file": "didi.medium.glb",
+          "bytes": 314804,
+          "triangles": 17873
+        },
+        "low": {
+          "file": "didi.low.glb",
+          "bytes": 262840,
+          "triangles": 9096
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "professor": {
+      "number": 3,
+      "role": "Adhyapika — the professor",
+      "idle": "newspaper",
+      "prop": "newspaper",
+      "height": 1.581,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.467
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 1.798
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 31766,
+        "Prop_newspaper": 2
+      },
+      "levels": {
+        "high": {
+          "file": "professor.high.glb",
+          "bytes": 385608,
+          "triangles": 31768
+        },
+        "medium": {
+          "file": "professor.medium.glb",
+          "bytes": 309532,
+          "triangles": 17464
+        },
+        "low": {
+          "file": "professor.low.glb",
+          "bytes": 257712,
+          "triangles": 8882
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "yoga": {
+      "number": 4,
+      "role": "Yoga Mashi — the morning stretcher",
+      "idle": "exercise",
+      "prop": null,
+      "height": 1.542,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.427
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 1.749
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 29978
+      },
+      "levels": {
+        "high": {
+          "file": "yoga.high.glb",
+          "bytes": 374500,
+          "triangles": 29978
+        },
+        "medium": {
+          "file": "yoga.medium.glb",
+          "bytes": 301296,
+          "triangles": 16480
+        },
+        "low": {
+          "file": "yoga.low.glb",
+          "bytes": 253356,
+          "triangles": 8402
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "kobi": {
+      "number": 1,
+      "role": "Kobi — the poet",
+      "idle": "adda",
+      "prop": null,
+      "height": 1.816,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.791
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 2.195
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 29866
+      },
+      "levels": {
+        "high": {
+          "file": "kobi.high.glb",
+          "bytes": 376400,
+          "triangles": 29866
+        },
+        "medium": {
+          "file": "kobi.medium.glb",
+          "bytes": 306044,
+          "triangles": 16416
+        },
+        "low": {
+          "file": "kobi.low.glb",
+          "bytes": 256920,
+          "triangles": 8356
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "boudi": {
+      "number": 2,
+      "role": "Boudi — the neighbourhood's news",
+      "idle": "tea",
+      "prop": "cup",
+      "height": 1.525,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.405
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 1.721
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 32406,
+        "Prop_cup": 104
+      },
+      "levels": {
+        "high": {
+          "file": "boudi.high.glb",
+          "bytes": 390852,
+          "triangles": 32510
+        },
+        "medium": {
+          "file": "boudi.medium.glb",
+          "bytes": 312880,
+          "triangles": 17867
+        },
+        "low": {
+          "file": "boudi.low.glb",
+          "bytes": 260896,
+          "triangles": 9094
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "dokandar": {
+      "number": 3,
+      "role": "Dokandar — the shopkeeper",
+      "idle": "newspaper",
+      "prop": "newspaper",
+      "height": 1.692,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.626
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 1.992
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 30622,
+        "Prop_newspaper": 2
+      },
+      "levels": {
+        "high": {
+          "file": "dokandar.high.glb",
+          "bytes": 376248,
+          "triangles": 30624
+        },
+        "medium": {
+          "file": "dokandar.medium.glb",
+          "bytes": 303208,
+          "triangles": 16836
+        },
+        "low": {
+          "file": "dokandar.low.glb",
+          "bytes": 254068,
+          "triangles": 8565
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
+    },
+    "kishore": {
+      "number": 4,
+      "role": "Kishore — the schoolboy",
+      "idle": "exercise",
+      "prop": null,
+      "height": 1.38,
+      "clips": {
+        "idle": {
+          "frames": 213,
+          "loop": true
+        },
+        "talk": {
+          "frames": 163,
+          "loop": true
+        },
+        "listen": {
+          "frames": 200,
+          "loop": true
+        },
+        "drink": {
+          "frames": 110,
+          "loop": false
+        },
+        "stretch": {
+          "frames": 235,
+          "loop": true
+        },
+        "exercise": {
+          "frames": 150,
+          "loop": true
+        },
+        "look_around": {
+          "frames": 75,
+          "loop": false
+        },
+        "wave": {
+          "frames": 53,
+          "loop": false
+        },
+        "excited": {
+          "frames": 83,
+          "loop": false
+        },
+        "walk": {
+          "frames": 33,
+          "loop": true,
+          "speed": 1.311
+        },
+        "run": {
+          "frames": 20,
+          "loop": true,
+          "speed": 1.606
+        },
+        "read": {
+          "frames": 213,
+          "loop": true
+        },
+        "dismay": {
+          "frames": 45,
+          "loop": false
+        }
+      },
+      "triangles": {
+        "Character": 29074
+      },
+      "levels": {
+        "high": {
+          "file": "kishore.high.glb",
+          "bytes": 371928,
+          "triangles": 29074
+        },
+        "medium": {
+          "file": "kishore.medium.glb",
+          "bytes": 299424,
+          "triangles": 15986
+        },
+        "low": {
+          "file": "kishore.low.glb",
+          "bytes": 252608,
+          "triangles": 8150
+        }
+      },
+      "animations": [
+        "dismay",
+        "drink",
+        "excited",
+        "exercise",
+        "idle",
+        "listen",
+        "look_around",
+        "read",
+        "run",
+        "stretch",
+        "talk",
+        "walk",
+        "wave"
+      ]
     }
   },
   "fps": 30
