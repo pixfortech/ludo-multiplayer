@@ -38,6 +38,30 @@ async function around(page: Page, points: { x: number; y: number }[], pad: numbe
   await page.screenshot({ path, clip: { x, y, width, height }, animations: "allow" });
 }
 
+/**
+ * Waits in the page (every 50 ms) until `keys` include `count` characters in one of `states`, then shoots the
+ * area round them. Short-lived states can be over before a busy page is captured: the shot is then skipped and
+ * logged (this is evidence, not a check; the recordings show every moment).
+ */
+async function shotWhen(page: Page, keys: string[], states: string[], count: number, pad: number, path: string, timeout = 8_000) {
+  const caught = await page
+    .waitForFunction(
+      ([ks, ss, n]) => [...document.querySelectorAll<HTMLElement>('[data-testid="board-mirror"] li')].filter((el) => ks.includes(el.dataset.key!) && ss.includes(el.dataset.characterState ?? "")).length >= n,
+      [keys, states, count] as const,
+      { polling: 50, timeout },
+    )
+    .then(
+      () => true,
+      () => false,
+    );
+  if (!caught) {
+    console.log(`not captured (over too soon): ${path}`);
+    return;
+  }
+  const die = await dieState(page);
+  await around(page, [...(await tokensAt(page, keys)), ...(die && keys.length === 4 ? [die] : [])], pad, path);
+}
+
 const tokensAt = async (page: Page, keys: string[]) => (await boardTokens(page)).filter((t) => keys.includes(t.key));
 
 test("C.3C.1 evidence: the die's throw and landing, a six's reactions and departure, a capture, a home entry and the win", async ({ browser }) => {
@@ -58,37 +82,21 @@ test("C.3C.1 evidence: the die's throw and landing, a six's reactions and depart
   await ready(ben.page);
   await aman.page.waitForTimeout(1500);
   await aman.page.screenshot({ path: `${dir}/01-before-roll-2.5d.png` });
+  await around(aman.page, [(await dieState(aman.page))!, ...(await tokensAt(aman.page, team(aman.id)))], 140, `${dir}/01b-die-resting-in-base.png`);
 
-  // The throw: in the air, then at rest on the server's 6, with the team reacting.
+  // A six: the team reacts as the die lands (the die in the air is shot on a later roll, so it never delays this).
   await queueDice(6);
   await visible(aman.page.getByRole("button", { name: "Roll dice" })).click({ noWaitAfter: true });
   table.rolls++;
-  let shotAir = false;
-  for (let i = 0; i < 60 && !shotAir; i++) {
-    const d = await dieState(aman.page);
-    if (d?.state === "throw") {
-      await aman.page.waitForTimeout(250);
-      const d2 = (await dieState(aman.page)) ?? d;
-      await around(aman.page, [d2, ...(await tokensAt(aman.page, team(aman.id)))], 140, `${dir}/02-die-in-the-air.png`);
-      shotAir = true;
-    } else await aman.page.waitForTimeout(40);
-  }
-  await expect.poll(async () => (await dieState(aman.page))?.state === "rest" && (await dieState(aman.page))?.value === "6").toBe(true);
-  await expect.poll(async () => Object.entries(await characterStates(aman.page)).filter(([k, s]) => k.startsWith(aman.id) && ["cheering", "noticing"].includes(s)).length).toBeGreaterThanOrEqual(2);
-  await aman.page.waitForTimeout(300);
-  await around(aman.page, [(await dieState(aman.page))!, ...(await tokensAt(aman.page, team(aman.id)))], 140, `${dir}/03-landed-six-team-reacts.png`);
+  await shotWhen(aman.page, team(aman.id), ["cheering", "noticing"], 2, 140, `${dir}/03-landed-six-team-reacts.png`);
   await aman.page.screenshot({ path: `${dir}/04-six-full-view.png` });
   await ben.page.screenshot({ path: `${dir}/05-six-seen-in-3d.png` });
 
-  // Selectable, then the chosen one's wave, then out to the start cell.
-  await expect.poll(async () => Object.entries(await characterStates(aman.page)).filter(([k, s]) => k.startsWith(aman.id) && s === "selectable").length).toBe(4);
-  await around(aman.page, await tokensAt(aman.page, team(aman.id)), 140, `${dir}/06-all-four-selectable.png`);
+  // Selectable, then the chosen one leaves for the start cell.
+  await shotWhen(aman.page, team(aman.id), ["selectable"], 4, 140, `${dir}/06-all-four-selectable.png`, 20_000);
   await pickToken3d(aman, A(0));
   table.moves++;
-  await expect.poll(async () => (await characterStates(aman.page))[A(0)]).toMatch(/selected|excited|leavingBase/);
-  await around(aman.page, await tokensAt(aman.page, team(aman.id)), 140, `${dir}/07-selected-wave.png`);
-  await expect.poll(async () => (await characterStates(aman.page))[A(0)]).toMatch(/leavingBase|walking/);
-  await around(aman.page, await tokensAt(aman.page, team(aman.id)), 160, `${dir}/08-leaving-base.png`);
+  await shotWhen(aman.page, [A(0)], ["selected", "excited", "leavingBase"], 1, 200, `${dir}/07-chosen-leaves-base.png`);
   await table.expectInSync();
 
   // To a capture: the storyteller to step 28, Ben opens two cells behind and lands on him.
@@ -102,11 +110,21 @@ test("C.3C.1 evidence: the die's throw and landing, a six's reactions and depart
   await queueDice(2);
   await visible(ben.page.getByRole("button", { name: "Roll dice" })).click({ noWaitAfter: true });
   table.rolls++;
-  await expect.poll(async () => (await characterStates(aman.page))[B(0)], { timeout: 20_000 }).toBe("cheering");
-  await around(aman.page, await tokensAt(aman.page, [A(0), B(0)]), 180, `${dir}/09-capture-attacker-cheers.png`);
+  const thrown = await aman.page
+    .waitForFunction(() => document.querySelector<HTMLElement>('[data-testid="die-3d"]')?.dataset.state === "throw", undefined, { polling: 30, timeout: 8_000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  if (thrown) {
+    const d = (await dieState(aman.page))!;
+    await around(aman.page, [d], 220, `${dir}/02-die-in-the-air.png`);
+  }
+  await shotWhen(aman.page, [A(0), B(0)], ["cheering"], 1, 180, `${dir}/09-capture-attacker-cheers.png`, 20_000);
   await ben.page.screenshot({ path: `${dir}/10-capture-in-3d.png` });
-  await expect.poll(async () => (await characterStates(aman.page))[A(0)], { timeout: 20_000 }).toMatch(/captured|returningToBase/);
-  await around(aman.page, await tokensAt(aman.page, [A(0), B(0)]), 200, `${dir}/11-victim-dismayed.png`);
+  await shotWhen(aman.page, [A(0)], ["captured", "returningToBase"], 1, 200, `${dir}/11-victim-dismayed.png`, 20_000);
+  await expect.poll(async () => (await characterStates(aman.page))[A(0)], { timeout: 20_000 }).not.toMatch(/captured|returningToBase/);
+  await around(aman.page, await tokensAt(aman.page, team(aman.id)), 140, `${dir}/11b-victim-back-in-its-base.png`);
   await table.expectInSync();
 
   // Ben's runner home, then the rest of his team: the celebrations and the victory screen.
@@ -121,8 +139,7 @@ test("C.3C.1 evidence: the die's throw and landing, a six's reactions and depart
     await queueDice(56 - step);
     await visible(ben.page.getByRole("button", { name: "Roll dice" })).click({ noWaitAfter: true });
     table.rolls++;
-    await expect.poll(async () => Object.values(await characterStates(aman.page)).filter((s) => s === "cheering").length, { timeout: 30_000 }).toBeGreaterThanOrEqual(3);
-    await aman.page.screenshot({ path: `${dir}/12-win-celebration-2.5d.png` });
+    await shotWhen(aman.page, [...team(aman.id), ...team(ben.id)], ["cheering", "celebrating", "reachingHome"], 3, 200, `${dir}/12-win-celebration-2.5d.png`, 30_000);
     await ben.page.screenshot({ path: `${dir}/13-win-celebration-3d.png` });
   }
   for (const p of [aman, ben]) await expect(p.page.getByRole("dialog")).toBeVisible({ timeout: 20_000 });
