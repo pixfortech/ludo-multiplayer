@@ -206,6 +206,10 @@ test("the city's life moves on its own capped clock, rests when hidden, under re
   await visible(aman.page.getByRole("radio", { name: level === "low" ? "Low" : "Medium" })).click();
   await expect(aman.page.getByTestId("game-board")).toHaveAttribute("data-quality", level);
   await expectKolkataBuilt(aman.page);
+  // The Crimson team's characters (C.3A) reload at the new level; the city measures once they have (loading is not its cost).
+  await expect
+    .poll(() => aman.page.evaluate((l) => document.querySelectorAll(`[data-testid="board-mirror"] li[data-character-ready="true"][data-character-level="${l}"]`).length, level), { timeout: 60_000 })
+    .toBe(4);
   await expect(aman.page.getByTestId("game-board")).toHaveAttribute("data-ambient", "measuring");
   const cells = await boardCells(aman.page);
   // Two pictures apart: the traffic has moved; the board's cells have not changed by a pixel.

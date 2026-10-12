@@ -28,7 +28,7 @@ import { TextureCache } from "./textures";
 import { Token3D, TokenKit, floorFor, type Token3DInput } from "./Tokens3D";
 import type { QualityLevel } from "./capabilities";
 import { environmentFor } from "./environments/registry";
-import { useAmbientClock, type AmbientState } from "./environments/ambient";
+import { followerFps, useAmbientClock, type AmbientReport, type AmbientState } from "./environments/ambient";
 import type { StageViewport } from "./CameraRig";
 import type { IdleBehaviour } from "./characters/brain";
 import { CHARACTERS, characterFor } from "./characters/catalog";
@@ -107,13 +107,16 @@ function Lights({ shadows, mapSize }: { shadows: boolean; mapSize: number }) {
  * intervals are long by design.) Publishes renderer counters on `host`.
  */
 /**
- * The characters' own clock (C.3A): their idle life is part of the game, not decoration, so where the
- * city's ambient life would rest they keep a slow pulse (at most 2 frames a second, and at most a tenth of
- * the device's time); otherwise the same governor (never under reduced motion or in a hidden tab).
+ * The characters' clock (C.3A). Every frame draws the whole scene, so in a city the characters follow the
+ * city's governor (one measurement): never faster than the city, and where it rests (the device cannot
+ * afford it), a slow pulse instead of a freeze, within a tenth of the device's time. Without a city they
+ * measure for themselves, with the same pulse. Never under reduced motion or in a hidden tab.
  */
+const CITY_UNDECIDED: AmbientReport = { state: "measuring", fps: 0, frameMs: null };
 const CHARACTER_FPS: Record<QualityLevel, number> = { low: 8, medium: 12, high: 20 };
-function CharacterClock({ quality, busy, active }: { quality: QualityLevel; busy: boolean; active: boolean }) {
-  useAmbientClock({ fps: CHARACTER_FPS[quality], busy, active, floor: 2 });
+function CharacterClock({ quality, busy, active, city }: { quality: QualityLevel; busy: boolean; active: boolean; city: AmbientReport | null }) {
+  const fps = city ? followerFps(CHARACTER_FPS[quality], city) : CHARACTER_FPS[quality];
+  useAmbientClock({ fps, busy, active: active && fps > 0, floor: 2, measure: city === null });
   return null;
 }
 
@@ -428,8 +431,8 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
   const [built, setBuilt] = useState<{ quality: QualityLevel; assets: readonly string[] } | null>(null);
   const onBuilt = useCallback((info: { assets: readonly string[] }) => setBuilt({ quality, assets: info.assets }), [quality]);
   const builtAssets = built?.quality === quality ? built.assets : [];
-  const [ambientReport, setAmbient] = useState<{ quality: QualityLevel; state: AmbientState; fps: number } | null>(null);
-  const onAmbient = useCallback((state: AmbientState, fps: number) => setAmbient({ quality, state, fps }), [quality]);
+  const [ambientReport, setAmbient] = useState<(AmbientReport & { quality: QualityLevel }) | null>(null);
+  const onAmbient = useCallback((state: AmbientState, fps: number, frameMs: number | null) => setAmbient({ quality, state, fps, frameMs }), [quality]);
   const ambient = ambientReport?.quality === quality ? ambientReport : null;
   const [failed, setFailed] = useState(false);
   const fail = useCallback(
@@ -471,7 +474,7 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
         }}
       >
         <ContextWatch onFailure={fail} />
-        <CharacterClock quality={quality} busy={sceneBusy} active={cast.byKey.size > 0 && !reduced} />
+        <CharacterClock quality={quality} busy={sceneBusy} active={cast.byKey.size > 0 && !reduced} city={env ? (ambient ?? CITY_UNDECIDED) : null} />
         <RedrawOnResize />
         <FrameWatch onReady={ready} onFrameStats={onFrameStats} host={root} />
         <CameraRig mode={mode === "2.5d" ? "aerial" : "immersive"} view={immersiveView} resetKey={resetKey} focus={focus} reduced={reduced} onViewChange={onImmersiveViewChange} viewport={staged ? viewport : null} obstacles={obstacles} />

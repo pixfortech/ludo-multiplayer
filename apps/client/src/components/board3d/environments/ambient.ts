@@ -50,15 +50,20 @@ export const ambientTime = (): number => performance.now() / 1000;
 export function affordableFps(askedFps: number, windowMs: number, delivered: number, workMs: readonly number[], floor = 0): number {
   if (askedFps <= 0) return 0;
   if (windowMs <= 0) return askedFps;
-  const asked = (askedFps * windowMs) / 1000;
-  const work = [...workMs].sort((a, b) => a - b)[Math.floor(workMs.length / 2)] ?? 0;
-  // Fewer than three-quarters of the asked frames arrived: each took about the window over the delivered count.
-  const late = delivered < asked * 0.75;
-  const cost = Math.max(work, late ? windowMs / Math.max(1, delivered) : 0);
+  const cost = frameCost(askedFps, windowMs, delivered, workMs);
   if (cost <= 0) return askedFps;
   const affordable = Math.min(askedFps, Math.floor((1000 / 3 / cost) * 10) / 10);
   if (affordable >= 3) return affordable;
   return Math.min(askedFps, floor, Math.floor((1000 / 10 / cost) * 100) / 100);
+}
+
+/** A frame's cost (ms) as measured in a window: its main-thread work, or the window over the frames delivered when they arrived late. */
+export function frameCost(askedFps: number, windowMs: number, delivered: number, workMs: readonly number[]): number {
+  const asked = (askedFps * windowMs) / 1000;
+  const work = [...workMs].sort((a, b) => a - b)[Math.floor(workMs.length / 2)] ?? 0;
+  // Fewer than three-quarters of the asked frames arrived: each took about the window over the delivered count.
+  const late = delivered < asked * 0.75;
+  return Math.max(work, late ? windowMs / Math.max(1, delivered) : 0);
 }
 
 /**
@@ -68,6 +73,32 @@ export function affordableFps(askedFps: number, windowMs: number, delivered: num
  */
 export type AmbientState = "measuring" | "live" | "eased" | "resting" | "still";
 
+/** What the city's governor decided: its state, its rate, and what a frame cost when it measured (ms). */
+export interface AmbientReport {
+  state: AmbientState;
+  fps: number;
+  frameMs: number | null;
+}
+
+/**
+ * The rate of a clock that follows the city's governor (the characters): one scene, one measurement, so it
+ * is never faster than the city; where the city rests, a slow pulse of at most `pulse` frames a second and
+ * at most a tenth of the device's time, from the cost the city measured.
+ */
+export function followerFps(own: number, city: AmbientReport, pulse = 2): number {
+  switch (city.state) {
+    case "still":
+      return 0;
+    case "measuring":
+      return own;
+    case "live":
+    case "eased":
+      return Math.min(own, city.fps);
+    case "resting":
+      return city.frameMs !== null && city.frameMs > 0 ? Math.min(own, pulse, Math.floor((100 / city.frameMs) * 100) / 100) : 0;
+  }
+}
+
 /**
  * Requests frames for the ambient life at the affordable rate (halved while
  * `busy`), only while the tab is visible, and returns that rate (0: the city
@@ -75,18 +106,35 @@ export type AmbientState = "measuring" | "live" | "eased" | "resting" | "still";
  * a two-second window and lowers the rate if the device cannot keep up; it
  * never raises it again (a quality change or a new game starts afresh).
  */
-export function useAmbientClock({ fps, busy, active, onState, floor = 0 }: { fps: number; busy: boolean; active: boolean; onState?: ((state: AmbientState, fps: number) => void) | undefined; floor?: number }): number {
+export function useAmbientClock({
+  fps,
+  busy,
+  active,
+  onState,
+  floor = 0,
+  measure = true,
+}: {
+  fps: number;
+  busy: boolean;
+  active: boolean;
+  onState?: ((state: AmbientState, fps: number, frameMs: number | null) => void) | undefined;
+  floor?: number;
+  /** False: run at `fps` as given (a clock that follows another's governor). */
+  measure?: boolean;
+}): number {
   const invalidate = useThree((s) => s.invalidate);
   const [rate, setRate] = useState(fps);
   const [measured, setMeasured] = useState(false);
+  const [cost, setCost] = useState<number | null>(null);
   useEffect(() => {
     setRate(fps);
     setMeasured(false);
+    setCost(null);
   }, [fps]);
   const live = active && rate > 0;
   useEffect(
-    () => onState?.(!active ? "still" : rate === 0 ? "resting" : rate < fps ? "eased" : measured ? "live" : "measuring", active ? rate : 0),
-    [active, rate, fps, measured, onState],
+    () => onState?.(!active ? "still" : rate === 0 ? "resting" : rate < fps ? "eased" : measured ? "live" : "measuring", active ? rate : 0, cost),
+    [active, rate, fps, measured, cost, onState],
   );
 
   // Frame timing, from frames drawn while only the city moves (not while tokens move, not in the warm-up).
@@ -95,7 +143,7 @@ export function useAmbientClock({ fps, busy, active, onState, floor = 0 }: { fps
     busyRef.current = busy;
   }, [busy]);
   useEffect(() => {
-    if (!live) return;
+    if (!live || !measure) return;
     // A one-second warm-up skips the first frames (shader compilation, the scene's first upload); then a
     // two-second window counts the frames delivered against those asked for. Tokens moving or a hidden tab
     // restart the window (other frames would be counted, or none asked for).
@@ -124,6 +172,7 @@ export function useAmbientClock({ fps, busy, active, onState, floor = 0 }: { fps
       if (now - windowStart >= WINDOW) {
         decided = true;
         const next = affordableFps(rate, now - windowStart, delivered, work, floor);
+        setCost(frameCost(rate, now - windowStart, delivered, work));
         if (next < rate) setRate(next);
         setMeasured(true);
       }
@@ -132,7 +181,7 @@ export function useAmbientClock({ fps, busy, active, onState, floor = 0 }: { fps
       before();
       after();
     };
-  }, [live, rate, floor]);
+  }, [live, rate, floor, measure]);
 
   useEffect(() => {
     if (!live) return;

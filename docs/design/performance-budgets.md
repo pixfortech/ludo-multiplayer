@@ -171,7 +171,8 @@ Same machine and method as C.2 (headless Chromium, software WebGL through SwiftS
 - **Found and fixed while measuring** (2.5D Low, before → after):
   - one skeleton per character instead of one per material (11–16 each): bone textures uploaded each frame 55 → 4, GPU textures 65 → 16;
   - the characters' slow pulse where the city rests is capped at a tenth of the device's time (it was 2 frames a second whatever a frame cost): main thread once settled 70–190% → 10–24%;
-  - the city's and the characters' governors wait for the characters to load before measuring, so loading never makes a device look slower than it is.
+  - the city's governor waits for the characters to load before measuring, so loading never makes a device look slower than it is;
+  - the characters follow the city's governor instead of measuring for themselves: two governors counting each other's frames let the characters run at 8 a second on the Windows runner while the city rested.
 - On this software renderer the city rests, so the characters are a still picture with a pulse every few seconds; on a GPU that affords the city, they animate at 8, 12 or 20 frames a second (Low, Medium, High) between moves and at the display rate while they move.
 
 Budgets for the characters (per character; 16 characters is the C.3B plan):

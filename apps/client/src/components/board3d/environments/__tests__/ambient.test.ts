@@ -2,7 +2,7 @@
 // frames are cheap, slows down where they are not, and rests (stands still)
 // where even a slow rate would take more than a third of the device's time.
 import { describe, expect, it } from "vitest";
-import { ENV_QUALITY, affordableFps, makeThrottle } from "../ambient";
+import { ENV_QUALITY, affordableFps, followerFps, frameCost, makeThrottle } from "../ambient";
 
 const repeat = (n: number, v: number) => Array.from({ length: n }, () => v);
 
@@ -60,5 +60,29 @@ describe("affordableFps", () => {
 
   it("is never asked to run when there is nothing to run", () => {
     expect(affordableFps(0, 2000, 0, [])).toBe(0);
+  });
+});
+
+describe("followerFps (the characters follow the city's governor)", () => {
+  it("is never faster than the city, and runs at its own rate while the city measures", () => {
+    expect(followerFps(8, { state: "measuring", fps: 12, frameMs: null })).toBe(8);
+    expect(followerFps(8, { state: "live", fps: 12, frameMs: 20 })).toBe(8);
+    expect(followerFps(20, { state: "eased", fps: 6.5, frameMs: 50 })).toBe(6.5);
+    expect(followerFps(8, { state: "still", fps: 0, frameMs: null })).toBe(0);
+  });
+
+  it("pulses where the city rests, within a tenth of the device's time from the cost the city measured", () => {
+    // Software WebGL: a frame costs about 330 ms, so a frame every 3.3 s.
+    expect(followerFps(8, { state: "resting", fps: 0, frameMs: 333 })).toBe(0.3);
+    // A frame of 120 ms (the city could not afford 3 a second): 0.83 a second.
+    expect(followerFps(8, { state: "resting", fps: 0, frameMs: 120 })).toBe(0.83);
+    // Never more than the pulse, and nothing without a measurement.
+    expect(followerFps(8, { state: "resting", fps: 0, frameMs: 20 })).toBe(2);
+    expect(followerFps(8, { state: "resting", fps: 0, frameMs: null })).toBe(0);
+  });
+
+  it("measures a frame's cost from its work, or the window over the frames delivered when they arrived late", () => {
+    expect(frameCost(12, 2000, 24, repeat(24, 8))).toBe(8);
+    expect(frameCost(12, 2000, 6, repeat(6, 25))).toBeCloseTo(333.3, 1);
   });
 });

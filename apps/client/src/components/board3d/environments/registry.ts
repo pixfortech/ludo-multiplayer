@@ -18,7 +18,8 @@ export interface EnvironmentProps {
   /** Called once the environment's scenery is built (for tooling). */
   onBuilt?: (info: { assets: readonly string[] }) => void;
   /** Called when the ambient life's state or rate changes (for tooling). */
-  onAmbient?: (state: AmbientState, fps: number) => void;
+  /** The governor's decision, with what a frame cost when it measured (ms; null until it has). */
+  onAmbient?: (state: AmbientState, fps: number, frameMs: number | null) => void;
 }
 
 export interface EnvironmentEntry {

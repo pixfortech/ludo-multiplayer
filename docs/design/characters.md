@@ -143,8 +143,9 @@ four 3D jobs, four rigging jobs) and a credit cap go through
 
 - One mixer per character; the clips are shared; clones share geometry and
   textures; only the tinted `team` material is cloned.
-- The characters' ambient clock runs at 8, 12 or 20 fps (Low, Medium, High)
-  under the city's governor. Where the city would rest, the characters keep a
+- The characters' ambient clock runs at 8, 12 or 20 fps (Low, Medium, High),
+  never faster than the city's governor allows (every frame draws the whole
+  scene, so the city measures for both). Where the city would rest, the characters keep a
   slow pulse instead (at most 2 frames a second and a tenth of the device's
   time: a frame every 3 s with software WebGL). Walking and one-off reactions
   render at full rate.
