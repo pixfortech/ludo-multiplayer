@@ -26,23 +26,32 @@ One die identity used everywhere: idle, rolling and result, in 2D and 3D. The se
 | waiting (not your turn) | 70% opacity; the tray is neutral |
 | six | gold ring flash on pips + a single soft radial burst behind the die (no confetti) |
 
-## 3D die
+## 3D die (as built in C.3C.1; provisional look)
+
+The 2.5D and 3D boards throw a real die into the base of the player who rolled
+(`board3d/dice/Die3D.tsx`, rules in `board3d/dice/dieMath.ts`). The 2D board
+keeps the 2D die; in 3D the tray shows a static face of the value (no second
+animation).
 
 | Property | Value |
 | --- | --- |
-| Size | 0.70 board cells |
-| Geometry | rounded box, 4 bevel segments; pips as real indents (sphere-subtracted) |
-| Triangles | ≤ 3,000 (LOD0), ≤ 900 (LOD1, pips via normal map) |
-| Material | `MeshPhysicalMaterial`: ivory, roughness 0.30, clearcoat 0.6; pips `MeshStandardMaterial` ink, roughness 0.6 |
-| Pivot | geometric centre |
+| Geometry | `RoundedBoxGeometry`, edge radius 15% of the side, 2 segments at Low, 4 above (about 300 / 1,000 triangles) |
+| Faces | one 3 × 2 canvas atlas (128 px cells at Low, 256 px above): ivory body, recessed ink pips, gold rings on the six; standard layout (opposite faces sum to 7; 1-2-3 counter-clockwise) |
+| Material | `MeshStandardMaterial`, roughness 0.38; one draw call (no material groups) |
+| Shadow | a soft radial contact disc that widens and fades with height |
+| Size | 0.78 world units on large boards, up to 1.0 on small screens (a cell is 1) |
+| Resting spot | inside the roller's base, on the side away from the start cell, clear of the four characters and of every path out of the base |
 
-### Roll animation (deterministic, not physics-decided)
+### Sequence (time-based, never physics-decided)
 
-1. The server's value arrives.
-2. The client picks a pre-authored tumble from a small set (keyframed quaternions over 650 ms with 2–3 bounces) whose **final orientation shows that value face-up**.
-3. The die settles, the result face is highlighted, and only then can any movement start.
+1. **Ready** (own roll, request on its way): the die lifts from its spot into the hand over the base's outer edge (260 ms) and shakes softly.
+2. **Throw** (the server's value has arrived): from wherever it is, an arc and two bounces to its resting spot, rolling forward along its direction of travel with at least two whole turns and a small wobble, over `DIE3D_ROLL_MS` (1,150 ms). The plan picks, among the orientations that show the server's value on top, the one reached by rolling forward; the last part of the turn happens on the ground, so there is no snap. A seed (the throw's id) varies the turn and wobble; it never decides a value.
+3. **Reveal**: the playback reveals the value when the throw ends; the tray shows it at the same time; tokens move only after.
+4. **Turn passes**: a short toss (520 ms) to the next player's base, still showing its value.
 
-The animation can never "land" on a different value than the server sent, and nothing on the client is random beyond the choice of tumble.
+Every motion is a function of time: at any frame the die is where its plan says, so dropped frames, a slow device or a remounted board (a quality or view change) never leave it mid-air, and a remount never replays a throw. Frames are requested only while it moves.
+
+**Reduced motion**: no lift, throw or toss; the die is simply on its value in the right base.
 
 ## Dice tray
 

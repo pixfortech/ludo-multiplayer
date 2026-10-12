@@ -82,7 +82,8 @@ their own bodies.
 - Skeleton: MakeHuman's `game_engine` rig (53 bones, Unreal-style names).
 - Clips (30 fps, baked per character): `idle`, `talk`, `listen`, `drink`,
   `read`, `look_around`, `stretch`, `exercise`, `wave`, `excited`, `dismay`,
-  `walk`, `run`. `read` and `dismay` are layered over `idle` with IK
+  `cheer`, `upset`, `walk`, `run` (`cheer` and `upset`, CMU subject 79, were
+  added in C.3C.1 for the gameplay reactions). `read` and `dismay` are layered over `idle` with IK
   (newspaper held at reading distance; hands to the head).
 - Retargeting: each mapped source bone's world rotation since its rest pose is
   applied to the target bone after turning the target's rest direction onto
@@ -107,7 +108,8 @@ and the playback's motion. Nothing in it can move a token.
 | Idle / Interacting | At the base, by the shared routine (a talker and a listener at once) | `talk`, `listen`, `drink`, `read`, `look_around`, `stretch`, `exercise`, `idle` |
 | TurnAlert | The first 1.6 s of their seat's turn | `look_around`, facing the board |
 | Selectable | Their token is movable | `idle`, facing the board, the movable ring on the plinth |
-| Selected | The player has picked them | `idle`, lifted ring |
+| Selected | The player has picked them | `wave` once (1.1 s, an excited acknowledgement), then `idle`, lifted ring |
+| Cheering / Noticing / Upset | A reaction to a game event (§ 5a), for the cue's length | `excited`, `cheer`, `wave` / `look_around` / `upset`, facing the board |
 | Excited | The first 40% of an `open` motion (a six, after the server accepted the move) | `excited` |
 | LeavingBase | The rest of the `open` motion: walking to the start cell | `walk` |
 | Walking | A `hop` or `land` motion: one cell at a time | `walk`, or `run` above 1.9 units/s (long moves) |
@@ -119,6 +121,33 @@ The playback (`useBoardPlayback`) starts motions only once the server's new
 state has arrived and the die has been revealed; a refresh or reconnect takes
 the server's state as it is (no motion), so nobody replays a celebration or a
 walk.
+
+## 5a. Reactions to game events (C.3C.1)
+
+The characters react to what the server's history says happened, never to
+what they appear to be near. The playback turns each committed event into a
+**cue** (`game/presentation.ts`): a kind, the player, the tokens it is about,
+when it was shown and how long it lasts. Each character asks
+`characters/reactions.ts` what it does for the latest active cue; the brain
+plays that above its routine and below travel (a walking, captured or
+returning character never stops to react). Reactions are short, varied
+(rotated by token and cue), and end on their own: nothing waits on them.
+
+| Cue (length) | Who reacts | Reaction |
+| --- | --- | --- |
+| Six (1.4 s) | The roller's team, not those home | A jump, a cheer, a wave or a look, varied across the four |
+| Selected | The chosen character | A quick wave; it leaves only after the server has accepted the move |
+| Capture (1.5 s) | The attacker | A cheer (the victim plays `dismay` and walks back to its own base slot: the `capture` motion) |
+| Bonus (1.2 s) | One of the roller's team still in base | A wave |
+| Three sixes (1.6 s) | The roller's team | One is upset, the others look |
+| No legal move (1.2 s) | The roller's team in base | One is upset, the others look |
+| Home (1.5 s) | The mover's teammates | A cheer or a wave (the mover plays its own arrival, `celebrating`) |
+| Finished (2.2 s) | The finishing team | A jump or a cheer |
+| Win (3.2 s) | The winning team, then everyone else | Cheer or jump; the other teams wave. The victory screen opens after it |
+
+Cues are presented only for seats played by characters and never under
+reduced motion. A refresh, a reconnect or a skipped version shows the
+server's state as it is: no cue, no reaction, no replay.
 
 ## 6. Movement
 
@@ -149,7 +178,7 @@ models could produce textured, rigged characters from approved concept art:
 1. Generate or draw one front-view concept per character (the four above).
 2. `meshy_v7_image_to_3d` (standard model, about 20k triangles,
    symmetry on, texture on), then `meshy_rigging` (humanoid rig).
-3. Retarget our 13 clips onto the generated rig with `tools/characters`
+3. Retarget our 15 clips onto the generated rig with `tools/characters`
    (the runtime needs only the clip names), then run `optimize.mjs`.
 
 **Cost**: unknown. Higgsfield shows no price for 3D jobs until a job is

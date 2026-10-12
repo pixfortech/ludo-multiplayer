@@ -26,9 +26,38 @@ Timings and easings live in `MOTION` (`packages/design-tokens/src/ui.ts`) and ar
 | **Three sixes** | third die reveals → die shakes softly (200 ms) → "Three sixes: turn forfeited" → turn change |
 | **Victory** | final home entry → board dims to 85% except the winner's tokens → winner's chip enlarges with a crown → one tasteful confetti burst in seat colours (≤ 80 particles, 1.2 s, 2D canvas or instanced 3D quads) → results sheet; total `victory` 2.4 s |
 
+## Presentation sequence (C.3C.1, 2.5D/3D)
+
+One plan per server version (`game/playbackPlan.ts`): a list of steps at fixed
+times (the die thrown, revealed; the cue; each hop; the capture; the home
+entry; settle), executed by one timer queue (`useBoardPlayback`). Each step
+applies its part of the view and emits its presentation events
+(`game/presentation.ts`): `die-throw`, `die-land`, `cue`, `token-move`, and
+`victory-screen` from the game screen. These are the hooks for sound and
+dialogue (dice sounds, reactions, Bengali lines with English subtitles,
+capture, home, victory music); none are connected yet.
+
+- Only consecutive versions are played; a refresh, a reconnect or a skipped
+  version snaps to the server's state and emits nothing (no replay).
+- A newer version or a pause fast-forwards the plan; every step and cue has a
+  fixed length, so nothing can wait forever or hold input.
+- A six with characters: die lands → team reacts (1.4 s, while the choice is
+  already open) → the chosen character waves and leaves after the server
+  accepts the move.
+- A capture: arrival → capture cue (attacker cheers; victim's dismay and walk
+  back to its own base slot) → bonus cue.
+- Camera emphasis: in the 3D follow view only, a capture draws the camera to
+  the capture cell and a home entry or the win to the board's centre for
+  1.6 s, within the camera's usual zoom limits. The aerial 2.5D view and an
+  overview or free view the player chose never move; a drag or the Overview
+  button takes over at once.
+- The victory screen opens after the win cue (3.2 s) when characters play the
+  game, else after 700 ms.
+
 ## Reduced motion (`prefers-reduced-motion` or the in-game setting)
 
-- The die shows its result directly (crossfade 120 ms); no tumble.
+- The die shows its result directly (crossfade 120 ms); no tumble. In 2.5D/3D the 3D die is placed on its value without a throw.
+- No character reactions to game events (cues are not presented).
 - Tokens slide straight to the destination in 180 ms, or teleport with a 120 ms crossfade for captures.
 - No pulses (movable tokens get a static ring), no bursts or confetti; banners and announcements are unchanged.
 - The order of reveals and the minimum pause before an auto-move (350 ms) are kept, because they carry meaning.
