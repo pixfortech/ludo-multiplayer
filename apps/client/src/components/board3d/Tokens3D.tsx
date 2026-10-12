@@ -15,7 +15,7 @@
 import { Suspense, lazy, memo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import type { Group} from "three";
-import { CylinderGeometry, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, SpriteMaterial, type BufferGeometry, type Material } from "three";
+import { CylinderGeometry, Frustum, Matrix4, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, Sphere, SpriteMaterial, Vector3, type BufferGeometry, type Camera, type Material } from "three";
 import type { WorldPoint } from "@ludo/board-layouts";
 import { INK, type PlayerIdentity } from "@ludo/design-tokens";
 import type { BoardTokenState } from "../board/BoardToken";
@@ -41,6 +41,10 @@ export interface TokenCharacter {
   partners: Partial<Record<IdleBehaviour, WorldPoint>>;
   /** When this seat's turn began (performance.now), or null when it is not this seat's turn. */
   turnStartedAt: number | null;
+  /** Seconds this team's base routine is ahead of the shared schedule (teams do not move in step). */
+  phase: number;
+  /** Its file may load now (teams load one after another); until then it stands as a pawn. */
+  load: boolean;
 }
 
 /** A character's plinth (world units). */
@@ -172,6 +176,17 @@ export class Breathing {
 }
 const SLOW_FRAME_S = 0.1;
 const PAUSE_MS = 4000;
+
+const viewFrustum = new Frustum();
+const viewMatrix = new Matrix4();
+const viewSphere = new Sphere(new Vector3(), 0.7);
+/** A character standing at (x, y, z) is in the camera's view (a sphere round its body). */
+function inView(camera: Camera, x: number, y: number, z: number): boolean {
+  viewMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  viewFrustum.setFromProjectionMatrix(viewMatrix);
+  viewSphere.center.set(x, y + 0.5, z);
+  return viewFrustum.intersectsSphere(viewSphere);
+}
 
 interface Travel {
   from: WorldPoint;
@@ -321,7 +336,7 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
           token: token.state === "finished" ? "finished" : token.state === "movable" ? "movable" : token.state === "selected" ? "selected" : token.state === "unmovable" ? "unmovable" : "idle",
           travel: live ? { kind: live.kind, progress, groundSpeed: groundSpeed(live.kind, live.from, live.to, live.ms) } : null,
           turnAge: character.turnStartedAt === null ? null : (performance.now() - character.turnStartedAt) / 1000,
-          time: performance.now() / 1000,
+          time: performance.now() / 1000 + character.phase,
         },
         { walkSpeed: entry?.clips.walk?.speed ?? 1.6, runSpeed: entry?.clips.run?.speed ?? 3, scale: characterScale(character.key) },
       );
@@ -333,9 +348,12 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
       if (yaw.current === null) yaw.current = target ?? 0;
       if (target !== null) yaw.current = reduced ? target : turnToward(yaw.current, target, Math.max(0.05, delta) * 7);
       controller.current.root.rotation.y = yaw.current;
-      controller.current.update(pose, delta);
-      // One-off reactions play at full rate even when the city's ambient life is resting.
-      if (["turnAlert", "excited", "celebrating", "captured", "returningToBase", "leavingBase", "reachingHome", "walking"].includes(pose.state) || (target !== null && Math.abs(target - yaw.current) > 0.01)) invalidate();
+      // Off screen (a close 3D view), its pose waits: the animation resumes where it was when it comes back into view.
+      if (inView(state.camera, s.x, y, s.z)) controller.current.update(pose, delta);
+      // Moves and one-off reactions play at full rate even when the city's ambient life is resting. Turning to a
+      // partner in the base routine does not: it follows the characters' own (possibly slow) clock, so four bases
+      // changing scene never hold a slow device at full rate.
+      if (["turnAlert", "excited", "celebrating", "captured", "returningToBase", "leavingBase", "reachingHome", "walking"].includes(pose.state)) invalidate();
       lastPose.current = pose;
       // For the token mirror (tests and tooling): what the character is doing.
       g.userData.characterState = pose.state;
@@ -381,7 +399,7 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
         </group>
       ) : null}
       <group ref={body}>
-        {character ? (
+        {character?.load ? (
           <Suspense fallback={<PawnBody identity={token.identity} state={token.state} kit={kit} textures={textures} shadows={shadows} />}>
             {/* A miniature on its plinth: the seat colour reads from any camera, and the base is the obvious thing to pick. */}
             <mesh geometry={kit.plinth} material={kit.body(token.identity, token.state === "unmovable")} dispose={null} />

@@ -1,9 +1,13 @@
-# Human characters (Batch C.3A prototype)
+# Human characters (Batches C.3A and C.3B, prototype)
 
-Status: **prototype**. Four characters play the Crimson team in Kolkata's 3D
-and 2.5D board. Everything here is presentation: the server, the rules, the
-board geometry, the move tray and the 2D board are unchanged. Other seats and
-other cities keep the pawns.
+Status: **functional prototype; the visual design is not approved.** Sixteen
+characters, four teams of four, play every seat of Kolkata's 3D and 2.5D board
+(C.3A built the first team, C.3B the other three). Their looks are
+provisional and will be replaced in the mandatory visual redesign; this batch
+established that they work (identity, team colours, skeletons, clips,
+routines, selection, movement, loading). Everything here is presentation: the
+server, the rules, the board geometry, the move tray and the 2D board are
+unchanged. Other cities keep the pawns.
 
 ## 1. Pipeline decision
 
@@ -39,13 +43,19 @@ The quality switch picks the level. Textures are WebP inside the GLB. Each file
 holds one skinned mesh with two materials (`skin`, `team`) plus a few small
 ones (hair locks, eyes, glasses), and the prop meshes.
 
-## 3. The four characters
+## 3. The sixteen characters
 
-All four wear the seat's colour, so the team reads from any camera. The
-material named `team` is tinted at runtime with the seat's identity colour, so
-no personality is tied to crimson: the same people can play any seat colour,
-and the mapping from a seat to its people is configuration
-(`CHARACTER_TEAMS` in `characters/catalog.ts`).
+Every character wears its player's colour, so a team reads from any camera.
+The material named `team` is tinted at runtime with the player's identity
+colour, so no personality is tied to a colour: any team can play any seat and
+colour, and the mapping from a seat to its people is configuration
+(`CHARACTER_TEAMS` in `characters/catalog.ts`). In every team, token 1 is the
+storyteller, 2 the tea drinker (with a cup), 3 the reader (with a newspaper)
+and 4 the active one, so each base runs the same coordinated routine with
+different people; each team starts it at a different point (`routinePhase`),
+so the four bases are not in step.
+
+**Team 1 (seat 1)**
 
 | Token | Number | Who | Look | Waiting at the base |
 | --- | --- | --- | --- | --- |
@@ -54,9 +64,18 @@ and the mapping from a seat to its people is configuration
 | 3 | 3 | **Kagoj**, the newspaper reader | Middle-aged man, short side-parted hair, glasses, stubble; shirt, trousers, belt, watch | Reads the paper, looks up now and then |
 | 4 | 4 | **Byayam**, the exerciser | Young athletic woman, ponytail, headband; tracksuit | Stretches, light exercise, rests |
 
-They differ in face, hair, gender presentation, age, build, height (1.54 to
-1.86 m before scaling), clothing cut and accessories. The number is on the
-back of each outfit.
+**Teams 2-4 (seats 2-4, C.3B)**
+
+| Seat | Token 1 (storyteller) | Token 2 (tea) | Token 3 (reader) | Token 4 (active) |
+| --- | --- | --- | --- | --- |
+| 2 | **Dida**, grandmother: white bun, round glasses, bindi; salwar kameez, bangles | **Rikshawala**, wiry rickshaw-puller: crop, moustache, stubble; panjabi | **Chhatro**, student: side-parted hair, glasses; shirt and trousers | **Khelowar**, footballer: crop, stubble; tracksuit, watch |
+| 3 | **Kaku**, uncle with opinions: grey receding hair, heavy build; shirt, watch | **Didi**, office-goer: ponytail; salwar kameez, bangles, watch | **Adhyapika**, retired professor: grey bun, glasses; salwar kameez | **Yoga Mashi**, homemaker: bun, bindi; tracksuit, bangles |
+| 4 | **Kobi**, poet: dark beard, side-parted hair; panjabi | **Boudi**, the neighbourhood's news: braid, bindi; salwar kameez, bangles | **Dokandar**, sweet-shop owner: moustache; panjabi, watch | **Kishore**, schoolboy: crop; tracksuit |
+
+They differ in face, hair, gender presentation, age (a schoolboy to a
+grandmother), build, height, clothing cut and accessories. The number (1-4)
+is on the back of each outfit. All sixteen carry the same 13 clips, baked to
+their own bodies.
 
 ## 4. Rig and animation
 
@@ -153,7 +172,13 @@ four 3D jobs, four rigging jobs) and a credit cap go through
   routine does not animate and moves slide (no walk).
 - No shadows, no per-frame React updates (the token mirror's attributes are
   written only when they change), and everything owned is disposed on unmount.
-- Built for 16 characters (four seats): level Low is 8.4k triangles each.
+- Sixteen characters (four seats): level Low is about 8.4k triangles each.
+- **Loading, one team at a time**: the player's own team first, then the
+  others by seat (`loadOrder`, `loadableSeats`). Until a character has loaded
+  (and its shaders have compiled) its token stands as a pawn, so the board is
+  playable at once and decoding sixteen files never stalls the page in one go.
+- **Off-screen characters do not animate**: in a close 3D view, a character
+  outside the camera's view keeps its pose until it is back in view.
 
 Measurements: [performance budgets § Human characters](performance-budgets.md#human-characters-batch-c3a-2026-10-12); on a real GPU: [`docs/qa/gpu-performance.md`](../qa/gpu-performance.md).
 
@@ -163,5 +188,9 @@ Measurements: [performance budgets § Human characters](performance-budgets.md#h
   skin. The faces read at close range but are not portrait quality.
 - Mocap retargeting is automatic: some poses (hands, shoulders) are rough, and
   fingers do not move.
-- Only Kolkata's Crimson seat has characters; the other 12 are C.3B work.
-- Not yet measured on a real GPU (see the GPU audit instructions).
+- The visual design is not approved: every character's face, hair, skin and
+  clothing is provisional (see the list in the C.3B report) and will be
+  replaced in the redesign phase.
+- All four teams share the same four roles and routine (with offsets); more
+  varied activities per team are future work.
+- High and Ultra are not validated on a real GPU (see the GPU audit page).

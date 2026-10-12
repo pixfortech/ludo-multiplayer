@@ -37,7 +37,7 @@ export function BoardViewControls({ mode, unavailable, quality, immersiveView, o
       {unavailable ? <p className="text-[12px] text-ink-muted">{unavailable}</p> : null}
       {characters && mode !== "2d" ? (
         <p className="text-[12px] text-ink-muted" data-testid="characters-prototype">
-          Prototype characters: the Crimson team is played by four Kolkata people.
+          Prototype characters: every team is played by four Kolkata people.
         </p>
       ) : null}
       {mode !== "2d" ? (

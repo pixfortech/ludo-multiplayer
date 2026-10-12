@@ -31,7 +31,7 @@ import { environmentFor } from "./environments/registry";
 import { followerFps, useAmbientClock, type AmbientReport, type AmbientState } from "./environments/ambient";
 import type { StageViewport } from "./CameraRig";
 import type { IdleBehaviour } from "./characters/brain";
-import { CHARACTERS, characterFor } from "./characters/catalog";
+import { CHARACTERS, characterFor, loadableSeats, loadOrder, routinePhase } from "./characters/catalog";
 import { characterWork } from "./characters/work";
 
 export interface Board3DProps extends ClassicBoardProps {
@@ -385,12 +385,20 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
   const onCharacterLoaded = useCallback((key: string, level: string) => setLoadedCharacters((s) => (s.has(`${key}@${level}`) ? s : new Set(s).add(`${key}@${level}`))), []);
   const charactersLoading = !reduced && [...cast.byKey.keys()].some((k) => !loadedCharacters.has(`${k}@${quality}`));
   const sceneBusy = busy || charactersLoading;
+  // One team's files at a time (decoding sixteen people at once would stall the page): yours first.
+  const loadable = useMemo(() => {
+    const seats = [...cast.byKey.values()].map((c) => c.seat);
+    const keysOf = (seat: number) => [...cast.byKey].filter(([, c]) => c.seat === seat).map(([k]) => k);
+    return loadableSeats(loadOrder(seats, youSeat), (seat) => keysOf(seat).every((k) => loadedCharacters.has(`${k}@${quality}`)));
+  }, [cast, youSeat, loadedCharacters, quality]);
   const items: Token3DInput[] = useMemo(
     () =>
       placements.map((p) => {
         const state: BoardTokenState = p.finished ? "finished" : (states[p.key] ?? "idle");
         const c = cast.byKey.get(p.key);
-        const character = c ? { key: c.key, behaviour: c.behaviour, quality, partners: cast.partners.get(c.seat) ?? {}, turnStartedAt: currentSeat === c.seat ? turnStartedAt : null } : null;
+        const character = c
+          ? { key: c.key, behaviour: c.behaviour, quality, partners: cast.partners.get(c.seat) ?? {}, turnStartedAt: currentSeat === c.seat ? turnStartedAt : null, phase: routinePhase(c.seat), load: loadable.has(c.seat) }
+          : null;
         return {
           character,
           key: p.key,
@@ -405,7 +413,7 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
           interactive: Boolean(onActivate) && (state === "movable" || state === "selected"),
         };
       }),
-    [placements, states, identityOf, motion, badges, onActivate, cast, quality, currentSeat, turnStartedAt],
+    [placements, states, identityOf, motion, badges, onActivate, cast, quality, currentSeat, turnStartedAt, loadable],
   );
   const candidates = useMemo(() => items.filter((t) => t.interactive).map((t) => ({ key: t.key, at: t.at })), [items]);
 

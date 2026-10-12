@@ -1,5 +1,5 @@
-// C.3A visual evidence (not a check): screenshots of the Crimson team's
-// characters for review. Runs only with E2E_SHOTS_DIR set, e.g.
+// C.3A/C.3B visual evidence (not a check): screenshots of Kolkata's four
+// teams of characters for review, in a four-player room. Runs only with E2E_SHOTS_DIR set, e.g.
 //   E2E_SHOTS_DIR=shots npx playwright test e2e/tests/characters-evidence.spec.ts
 // Add E2E_RECORD_DIR to record both players' screens to video as well.
 import { expect, test, type Page } from "@playwright/test";
@@ -10,8 +10,8 @@ const dir = process.env.E2E_SHOTS_DIR;
 
 async function ready(page: Page) {
   await expect
-    .poll(async () => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-testid="board-mirror"] li')].filter((el) => el.dataset.characterReady === "true").length), { timeout: 60_000 })
-    .toBe(4);
+    .poll(async () => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('[data-testid="board-mirror"] li')].filter((el) => el.dataset.characterReady === "true").length), { timeout: 180_000 })
+    .toBe(16);
 }
 
 /** A screenshot of the area round some tokens (their projected centres), padded. */
@@ -27,49 +27,54 @@ async function around(page: Page, keys: string[], pad: number, path: string) {
   await page.screenshot({ path, clip: { x, y, width, height } });
 }
 
-test("C.3A evidence: the Crimson base from above, the 3D view and each character close up", async ({ browser }) => {
+test("C.3B evidence: all four bases from above, the 3D view, each team followed and every character close up", async ({ browser }) => {
   test.skip(!dir, "set E2E_SHOTS_DIR to take the evidence screenshots");
-  test.setTimeout(6 * 60_000);
+  test.setTimeout(12 * 60_000);
   const aman = await openPlayer(browser, "Aman", "wide", { board: "2.5d" });
   const ben = await openPlayer(browser, "Ben", "wide", { board: "3d" });
-  const code = await createRoom(aman, { players: 2, city: "Kolkata" });
-  await joinRoom(ben, code);
-  await startGame(aman, [aman, ben]);
-  const table = await seatTable(code, [aman, ben]);
-  const crimson = [0, 1, 2, 3].map((t) => `${aman.id}:${t}`);
+  const cara = await openPlayer(browser, "Cara", "phone", { board: "2d" });
+  const dev = await openPlayer(browser, "Dev", "phone", { board: "2d" });
+  const players = [aman, ben, cara, dev];
+  const code = await createRoom(aman, { players: 4, city: "Kolkata" });
+  for (const p of [ben, cara, dev]) await joinRoom(p, code);
+  await startGame(aman, players);
+  const table = await seatTable(code, players);
+  const team = (id: string) => [0, 1, 2, 3].map((t) => `${id}:${t}`);
+  const names = (page: Page, keys: string[]) => page.evaluate((ks) => ks.map((k) => document.querySelector<HTMLElement>(`[data-testid="board-mirror"] li[data-key="${k}"]`)!.dataset.character!), keys);
 
-  // Aerial (2.5D): the whole board, then the Crimson base.
+  // Aerial (2.5D): the whole board with sixteen people, then each base.
   await expectBoard3d(aman.page, "2.5d");
   await ready(aman.page);
   await aman.page.waitForTimeout(4000);
-  await aman.page.screenshot({ path: `${dir}/characters-aerial.png` });
-  await around(aman.page, crimson, 110, `${dir}/characters-base-aerial.png`);
+  await aman.page.screenshot({ path: `${dir}/teams-aerial.png` });
+  for (const [i, p] of players.entries()) await around(aman.page, team(p.id), 110, `${dir}/teams-base-${i + 1}-aerial.png`);
 
-  // 3D: the isometric overview, then the base followed and zoomed in.
+  // 3D: the isometric overview; then, as each player's turn comes, the camera follows that base.
   await expectBoard3d(ben.page, "3d");
   await ready(ben.page);
   await ben.page.waitForTimeout(3000);
-  await ben.page.screenshot({ path: `${dir}/characters-iso.png` });
+  await ben.page.screenshot({ path: `${dir}/teams-iso.png` });
   await visible(ben.page.getByRole("button", { name: "Follow token" })).click();
-  await ben.page.waitForTimeout(1500);
-  const canvas = (await ben.page.locator("canvas[data-board-gl]").boundingBox())!;
-  await ben.page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
-  for (let i = 0; i < 12; i++) {
-    await ben.page.mouse.wheel(0, -120);
-    await ben.page.waitForTimeout(80);
+  for (let turn = 0; turn < 4; turn++) {
+    const current = (await table.state()).game!.currentPlayerId;
+    const p = players.find((x) => x.id === current)!;
+    const i = players.indexOf(p);
+    await ben.page.waitForTimeout(2500);
+    await ben.page.screenshot({ path: `${dir}/teams-base-${i + 1}-3d.png` });
+    const keys = team(p.id);
+    const who = await names(ben.page, keys);
+    for (const [j, key] of keys.entries()) await around(ben.page, [key], 150, `${dir}/teams-close-${i + 1}-${who[j]}.png`);
+    await table.act(1); // no token out: the turn passes
   }
-  await ben.page.waitForTimeout(2500);
-  await ben.page.screenshot({ path: `${dir}/characters-base-3d.png` });
-  const names = ["adda", "tea", "newspaper", "exercise"];
-  for (const [i, key] of crimson.entries()) await around(ben.page, [key], 170, `${dir}/characters-close-${names[i]}.png`);
 
-  // A six: the storyteller leaves the base (recorded when E2E_RECORD_DIR is set).
+  // A six: the current player's storyteller leaves the base (recorded when E2E_RECORD_DIR is set).
+  const current = (await table.state()).game!.currentPlayerId;
   await table.roll(6);
   await aman.page.waitForTimeout(2500);
-  await around(aman.page, crimson, 110, `${dir}/characters-turn-aerial.png`);
   await table.move(0);
   await aman.page.waitForTimeout(6000);
-  await aman.page.screenshot({ path: `${dir}/characters-departed-aerial.png` });
-  await ben.page.screenshot({ path: `${dir}/characters-departed-3d.png` });
-  for (const p of [aman, ben]) await p.context.close();
+  await aman.page.screenshot({ path: `${dir}/teams-departed-aerial.png` });
+  await ben.page.screenshot({ path: `${dir}/teams-departed-3d.png` });
+  console.log("departed:", current);
+  for (const p of players) await p.context.close();
 });

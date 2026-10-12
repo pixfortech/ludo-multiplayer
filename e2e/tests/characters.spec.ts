@@ -54,8 +54,9 @@ function characters(page: Page): Promise<CharacterView[]> {
   );
 }
 
-async function allReady(page: Page, count = 4) {
-  await expect.poll(async () => (await characters(page)).filter((c) => c.ready).length, { message: "the characters have loaded", timeout: 60_000 }).toBe(count);
+/** Every character on the board has loaded (two teams in a two-player game). */
+async function allReady(page: Page, count = 8) {
+  await expect.poll(async () => (await characters(page)).filter((c) => c.ready).length, { message: "the characters have loaded", timeout: 90_000 }).toBe(count);
 }
 
 /** Records each character's states in the page (every change, with a timestamp). */
@@ -83,7 +84,7 @@ async function kolkata(host: { name: string; device: Device; board: BoardView },
   return { aman, ben, table, code };
 }
 
-test("Kolkata's Crimson seat is played by four distinct characters in its colours, with every clip; everyone else keeps pawns", async ({ browser }) => {
+test("each Kolkata seat is played by its own team of four distinct characters in its colours, with every clip; other cities keep pawns", async ({ browser }) => {
   const { aman, ben, table } = await kolkata({ name: "Aman", device: "wide", board: "2.5d" }, { name: "Ben", device: "phone", board: "3d" }, browser);
   for (const p of [aman, ben]) {
     await expectBoard3d(p.page, p === aman ? "2.5d" : "3d");
@@ -91,7 +92,13 @@ test("Kolkata's Crimson seat is played by four distinct characters in its colour
     const cs = await characters(p.page);
     const crimson = cs.filter((c) => c.key.startsWith(`${aman.id}:`));
     expect(crimson.map((c) => c.character), `${p.name}: tokens 0-3 are the four people`).toEqual(["adda", "tea", "newspaper", "exercise"]);
-    expect(cs.filter((c) => !c.key.startsWith(`${aman.id}:`)).every((c) => c.character === null), "the other seat keeps pawns").toBe(true);
+    // Ben's seat has its own team: four other people, in his colour.
+    const others = cs.filter((c) => !c.key.startsWith(`${aman.id}:`));
+    expect(others.map((c) => c.character).every((k) => k !== null), `${p.name}: Ben's tokens are people too`).toBe(true);
+    expect(new Set([...crimson, ...others].map((c) => c.character)).size, "eight different people").toBe(8);
+    expect(new Set(others.map((c) => c.team)).size, "one colour for Ben's team").toBe(1);
+    expect(others[0]!.team, "Ben's team wears his colour, not crimson").not.toBe(crimson[0]!.team);
+    for (const c of others) expect(c.clips, `${c.character}: every clip`).toEqual(CLIPS);
     for (const c of crimson) {
       expect(c.clips, `${c.character}: every clip`).toEqual(CLIPS);
       // Tinted to the seat's colour: a crimson red.
@@ -124,11 +131,29 @@ test("Kolkata's Crimson seat is played by four distinct characters in its colour
   expect(clipsSeen.get("newspaper")).toContain("read");
   expect([...clipsSeen.get("exercise")!].some((c) => c === "stretch" || c === "exercise")).toBe(true);
   expect(clipsSeen.get("tea")).toContain("drink");
-  // Another city has no characters at all.
   await table.act(6, () => 0);
+  await table.act(1); // Aman's bonus roll moves his storyteller on
+
+  // The second team plays too: Ben, on his phone in 3D, picks one of his own people by touch (a tap selects,
+  // a second plays), and Aman's screen shows that character leaving Ben's base.
+  await watchStates(aman.page);
+  await table.roll(6);
+  const bens = `${ben.id}:0`;
+  await expect.poll(async () => (await boardTokens(ben.page)).filter((t) => t.state === "movable").length).toBe(4);
+  await pickToken3d(ben, bens);
+  await expect.poll(async () => (await characters(ben.page)).find((c) => c.key === bens)!.state, { message: "Ben's character is selected" }).toBe("selected");
+  const before = (await table.state()).game!.stateVersion;
+  await pickToken3d(ben, bens);
+  await expect.poll(async () => (await table.state()).game!.stateVersion, { message: "Ben's tap plays the move" }).toBeGreaterThan(before);
+  table.moves++;
+  await expect
+    .poll(async () => (await states(aman.page)).filter((x) => x.key === bens).map((x) => x.state), { message: "Ben's character leaves his base", timeout: 20_000 })
+    .toEqual(expect.arrayContaining(["excited", "leavingBase"]));
+  await table.expectInSync();
   noErrors([aman, ben]);
   await close([aman, ben]);
 
+  // Another city has no characters at all.
   const dev = await openPlayer(browser, "Dev", "wide", { board: "2.5d" });
   const eve = await openPlayer(browser, "Eve", "phone", { board: "2d" });
   const code = await createRoom(dev, { players: 2, city: "Delhi" });
@@ -283,7 +308,7 @@ test("focus follows the walking character; mouse in 2.5D and touch in 3D pick ch
     await visible(phone.page.getByRole("radio", { name: level })).click();
     await expect(phone.page.getByTestId("game-board")).toHaveAttribute("data-quality", level.toLowerCase());
     await expectBoard3d(phone.page, "3d");
-    await expect.poll(async () => (await characters(phone.page)).filter((c) => c.ready && c.level === level.toLowerCase()).length, { timeout: 60_000 }).toBe(4);
+    await expect.poll(async () => (await characters(phone.page)).filter((c) => c.ready && c.level === level.toLowerCase()).length, { timeout: 90_000 }).toBe(8);
     await expect(phone.page.locator("canvas")).toHaveCount(1);
     counts[level] = Number(await phone.page.getByTestId("game-board").getAttribute("data-gl-geometries"));
   }

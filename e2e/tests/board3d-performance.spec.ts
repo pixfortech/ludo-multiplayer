@@ -32,8 +32,11 @@ interface Sample {
   frameWorkMs: number | null;
   /** Of which animating the human characters (Kolkata's Crimson team), ms per frame. */
   characterMs: number | null;
-  /** From the reload to all four characters loaded (Kolkata), ms. */
+  /** From the reload to every character loaded (Kolkata: four per player), ms. */
   charactersReadyMs: number | null;
+  /** From the reload to the player's own team loaded (it loads first), ms. */
+  ownTeamReadyMs: number | null;
+  players: number;
   /** The city's ambient life once settled: live, eased (slowed for this device), resting (stopped for this device) or still, with its rate. */
   ambient: string | null;
   /** Main-thread busy while idle once the city has settled, %. */
@@ -72,7 +75,7 @@ function frames(page: Page, ms: number): Promise<{ count: number; worst: number 
   );
 }
 
-async function measure(browser: Browser, view: Exclude<BoardView, "default">, quality: "low" | "medium" | null, city?: "Kolkata"): Promise<Sample> {
+async function measure(browser: Browser, view: Exclude<BoardView, "default">, quality: "low" | "medium" | null, city?: "Kolkata", players: 2 | 4 = 2): Promise<Sample> {
   const aman = await openPlayer(browser, "Aman", "desktop", { board: view });
   if (quality) await aman.context.addInitScript((q) => localStorage.setItem("ludo.board-view.v1", JSON.stringify({ mode: localStorage.getItem("ludo.board-view.v1") ? JSON.parse(localStorage.getItem("ludo.board-view.v1")!).mode : null, quality: q })), quality);
   // Record when a pointer is released and when a move request leaves the page.
@@ -86,10 +89,11 @@ async function measure(browser: Browser, view: Exclude<BoardView, "default">, qu
     };
   });
   const ben = await openPlayer(browser, "Ben", "phone", { board: "2d" });
-  const code = await createRoom(aman, city ? { players: 2, city } : { players: 2 });
-  await joinRoom(ben, code);
-  await startGame(aman, [aman, ben]);
-  const table = await seatTable(code, [aman, ben]);
+  const more = players === 4 ? [await openPlayer(browser, "Cara", "phone", { board: "2d" }), await openPlayer(browser, "Dev", "phone", { board: "2d" })] : [];
+  const code = await createRoom(aman, city ? { players, city } : { players });
+  for (const p of [ben, ...more]) await joinRoom(p, code);
+  await startGame(aman, [aman, ben, ...more]);
+  const table = await seatTable(code, [aman, ben, ...more]);
 
   // Time to the first drawn board after a fresh load, and the 3D chunk's transfer size.
   await aman.page.reload();
@@ -105,18 +109,25 @@ async function measure(browser: Browser, view: Exclude<BoardView, "default">, qu
       }),
     view !== "2d",
   );
-  const charactersReadyMs = city
+  // Characters load one team at a time, the player's own first: when that team stands, and when everyone does.
+  const loaded = city
     ? await aman.page.evaluate(
-        () =>
-          new Promise<number>((resolve) => {
+        ({ own, all }) =>
+          new Promise<{ own: number; all: number }>((resolve) => {
+            let ownAt = 0;
             const check = () => {
-              if (document.querySelectorAll('[data-testid="board-mirror"] li[data-character-ready="true"]').length === 4) resolve(Math.round(performance.now()));
+              const ready = [...document.querySelectorAll<HTMLElement>('[data-testid="board-mirror"] li[data-character-ready="true"]')].map((el) => el.dataset.key!);
+              if (!ownAt && ready.filter((k) => k.startsWith(own)).length === 4) ownAt = Math.round(performance.now());
+              if (ready.length === all) resolve({ own: ownAt, all: Math.round(performance.now()) });
               else requestAnimationFrame(check);
             };
             check();
           }),
+        { own: `${aman.id}:`, all: players * 4 },
       )
     : null;
+  const charactersReadyMs = loaded?.all ?? null;
+  const ownTeamReadyMs = loaded?.own ?? null;
   const chunk = (pattern: string) =>
     aman.page.evaluate((p) => {
       const e = performance.getEntriesByType("resource").find((r) => new RegExp(p).test(r.name)) as PerformanceResourceTiming | undefined;
@@ -197,10 +208,11 @@ async function measure(browser: Browser, view: Exclude<BoardView, "default">, qu
     const info = gl?.getExtension("WEBGL_debug_renderer_info");
     return gl && info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : null;
   });
-  await aman.context.close();
-  await ben.context.close();
+  for (const p of [aman, ben, ...more]) await p.context.close();
   return {
-    view: `${city ? `${city} ` : ""}${quality ? `${view} (${quality})` : view}`,
+    view: `${city ? `${city} ` : ""}${quality ? `${view} (${quality})` : view}${players === 4 ? ", 4 players" : ""}`,
+    players,
+    ownTeamReadyMs,
     gpu,
     idleFps: Math.round((idle.count / 3) * 10) / 10,
     moveFps: Math.round((moving.count / 1.5) * 10) / 10,
@@ -226,7 +238,7 @@ async function measure(browser: Browser, view: Exclude<BoardView, "default">, qu
 }
 
 test("the 2.5D board, and the living Kolkata city: load, frames, main-thread time, GPU objects and tap latency against the 2D board", async ({ browser }) => {
-  test.setTimeout(16 * 60_000);
+  test.setTimeout(20 * 60_000);
   for (const context of browser.contexts()) await context.close();
   const samples: Sample[] = [];
   samples.push(await measure(browser, "2d", null));
@@ -236,12 +248,14 @@ test("the 2.5D board, and the living Kolkata city: load, frames, main-thread tim
   samples.push(await measure(browser, "2.5d", "low", "Kolkata"));
   samples.push(await measure(browser, "2.5d", "medium", "Kolkata"));
   samples.push(await measure(browser, "3d", "medium", "Kolkata"));
+  // Sixteen characters (C.3B): a four-player room.
+  samples.push(await measure(browser, "2.5d", "low", "Kolkata", 4));
   console.table(samples);
   if (process.env.E2E_PERF_OUT) writeFileSync(process.env.E2E_PERF_OUT, JSON.stringify(samples, null, 2));
   const [flat, ...threeD] = samples;
   const classic = threeD.filter((s) => s.cityChunkKb === null);
   const kolkata = threeD.filter((s) => s.cityChunkKb !== null);
-  expect(kolkata, "the Kolkata scene loads as its own chunk").toHaveLength(3);
+  expect(kolkata, "the Kolkata scene loads as its own chunk").toHaveLength(4);
   for (const s of classic) {
     // Without a living city, nothing draws while the game is idle.
     expect(s.ambientFps, `${s.view}: no frames while idle`).toBeLessThan(1);
@@ -267,7 +281,9 @@ test("the 2.5D board, and the living Kolkata city: load, frames, main-thread tim
     expect(s.tapToRequestMs, `${s.view}: tap to request`).toBeLessThan(150);
     expect(s.chunkKb, `${s.view}: the 3D chunk was loaded lazily`).not.toBeNull();
     if (s.cityChunkKb === null) expect(s.glGeometries, `${s.view}: GPU geometries stay bounded`).toBeLessThan(120);
-    expect(s.glTextures, `${s.view}: GPU textures stay bounded`).toBeLessThan(40);
+    // The scene's few, plus at most three for each character (skin, eyes, its skeleton's bone texture).
+    const characters = s.cityChunkKb === null ? 0 : s.players * 4;
+    expect(s.glTextures, `${s.view}: GPU textures stay bounded`).toBeLessThanOrEqual(characters ? 12 + 3 * characters : 39);
   }
   expect(flat!.chunkKb, "the 2D board never loads the 3D chunk").toBeNull();
   for (const s of [flat!, ...classic]) {

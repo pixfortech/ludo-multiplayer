@@ -206,10 +206,10 @@ test("the city's life moves on its own capped clock, rests when hidden, under re
   await visible(aman.page.getByRole("radio", { name: level === "low" ? "Low" : "Medium" })).click();
   await expect(aman.page.getByTestId("game-board")).toHaveAttribute("data-quality", level);
   await expectKolkataBuilt(aman.page);
-  // The Crimson team's characters (C.3A) reload at the new level; the city measures once they have (loading is not its cost).
+  // Both teams' characters (C.3A, C.3B) reload at the new level; the city measures once they have (loading is not its cost).
   await expect
-    .poll(() => aman.page.evaluate((l) => document.querySelectorAll(`[data-testid="board-mirror"] li[data-character-ready="true"][data-character-level="${l}"]`).length, level), { timeout: 60_000 })
-    .toBe(4);
+    .poll(() => aman.page.evaluate((l) => document.querySelectorAll(`[data-testid="board-mirror"] li[data-character-ready="true"][data-character-level="${l}"]`).length, level), { timeout: 90_000 })
+    .toBe(8);
   await expect(aman.page.getByTestId("game-board")).toHaveAttribute("data-ambient", "measuring");
   const cells = await boardCells(aman.page);
   // Two pictures apart: the traffic has moved; the board's cells have not changed by a pixel.
@@ -393,6 +393,10 @@ test("switching views and graphics quality mid-turn, a refresh, a lost context a
     await expectKolkataBuilt(aman.page);
     // The old canvas (and its WebGL context) is gone: one board canvas at a time.
     await expect(aman.page.locator("canvas")).toHaveCount(1);
+    // Every character loaded at this level (they load a team at a time), so the counts compare like with like.
+    await expect
+      .poll(() => aman.page.evaluate((l) => document.querySelectorAll(`[data-testid="board-mirror"] li[data-character-ready="true"][data-character-level="${l}"]`).length, level.toLowerCase()), { timeout: 90_000 })
+      .toBe(8);
     await aman.page.waitForTimeout(2500);
     const e = await environmentOf(aman.page);
     const key = counts[level] ? `${level} (again)` : level;
@@ -401,7 +405,7 @@ test("switching views and graphics quality mid-turn, a refresh, a lost context a
   console.table(counts);
   // Each level builds a fresh renderer, so its counts cannot carry anything over; they stay bounded, and the
   // second Medium is within what the levels drew (the movable tokens' rings appear once a choice is open).
-  // Under 80 for the city and board, plus the four Crimson characters (C.3A: a few primitives and props each).
+  // Under 80 for the city and board, plus the two teams' characters (a few primitives and props each).
   for (const [level, c] of Object.entries(counts)) expect(c.geometries, `${level}: GPU geometries bounded`).toBeLessThan(130);
   expect(counts["Medium (again)"]!.geometries).toBeLessThanOrEqual(Math.max(...Object.values(counts).map((c) => c.geometries)));
   expect(counts.Low!.triangles, "Low draws less than High").toBeLessThan(counts.High!.triangles);

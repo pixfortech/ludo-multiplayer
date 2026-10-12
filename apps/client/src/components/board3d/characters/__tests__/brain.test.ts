@@ -6,38 +6,74 @@
 import { describe, expect, it } from "vitest";
 import { tokenPositionToWorld } from "@ludo/board-layouts";
 import { CAPTURE_DISMAY, HOME_ARRIVE, OPEN_EXCITED, RUN_ABOVE, decide, groundSpeed, sceneAt, turnToward, waiting, walkPosition, yawToward, type CharacterInputs, type Gait } from "../brain";
-import { CHARACTERS, CHARACTER_HEIGHT, CHARACTER_TEAMS, characterFor, characterScale, characterSeats } from "../catalog";
+import { CHARACTERS, CHARACTER_HEIGHT, CHARACTER_TEAMS, characterFor, characterScale, characterSeats, loadableSeats, loadOrder, routinePhase } from "../catalog";
 
 const gait: Gait = { walkSpeed: 1.6, runSpeed: 3.0, scale: 0.55 };
 const base: CharacterInputs = { behaviour: "adda", where: "base", token: "idle", travel: null, turnAge: null, time: 0 };
 
 describe("character identities", () => {
-  it("maps Kolkata's Crimson tokens 0-3 to four different characters, and nothing else", () => {
-    const team = [0, 1, 2, 3].map((t) => characterFor("kolkata", 0, t));
-    expect(team).toEqual(["adda", "tea", "newspaper", "exercise"]);
-    expect(new Set(team).size).toBe(4);
-    for (const seat of [1, 2, 3]) for (const t of [0, 1, 2, 3]) expect(characterFor("kolkata", seat, t)).toBeNull();
+  it("gives each of Kolkata's four seats its own team of four: sixteen different people, and nothing in other cities", () => {
+    const all = [0, 1, 2, 3].flatMap((seat) => [0, 1, 2, 3].map((t) => characterFor("kolkata", seat, t)));
+    expect(all.every((k) => k !== null)).toBe(true);
+    expect(new Set(all).size).toBe(16);
+    expect([0, 1, 2, 3].map((t) => characterFor("kolkata", 0, t))).toEqual(["adda", "tea", "newspaper", "exercise"]);
+    expect(characterFor("kolkata", 4, 0)).toBeNull();
     for (const city of ["delhi", "mumbai", "chennai", "bengaluru", "classic"] as const) expect(characterFor(city, 0, 0)).toBeNull();
     expect(characterFor(null, 0, 0)).toBeNull();
-    expect([...characterSeats("kolkata")]).toEqual([0]);
+    expect([...characterSeats("kolkata")]).toEqual([0, 1, 2, 3]);
     expect([...characterSeats("delhi")]).toEqual([]);
+  });
+
+  it("gives every team the same four roles in token order (so the routine pairs them), numbered 1 to 4", () => {
+    for (const seat of [0, 1, 2, 3]) {
+      const team = CHARACTER_TEAMS.kolkata![seat]!;
+      expect(team.map((k) => CHARACTERS[k]!.idle), `seat ${seat}`).toEqual(["adda", "tea", "newspaper", "exercise"]);
+      expect(team.map((k) => CHARACTERS[k]!.number), `seat ${seat}`).toEqual([1, 2, 3, 4]);
+      expect(team.map((k) => CHARACTERS[k]!.prop), `seat ${seat}`).toEqual([null, "cup", "newspaper", null]);
+    }
   });
 
   it("gives each character its number, its own way of waiting, every clip it needs, and three levels of detail", () => {
     const needed = ["idle", "talk", "listen", "drink", "stretch", "exercise", "look_around", "wave", "excited", "walk", "run", "read", "dismay"];
     const numbers = new Set<number>();
-    for (const key of CHARACTER_TEAMS.kolkata![0]!) {
+    const heights: number[] = [];
+    for (const key of Object.values(CHARACTER_TEAMS.kolkata!).flatMap((t) => t ?? [])) {
       const c = CHARACTERS[key]!;
       numbers.add(c.number);
       for (const clip of needed) expect(c.clips[clip], `${key} ${clip}`).toBeTruthy();
       expect(c.clips.walk!.speed).toBeGreaterThan(0.8);
       expect(c.levels.low.triangles).toBeLessThan(c.levels.medium.triangles);
       expect(c.levels.medium.triangles).toBeLessThan(c.levels.high.triangles);
-      expect(c.height).toBeGreaterThan(1.4);
-      expect(characterScale(key) * c.height).toBeCloseTo(CHARACTER_HEIGHT, 5);
+      expect(c.height).toBeGreaterThan(1.3);
+      // Few draw calls a character: team, skin, hair, eyes, and every plain colour in one.
+      expect(c.materials, `${key} materials`).toBeLessThanOrEqual(6);
+      heights.push(characterScale(key) * c.height);
     }
+    // One scale for everyone: heights differ as people's do, within what the board can show without hiding a cell.
+    expect(new Set(Object.values(CHARACTER_TEAMS.kolkata!).flatMap((t) => t ?? []).map((k) => characterScale(k))).size).toBe(1);
+    expect(Math.max(...heights)).toBeLessThan(1.05);
+    expect(Math.min(...heights)).toBeGreaterThan(0.7);
+    expect(heights.reduce((a, b) => a + b, 0) / heights.length).toBeGreaterThan(CHARACTER_HEIGHT - 0.1);
     expect([...numbers].sort()).toEqual([1, 2, 3, 4]);
     expect(new Set(CHARACTER_TEAMS.kolkata![0]!.map((k) => CHARACTERS[k]!.idle)).size).toBe(4);
+  });
+
+  it("starts each team's routine at a different point, so the bases are not doing the same thing at once", () => {
+    const phases = [0, 1, 2, 3].map(routinePhase);
+    expect(new Set(phases).size).toBe(4);
+    let apart = 0;
+    for (let t = 0; t < 120; t += 1) if (new Set(phases.map((p) => sceneAt(t + p))).size > 1) apart++;
+    expect(apart, "seconds in two minutes when the bases differ").toBeGreaterThan(80);
+  });
+
+  it("loads one team at a time, the player's own first, then the others by seat", () => {
+    expect(loadOrder([0, 0, 2, 1, 3], 2)).toEqual([2, 0, 1, 3]);
+    expect(loadOrder([0, 2], null)).toEqual([0, 2]);
+    const order = loadOrder([0, 1, 2, 3], 1);
+    expect([...loadableSeats(order, () => false)]).toEqual([1]);
+    expect([...loadableSeats(order, (s) => s === 1)]).toEqual([1, 0]);
+    expect([...loadableSeats(order, (s) => s !== 3)]).toEqual([1, 0, 2, 3]);
+    expect([...loadableSeats(order, () => true)]).toEqual([1, 0, 2, 3]);
   });
 });
 
