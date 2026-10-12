@@ -208,6 +208,57 @@ def place_newspaper(c, info: dict) -> None:
     c.rigid(ob, "hand_r")
 
 
+def merge_flat_materials(ob: bpy.types.Object) -> int:
+    """Draws every plain-colour part of the body with one material, its colours in a vertex colour attribute.
+
+    The game draws one call per material of every character; most of them (clothes, shoes, glasses, bangles,
+    the number) are plain colours. Merging those leaves the textured ones (skin, hair, eyes) and "team" (tinted
+    by the game): about 5 draw calls a character instead of 11-16. Returns the materials left.
+    """
+    me = ob.data
+    flat = [i for i, m in enumerate(me.materials) if m is not None and m.name != "team" and not any(n.type == "TEX_IMAGE" for n in m.node_tree.nodes)]
+    if len(flat) < 2:
+        return len(me.materials)
+    colour = {}
+    rough = []
+    for i in flat:
+        bsdf = me.materials[i].node_tree.nodes["Principled BSDF"]
+        colour[i] = tuple(bsdf.inputs["Base Color"].default_value)
+        rough.append(bsdf.inputs["Roughness"].default_value)
+    merged = bpy.data.materials.new("plain")
+    merged.use_nodes = True
+    nt = merged.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    bsdf.inputs["Roughness"].default_value = float(sum(rough) / len(rough))
+    attr = nt.nodes.new("ShaderNodeVertexColor")
+    attr.layer_name = "Col"
+    nt.links.new(attr.outputs["Color"], bsdf.inputs["Base Color"])
+    me.materials.append(merged)
+    target = len(me.materials) - 1
+    col = me.color_attributes.new("Col", "FLOAT_COLOR", "CORNER")
+    values = np.ones((len(me.loops), 4), dtype=np.float32)
+    indices = np.zeros(len(me.polygons), dtype=np.int32)
+    me.polygons.foreach_get("material_index", indices)
+    starts = np.zeros(len(me.polygons), dtype=np.int32)
+    totals = np.zeros(len(me.polygons), dtype=np.int32)
+    me.polygons.foreach_get("loop_start", starts)
+    me.polygons.foreach_get("loop_total", totals)
+    for i, rgba in colour.items():
+        for p in np.where(indices == i)[0]:
+            values[starts[p] : starts[p] + totals[p]] = rgba
+        indices[indices == i] = target
+    col.data.foreach_set("color", values.ravel())
+    me.color_attributes.active_color = col
+    me.polygons.foreach_set("material_index", indices)
+    me.update()
+    # Drop the slots no face uses any more.
+    bpy.ops.object.select_all(action="DESELECT")
+    ob.select_set(True)
+    bpy.context.view_layer.objects.active = ob
+    bpy.ops.object.material_slot_remove_unused()
+    return len(ob.data.materials)
+
+
 def finish(c, key: str, out: str) -> dict:
     """Joins the parts (props stay separate, so the game can show or hide them) and exports the GLB."""
     props: dict[str, list] = {}
@@ -226,6 +277,7 @@ def finish(c, key: str, out: str) -> dict:
         if len(objs) > 1:
             bpy.ops.object.join()
         bpy.context.active_object.name = name
+    materials = merge_flat_materials(bpy.data.objects["Character"])
     tris = {}
     for name, _ in groups:
         ob = bpy.data.objects[name]
@@ -245,7 +297,7 @@ def finish(c, key: str, out: str) -> dict:
         export_image_format="WEBP",
         export_image_quality=82,
     )
-    return {"triangles": tris, "raw": os.path.basename(path)}
+    return {"triangles": tris, "materials": materials, "raw": os.path.basename(path)}
 
 
 def main() -> None:
