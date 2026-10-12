@@ -14,11 +14,22 @@ export interface ServerSnapshot {
 }
 
 export async function control(method: "GET" | "POST", path: string, body?: unknown): Promise<unknown> {
-  const response = await fetch(`http://127.0.0.1:${process.env.E2E_CONTROL_PORT}${path}`, {
-    method,
-    headers: { "x-e2e-token": process.env.E2E_CONTROL_TOKEN ?? "", "content-type": "application/json" },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  });
+  const send = () =>
+    fetch(`http://127.0.0.1:${process.env.E2E_CONTROL_PORT}${path}`, {
+      method,
+      headers: { "x-e2e-token": process.env.E2E_CONTROL_TOKEN ?? "", "content-type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  let response: Response;
+  try {
+    response = await send();
+  } catch (error) {
+    // A kept-alive connection the server had just closed (seen on the Windows runner as ECONNRESET): a read is
+    // safe to send again; a POST is not (it may have been applied), so it fails as before.
+    const code = (error as { cause?: { code?: string } }).cause?.code;
+    if (method !== "GET" || (code !== "ECONNRESET" && code !== "UND_ERR_SOCKET")) throw error;
+    response = await send();
+  }
   if (!response.ok) throw new Error(`control ${method} ${path}: ${response.status} ${await response.text()}`);
   return response.json();
 }
