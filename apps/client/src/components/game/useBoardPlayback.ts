@@ -1,7 +1,7 @@
 // Runs the presentation plan (playbackPlan.ts) for each new authoritative state.
 //
-// Exactly one new action (version n → n+1) plays its plan, step by step on
-// timers; anything else snaps straight to the state (first load, refresh,
+// Exactly one new action (version n → n+1) plays its plan, step by step, each
+// step timed from the one before (so a late timer never squeezes a gap out); anything else snaps straight to the state (first load, refresh,
 // reconnect, a missed version), so nothing ever animates or reacts twice. A
 // newer state cancels what is still playing (fast-forward), and so does a
 // pause. Every plan is bounded and ends on the server's state, so input (which
@@ -38,17 +38,27 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean, p
       return;
     }
     const plan = planPlayback(previous, game, { reduced, die3d, ...(characterSeats ? { characterSeats } : {}) });
-    for (const step of plan.steps) {
-      const run = () => {
-        const now = performance.now();
-        if (step.own) flushSync(() => setView((v) => step.apply(v, now)));
-        else setView((v) => step.apply(v, now));
-        if (step.events) for (const e of step.events(now)) emitPresentationEvent(e);
-      };
-      // The first steps (the action starts, the die starts rolling) show at once.
-      if (step.at === 0) run();
-      else timers.current.push(setTimeout(run, step.at));
-    }
+    const run = (step: (typeof plan.steps)[number]) => {
+      const now = performance.now();
+      if (step.own) flushSync(() => setView((v) => step.apply(v, now)));
+      else setView((v) => step.apply(v, now));
+      if (step.events) for (const e of step.events(now)) emitPresentationEvent(e);
+    };
+    // One step (or group of simultaneous steps) at a time, each timed from when the one before actually
+    // ran: a busy page that runs a step late delays the rest by as much, so the gaps the plan sets (the
+    // value shown before anything moves, the pause before an auto-move) are never squeezed out.
+    const next = (i: number) => {
+      const at = plan.steps[i]?.at;
+      if (at === undefined) return;
+      let j = i;
+      while (j < plan.steps.length && plan.steps[j]!.at === at) run(plan.steps[j++]!);
+      const following = plan.steps[j];
+      if (following) timers.current = [setTimeout(() => next(j), following.at - at)];
+    };
+    // The first steps (the action starts, the die starts rolling) show at once.
+    const first = plan.steps[0];
+    if (first && first.at === 0) next(0);
+    else if (first) timers.current = [setTimeout(() => next(0), first.at)];
   }, [game, reduced, characterSeats, die3d]);
 
   // A pause (or anything else that stops play) fast-forwards whatever is still playing.
