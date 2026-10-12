@@ -141,6 +141,38 @@ export class TokenKit {
   }
 }
 
+/**
+ * The movable ring breathes while the player chooses, asking for a frame each frame. Where a frame is
+ * expensive (a frame of the city with its characters on a slow or software renderer) that would hold the
+ * device for as long as the choice is open, so the breathing pauses for a few seconds after a slow frame
+ * (the ring stays, still) and tries again. Each token decides for itself; they all see the same frames.
+ */
+export class Breathing {
+  private asked = false;
+  private pausedUntil = 0;
+  /** True when the next frame may be asked for; `delta` is the seconds since the last frame. */
+  affordable(delta: number, now = performance.now()): boolean {
+    if (now < this.pausedUntil) {
+      this.asked = false;
+      return false;
+    }
+    // A frame we asked for took long to arrive: this device cannot breathe the ring at the display rate.
+    if (this.asked && delta > SLOW_FRAME_S) {
+      this.asked = false;
+      this.pausedUntil = now + PAUSE_MS;
+      return false;
+    }
+    this.asked = true;
+    return true;
+  }
+  reset(): void {
+    this.asked = false;
+    this.pausedUntil = 0;
+  }
+}
+const SLOW_FRAME_S = 0.1;
+const PAUSE_MS = 4000;
+
 interface Travel {
   from: WorldPoint;
   to: WorldPoint;
@@ -248,6 +280,8 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
 
   const lifted = token.state === "selected" ? 0.08 : 0;
   const pulse = token.state === "movable" && !reduced;
+  const breathe = useRef(new Breathing()).current;
+  useEffect(() => breathe.reset(), [pulse, breathe]);
 
   useFrame((state, delta) => {
     const g = group.current;
@@ -314,7 +348,7 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
     if (ring.current) {
       const k = pulse ? 1 + 0.08 * Math.sin(performance.now() / 260) : 1;
       ring.current.scale.setScalar(token.scale * k);
-      if (pulse) invalidate();
+      if (pulse && breathe.affordable(delta)) invalidate();
     }
   });
 
