@@ -294,3 +294,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    # Blender's module can crash while tearing down at interpreter exit; everything is written by now.
+    sys.stdout.flush()
+    os._exit(0)

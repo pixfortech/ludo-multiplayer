@@ -174,6 +174,17 @@ def hair(c: Character) -> None:
     elif style == "short_side":
         c.paint.append({"values": soft.astype(np.float32), "colour": colour, "strength": 1.0, "grain": 0.35, "blur": 1})
         c.region_shell("Hair", scalp, lambda idx: 0.004 + 0.011 * np.clip((h[idx] - hairline[idx]) / 0.06, 0, 1) * (1 + 0.25 * np.clip(-front[idx] + 0.5, 0, 1)), "hair", {"hair": mat}, cover=False, all_vertices=False, taper=0.0)
+    elif style == "crop":
+        # Close-cropped all over: mostly painted, a thin shell for the outline.
+        c.paint.append({"values": soft.astype(np.float32), "colour": colour, "strength": 1.0, "grain": 0.5, "blur": 1})
+        c.region_shell("Hair", scalp, lambda idx: 0.002 + 0.003 * np.clip((h[idx] - hairline[idx]) / 0.05, 0, 1), "hair", {"hair": mat}, cover=False, all_vertices=False, taper=0.0)
+    elif style == "bun":
+        # Hair drawn back into a round bun low at the back of the head.
+        c.paint.append({"values": soft.astype(np.float32), "colour": colour, "strength": 1.0, "grain": 0.3, "blur": 1})
+        c.region_shell("Hair", scalp, lambda idx: 0.003 + 0.008 * np.clip((h[idx] - hairline[idx]) / 0.05, 0, 1), "hair", {"hair": mat}, cover=False, all_vertices=False, taper=0.0)
+        lock = c.mats.get("hairlock", colour, 0.5, sheen=0.1)
+        back = Vector(head_c) + Vector((0, 0.1, 0.0))
+        c.primitive("sphere", "Bun", lock, "head", Matrix.Translation(back), radius=0.042, segments=12, rings=8, scale=(1.0, 0.75, 0.9))
     elif style in ("braid", "ponytail"):
         c.paint.append({"values": soft.astype(np.float32), "colour": colour, "strength": 1.0, "grain": 0.3, "blur": 1})
         c.region_shell("Hair", scalp, lambda idx: 0.003 + 0.011 * np.clip((h[idx] - hairline[idx]) / 0.05, 0, 1), "hair", {"hair": mat}, cover=False, all_vertices=False, taper=0.0)

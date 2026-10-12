@@ -5,12 +5,15 @@
 //
 //   node tools/characters/optimize.mjs <raw dir> <out dir> [<manifest copy>]
 //
+// The manifest copy keeps characters it already lists that this raw directory
+// does not (teams can be built in separate runs).
+//
 // The game serves the GLBs from apps/client/public/characters and imports the
 // manifest from apps/client/src/components/board3d/characters/characters.json.
 //
 // Works the same on Windows and Linux (gltfpack is an npm package).
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const [rawDir, outDir, manifestCopy] = process.argv.slice(2);
@@ -57,5 +60,11 @@ for (const [key, entry] of Object.entries(manifest.characters)) {
 // The game imports the manifest (without the build-only raw file names).
 for (const entry of Object.values(manifest.characters)) delete entry.raw;
 writeFileSync(join(rawDir, "characters.optimized.json"), JSON.stringify(manifest, null, 2) + "\n");
-if (manifestCopy) copyFileSync(join(rawDir, "characters.optimized.json"), manifestCopy);
+if (manifestCopy) {
+  // Characters built in another run (another raw directory) stay in the game's manifest; these replace their own.
+  const merged = existsSync(manifestCopy) ? JSON.parse(readFileSync(manifestCopy, "utf8")) : { characters: {} };
+  merged.characters = { ...merged.characters, ...manifest.characters };
+  merged.fps = manifest.fps;
+  writeFileSync(manifestCopy, JSON.stringify(merged, null, 2) + "\n");
+}
 console.table(Object.fromEntries(Object.entries(manifest.characters).flatMap(([k, e]) => Object.entries(e.levels).map(([l, v]) => [`${k} ${l}`, { kb: Math.round(v.bytes / 1024), triangles: v.triangles }]))));

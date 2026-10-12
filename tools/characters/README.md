@@ -1,4 +1,4 @@
-# Character build (C.3A)
+# Character build (C.3A, C.3B)
 
 Builds the playable human characters as GLB files, headlessly, from CC0 and
 free-to-use sources. The output is committed (`apps/client/public/characters/`
@@ -31,12 +31,14 @@ git -C ../cmu-mocap checkout HEAD -- data/002/02_03.bvh data/008/08_01.bvh data/
 # 2. Blender as a Python module (Linux, macOS and Windows wheels)
 python3.11 -m venv .bpy && .bpy/bin/pip install bpy==4.2.23     # Windows: .bpy\Scripts\pip
 
-# 3. Build the raw GLBs and characters.json (about 3 minutes a character)
-.bpy/bin/python -I tools/characters/build.py --mh ../mpfb2/src/mpfb/data --cmu ../cmu-mocap/data --out build/characters [--preview build/previews]
+# 3. Build the raw GLBs and characters.json (1-3 minutes a character; all sixteen, about 25 minutes)
+.bpy/bin/python -I tools/characters/build.py --mh ../mpfb2/src/mpfb/data --cmu ../cmu-mocap/data --out build/characters [--only kaku didi] [--preview build/previews]
 
 # 4. Levels of detail and compression, into the game
 node tools/characters/optimize.mjs build/characters apps/client/public/characters apps/client/src/components/board3d/characters/characters.json
 ```
+
+`optimize.mjs` merges into the game's manifest, so a team can be built and optimised on its own.
 
 Run the Python from the repository root with `-I` (isolated mode). The
 scripts read the downloaded data by path and never import code from it.
@@ -46,9 +48,9 @@ scripts read the downloaded data by path and never import code from it.
 | File | Does |
 | --- | --- |
 | `makehuman.py` | Reads the base mesh, targets, rig and weights; mixes macro targets as MakeHuman's macro modifiers do; joint positions. |
-| `identities.py` | The four Crimson characters: body, face, skin, hair, clothes, accessories, prop, number, idle behaviour. |
+| `identities.py` | The sixteen Kolkata characters (four teams of four): body, face, skin, hair, clothes, accessories, prop, number, idle role. |
 | `garments.py` | Region tests on the skeleton; shells of the body (clothes keep the body's UVs and skin weights); edges laid onto the skin. |
-| `outfits.py` | Panjabi, salwar kameez with dupatta, shirt and trousers, tracksuit; hairstyles; moustache, glasses, bindi, bangles, watch, headband; props; the number. |
+| `outfits.py` | Panjabi, salwar kameez with dupatta, shirt and trousers, tracksuit; hairstyles (receding, short side, crop, bun, braid, ponytail); moustache, glasses, bindi, bangles, watch, headband; props; the number. |
 | `skin.py` | The painted skin texture (tone, lips, lids, brows, stubble, hair, moustache) and the eyes. |
 | `assemble.py` | Builds one character in Blender: armature, body, eyes, lashes, teeth, shells, ribbons (draped cloth), primitives. |
 | `animation.py` | Retargets CMU BVH onto the game skeleton. |

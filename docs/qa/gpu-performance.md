@@ -60,3 +60,16 @@ For each view it records:
   - `resting` means the device couldn't afford the city's motion, so it stood still.
 - **Tap to request** should stay within a few milliseconds on any device.
 - **Bound to this run:** the numbers hold only for this machine, browser and driver. Run it twice to see the variance.
+
+## Runs so far
+
+| Date | Machine | What it established | What it did not |
+| --- | --- | --- | --- |
+| 2026-10 (after C.3A) | Windows, Intel graphics, Direct3D 11 (reported by the project owner) | Low and Medium ran on a real GPU. | **High and Ultra are not validated**: this test measures Low and Medium only. The run ended with internal test-runner errors, so its summary is incomplete; the result file was not shared, so no numbers from it are recorded here. |
+
+What follows from it:
+
+- Low and Medium stay the supported levels; High stays available as a target, with no promise yet.
+- No final graphics-quality claims are made until the comprehensive High/Ultra audit, which comes after the visual redesign (new assets and lighting).
+- If the runner errors recur, send the console output with the JSON file: the test writes the JSON before it checks its budgets, so a budget failure still leaves the numbers.
+- Since C.3B the test also measures a four-player Kolkata room (sixteen characters) and reports when the player's own team and when every character has loaded.
