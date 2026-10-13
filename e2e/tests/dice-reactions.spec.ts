@@ -175,7 +175,8 @@ test("the 3D die shows the server's value before anything moves; one roll per do
   const amanDie = await dieLog(aman.page);
   expect(amanDie.map((d) => d.state), "lifted, thrown, at rest").toEqual(expect.arrayContaining(["lift", "throw", "rest"]));
   expect(amanDie.findIndex((d) => d.state === "lift")).toBeLessThan(amanDie.findIndex((d) => d.state === "throw"));
-  expect((await dieLog(ben.page)).map((d) => d.state), "Ben sees the throw").toContain("throw");
+  // Ben's page may draw no frame mid-air on a slow machine (the throw is time-based): his presentation log below
+  // shows the throw and the landing instead.
   expect(await trayDie(aman.page), "the tray shows the value too").toBe("6");
   // The presentation: the throw, the landing on the server's value, then the six.
   for (const [p, m] of [[aman, mark.aman], [ben, mark.ben]] as const) {

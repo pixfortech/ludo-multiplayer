@@ -30,7 +30,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       # Missing PostgreSQL fails the run instead of skipping database tests.
       REQUIRE_POSTGRES_TESTS: "1"

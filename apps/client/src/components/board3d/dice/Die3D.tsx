@@ -150,7 +150,8 @@ export const Die3D = memo(function Die3D({ die, reduced, segments, viewport, mir
     return new Vector3(at.x, restY, at.z);
   };
   // Where the die is and how it is turned now (every motion starts from here: never a jump).
-  const startSeat = die.throw?.seat ?? die.seat ?? 0;
+  // A remount (another view or quality) puts it straight in the base of the seat whose turn it is: no toss replayed.
+  const startSeat = die.seat ?? die.throw?.seat ?? 0;
   const pose = useRef<{ position: Vector3; quaternion: Quaternion } | null>(null);
   if (pose.current === null) pose.current = { position: rest3(startSeat), quaternion: faceUp(die.value ?? 1, 0.35) };
   const motion = useRef<Motion | null>(null);
