@@ -96,10 +96,12 @@ test("four players in one Kolkata room each keep their own view, quality and cam
   // Three WebGL pages (one at High) with sixteen people each, all in software on one CPU here: a walk can take
   // a while to be drawn cell by cell, especially while another page reloads its people.
   table.syncTimeout = 90_000;
-  await expectBoard3d(a.page, "3d");
+  // Their first frames too: three Kolkata canvases start at once (the Windows runner took over 15 s).
+  const firstFrame = 90_000;
+  await expectBoard3d(a.page, "3d", firstFrame);
   await expect(b.page.locator('svg[data-testid="game-board"]')).toBeVisible();
-  await expectBoard3d(c.page, "2.5d");
-  await expectBoard3d(d.page, "3d");
+  await expectBoard3d(c.page, "2.5d", firstFrame);
+  await expectBoard3d(d.page, "3d", firstFrame);
 
   // D follows the play; A orbits freely.
   await visible(d.page.getByRole("button", { name: "Follow token" })).click();
@@ -126,9 +128,9 @@ test("four players in one Kolkata room each keep their own view, quality and cam
   }
   // And A's view: 2.5D, back to 3D (its quality and camera choices are its own).
   await visible(a.page.getByRole("radio", { name: "2.5D board" })).click();
-  await expectBoard3d(a.page, "2.5d");
+  await expectBoard3d(a.page, "2.5d", firstFrame);
   await visible(a.page.getByRole("radio", { name: "3D board (preview)" })).click();
-  await expectBoard3d(a.page, "3d");
+  await expectBoard3d(a.page, "3d", firstFrame);
   await expect(a.page.getByTestId("game-board")).toHaveAttribute("data-quality", "high");
   const after = await Promise.all(others.map((p) => settledView(p.page)));
   for (const [i, p] of others.entries()) expect(after[i], `${p.name}: untouched by Asha's camera and view`).toEqual(before[i]);
@@ -146,7 +148,7 @@ test("four players in one Kolkata room each keep their own view, quality and cam
   const othersOfC = [a, b, d];
   const beforeRefresh = await Promise.all(othersOfC.map(async (p) => ({ renderer: (await viewOf(p.page)).renderer, quality: (await viewOf(p.page)).quality, camera: (await viewOf(p.page)).camera })));
   await c.page.reload();
-  await expectBoard3d(c.page, "2.5d");
+  await expectBoard3d(c.page, "2.5d", firstFrame);
   await expect(c.page.getByTestId("game-board")).toHaveAttribute("data-quality", "medium");
   snap = await table.expectInSync();
   for (const [i, p] of othersOfC.entries()) {

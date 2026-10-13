@@ -97,11 +97,11 @@ export interface Token3D {
 }
 
 /** The 2.5D/3D board is on screen and has drawn (its mirrors carry projected positions). */
-export async function expectBoard3d(page: Page, mode: "2.5d" | "3d" = "2.5d"): Promise<void> {
+export async function expectBoard3d(page: Page, mode: "2.5d" | "3d" = "2.5d", timeout = 20_000): Promise<void> {
   const board = page.locator(`[data-testid="game-board"][data-renderer="${mode}"]`);
-  await expect(board).toBeVisible({ timeout: 20_000 });
-  await expect(page.locator("canvas[data-board-gl]")).toBeVisible();
-  await expect.poll(() => board.locator('[data-testid="board-cells-mirror"] li[data-cx]').count(), { message: "the 3D board has drawn" }).toBeGreaterThan(70);
+  await expect(board).toBeVisible({ timeout });
+  await expect(page.locator("canvas[data-board-gl]")).toBeVisible({ timeout });
+  await expect.poll(() => board.locator('[data-testid="board-cells-mirror"] li[data-cx]').count(), { message: "the 3D board has drawn", timeout }).toBeGreaterThan(70);
 }
 
 export async function boardCells(page: Page): Promise<Cell3D[]> {
