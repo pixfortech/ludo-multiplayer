@@ -178,6 +178,47 @@ describe("captures, home, finishing and the win", () => {
     expect(views.find((v) => v.label === "settle")!.view.celebrate).not.toBeNull();
   });
 
+  it("full ranking: a finisher celebrates while the game carries on (no end-of-game celebration until it is over)", () => {
+    const CARA = "p-cara";
+    const three = (version: number, host: (number | null)[], ben: (number | null)[], history: GameHistoryEntry[], over: Partial<GameStateView> = {}): GameStateView => {
+      const g = state(version, host, ben, history, { settings: { autoMove: true, rankingMode: "full-ranking" }, ...over });
+      return { ...g, players: [...g.players, { id: CARA, seat: 1, tokens: steps([null, null, null, null]), finished: false }] };
+    };
+    const seats = new Set([0, 1, 2]);
+    // The first to finish wins, and the other two play on for the places.
+    const first = planPlayback(
+      three(9, [56, 56, 56, 54], [null, null, null, null], []),
+      three(10, [56, 56, 56, 56], [null, null, null, null], [
+        { seq: 1, type: "move", playerId: HOST, tokenId: 3, from: 54, to: 56, dice: 2 },
+        { seq: 2, type: "home", playerId: HOST, tokenId: 3 },
+        { seq: 3, type: "player-finished", playerId: HOST, place: 1 },
+        { seq: 4, type: "win", playerId: HOST },
+        { seq: 5, type: "turn", playerId: BEN, reason: "player-finished" },
+      ], { winnerId: HOST, ranking: [HOST], currentPlayerId: BEN }),
+      { reduced: false, die3d: true, characterSeats: seats },
+    );
+    expect(first.steps.filter((s) => s.label.startsWith("cue:")).map((s) => s.label)).toEqual([`cue:home:${HOST}`, `cue:finished:${HOST}`, `cue:win:${HOST}`]);
+    const firstViews = run(first, snapshot(three(9, [56, 56, 56, 54], [null, null, null, null], [])));
+    expect(firstViews.every((v) => v.view.celebrate === null), "the game goes on: no victory screen yet").toBe(true);
+    // A later finisher takes a place: their team celebrates finishing, nobody is announced as the winner again.
+    const before = three(20, [56, 56, 56, 56], [56, 56, 56, 55], [], { winnerId: HOST, ranking: [HOST], currentPlayerId: BEN });
+    const second = planPlayback(
+      before,
+      three(21, [56, 56, 56, 56], [56, 56, 56, 56], [
+        { seq: 1, type: "move", playerId: BEN, tokenId: 3, from: 55, to: 56, dice: 1 },
+        { seq: 2, type: "home", playerId: BEN, tokenId: 3 },
+        { seq: 3, type: "player-finished", playerId: BEN, place: 2 },
+        { seq: 4, type: "game-over", ranking: [HOST, BEN, CARA] },
+      ], { phase: "finished", winnerId: HOST, ranking: [HOST, BEN, CARA], currentPlayerId: null }),
+      { reduced: false, die3d: true, characterSeats: seats },
+    );
+    expect(second.steps.filter((s) => s.label.startsWith("cue:")).map((s) => s.label)).toEqual([`cue:home:${BEN}`, `cue:finished:${BEN}`]);
+    // That ended the game (one player left): the celebration (the victory screen) comes at the very end.
+    const views = run(second, snapshot(before));
+    expect(views.find((v) => v.label === "settle")!.view.celebrate).not.toBeNull();
+    expect(views.filter((v) => v.label !== "settle" && v.label !== "clear-effects").every((v) => v.view.celebrate === null)).toBe(true);
+  });
+
   it("three sixes and no move: the die shows, the team reacts, the banner holds, nothing moves", () => {
     const before = state(6, [12, null, null, null], [null, null, null, null], []);
     const forfeit = state(7, [12, null, null, null], [null, null, null, null], [
