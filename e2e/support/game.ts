@@ -129,6 +129,8 @@ export class Table {
   moves = 0;
   /** Players whose network is deliberately down: not expected to be in sync until they return. */
   readonly offline = new Set<Player>();
+  /** How long a page may take to show the server's state (software WebGL with many 3D pages needs longer). */
+  syncTimeout = 20_000;
   constructor(
     readonly code: string,
     readonly players: Player[],
@@ -158,7 +160,7 @@ export class Table {
             const same = (a: Record<string, string>, b: Record<string, string>) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
             return same(board, expected) ? "in sync" : { version: latest.game!.stateVersion, board, expected };
           },
-          { message: `${p.name}'s board matches the server`, timeout: 20_000 },
+          { message: `${p.name}'s board matches the server`, timeout: this.syncTimeout },
         )
         .toBe("in sync");
     }

@@ -30,7 +30,21 @@ import type { CharacterController } from "./characters/CharacterBody";
 import type { ChosenReaction } from "./characters/reactions";
 
 // The character code (glTF loader, meshopt decoder, skeleton cloning) is its own chunk: only cities with characters fetch it.
-const CharacterBody = lazy(() => import("./characters/CharacterBody").then((m) => ({ default: m.CharacterBody })));
+let characterModule: { forgetCharacterFiles: (urls: readonly string[]) => void } | null = null;
+const CharacterBody = lazy(() =>
+  import("./characters/CharacterBody").then((m) => {
+    characterModule = m;
+    return { default: m.CharacterBody };
+  }),
+);
+
+/**
+ * Forgets cached character files (and their cached errors) before a retry, so the retry fetches them again.
+ * Synchronous: it must happen before the characters render again, or they would meet the cached error.
+ */
+export function forgetCharacterFiles(urls: readonly string[]): void {
+  characterModule?.forgetCharacterFiles(urls);
+}
 import { CHARACTERS, characterScale, characterUrl } from "./characters/catalog";
 import { errorMessage } from "./characters/status";
 

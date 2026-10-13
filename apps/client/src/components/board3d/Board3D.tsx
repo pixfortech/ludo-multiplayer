@@ -25,7 +25,7 @@ import { CameraRig, type ImmersiveView } from "./CameraRig";
 import { DETAIL } from "./geometry3d";
 import { Effects3D, MovePreview3D } from "./Overlays3D";
 import { TextureCache } from "./textures";
-import { Token3D, TokenKit, floorFor, type Token3DInput } from "./Tokens3D";
+import { Token3D, TokenKit, floorFor, type Token3DInput, forgetCharacterFiles } from "./Tokens3D";
 import type { QualityLevel } from "./capabilities";
 import { environmentFor } from "./environments/registry";
 import { followerFps, useAmbientClock, type AmbientReport, type AmbientState } from "./environments/ambient";
@@ -419,15 +419,14 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
     if (import.meta.env.DEV) console.error(`[characters] ${character} (${level}) could not load from ${url}: ${error}`);
     setFailedCharacters((m) => (m.get(token)?.error === error && m.get(token)?.level === level ? m : new Map(m).set(token, { key: character, token, url, error, level })));
   }, []);
+  const failedRef = useRef(failedCharacters);
+  failedRef.current = failedCharacters;
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (characterRetry === 0) return;
-    setFailedCharacters((m) => {
-      if (m.size === 0) return m;
-      const urls = [...m.values()].map((f) => f.url);
-      void import("./characters/CharacterBody").then((mod) => mod.forgetCharacterFiles(urls)).catch(() => undefined);
-      return new Map();
-    });
+    // Forget the failed files first (their cached errors too), then try again.
+    forgetCharacterFiles([...failedRef.current.values()].map((f) => f.url));
+    setFailedCharacters(new Map());
     setAttempt((a) => a + 1);
   }, [characterRetry]);
   const failedNow = (token: string) => failedCharacters.get(token)?.level === quality;

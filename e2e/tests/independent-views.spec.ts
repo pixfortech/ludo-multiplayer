@@ -93,6 +93,9 @@ test("four players in one Kolkata room each keep their own view, quality and cam
   for (const p of [b, c, d]) await joinRoom(p, code);
   await startGame(a, players);
   const table = await seatTable(code, players);
+  // Three WebGL pages (one at High) with sixteen people each, all in software on one CPU here: a walk can take
+  // a while to be drawn cell by cell, especially while another page reloads its people.
+  table.syncTimeout = 90_000;
   await expectBoard3d(a.page, "3d");
   await expect(b.page.locator('svg[data-testid="game-board"]')).toBeVisible();
   await expectBoard3d(c.page, "2.5d");
