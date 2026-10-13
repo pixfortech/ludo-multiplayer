@@ -74,6 +74,25 @@ Exactly one connection controls a seat.
 - **Rotation:** after `session:rotate`, write the new secret to storage *before* calling `session:confirmCredential`.
 - **TLS:** use `wss://`, and never put credentials in URLs.
 
+## Taking over an offline player's seat
+
+An old game can carry on without one of its players: someone new takes over the seat of a player who is
+offline, with the host's approval.
+
+| Step | What happens |
+| --- | --- |
+| Find a seat | `room:preview` lists `takeoverSeats`: in a game in progress (`playing` or `paused`), the players who are offline (name, seat, colour; never anything secret) |
+| Ask | A connection without a seat sends `room:requestSeat { code, playerId, displayName }` (rate-limited like joining). Refused with `seat-not-available` if that player is connected or the game is not in progress, and `name-taken` if a member has the name |
+| Who is asked | Everyone in the game gets `seat:requested`. The **host** answers; while the host is offline, or is the player being replaced, any other player in the game may answer |
+| Answer | `room:answerSeatRequest { seatRequestId, approve }`. Anyone else gets `not-host`. A request can be approved once; a second answer gets `seat-request-gone` |
+| On approval | In one transaction under the room lock: the seat takes the newcomer's name and a **new credential**, so the absent player's secret (and any pending one) stops working, and the session epoch moves on. The seat keeps its id, colour, tokens, turn and place; the game state does not change. The newcomer's connection takes control of the seat and receives `seat:granted` with the credential (never broadcast). Everyone gets `room:updated`; a game paused for that player resumes |
+| Otherwise | `seat:declined` (`declined`, `expired` after 2 minutes, or `unavailable` when another request for the seat won). A request is withdrawn when the asking connection disconnects |
+| The absent player returns | Their old credential is refused (`unauthenticated`): the browser drops the saved seat ("This saved seat is no longer valid on this device"). They can still ask to take over a seat themselves |
+
+Requests live in the server process only (at most 8 open per room, 2 minutes each); nothing about them is
+stored until one is approved. Names, seats and colours shown in a request are the ones every player already
+sees on the board.
+
 ## Disconnects and pausing
 
 | Room status | `pause_reason` | Meaning | Who ends it |
@@ -105,7 +124,7 @@ The engine's `phase` (`playing` / `finished`) is the game's terminal state. Paus
 | Host leaves for good | Lobby: `room:leave` hands over automatically. Mid-game: `room:transferHost` first, then disconnect. |
 | Host returns later | Resumes as host with the same credential |
 | Everyone disconnects | Nothing changes except presence. A running game pauses for its current player after the grace period; every saved state remains, ready to resume within the retention period. |
-| A game stuck waiting for someone who never returns | The host can `room:close` (abandoned, `closed-by-host`) |
+| A game stuck waiting for someone who never returns | Someone new can take over their seat with the host's approval (see above), or the host can `room:close` (abandoned, `closed-by-host`) |
 
 ### Forfeit (needs a decision)
 

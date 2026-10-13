@@ -45,7 +45,9 @@ export function roomView(over: Partial<RoomView> = {}): RoomView {
 }
 
 export class FakeClient implements GameClient {
-  state: ConnectionState = { link: "connected", seat: null, room: null, game: null, ended: null };
+  state: ConnectionState = { link: "connected", seat: null, room: null, game: null, ended: null, seatRequests: [] };
+  /** The outcome a takeover request gets (a membership, or an error to reject with). */
+  seatResult: MembershipData | Error | null = null;
   calls: { method: string; args: unknown[] }[] = [];
   private listeners = new Set<() => void>();
   private noticeListeners = new Set<(n: Notice) => void>();
@@ -130,6 +132,20 @@ export class FakeClient implements GameClient {
   async leaveRoom() {
     this.calls.push({ method: "leaveRoom", args: [] });
     this.set({ seat: null, room: null });
+  }
+
+  async requestSeat(input: { code: string; playerId: string; displayName: string }) {
+    this.calls.push({ method: "requestSeat", args: [input] });
+    const result = this.seatResult;
+    const granted = result instanceof Error ? Promise.reject(result) : result ? Promise.resolve(result) : new Promise<MembershipData>(() => undefined);
+    granted.catch(() => undefined);
+    return { request: { seatRequestId: "seat-request-1", expiresAt: Date.now() + 120_000 }, granted };
+  }
+
+  async answerSeatRequest(seatRequestId: string, approve: boolean) {
+    this.calls.push({ method: "answerSeatRequest", args: [seatRequestId, approve] });
+    this.set({ seatRequests: this.state.seatRequests.filter((r) => r.seatRequestId !== seatRequestId) });
+    return approve;
   }
 }
 

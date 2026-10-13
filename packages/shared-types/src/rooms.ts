@@ -120,6 +120,19 @@ export interface RoomPreview {
   joinable: boolean;
   /** Set when joinable is false. */
   blockedReason: JoinBlockReason | null;
+  /**
+   * In a game in progress: the seats whose players are offline. Someone new may ask to take one over; the host
+   * (or, while the host is away, another player in the game) decides. Empty otherwise.
+   */
+  takeoverSeats: TakeoverSeat[];
+}
+
+/** A seat in a game in progress whose player is offline (see RoomPreview.takeoverSeats). */
+export interface TakeoverSeat {
+  playerId: string;
+  displayName: string;
+  seat: number;
+  colour: string;
 }
 
 /** A member of a room, as other members see them. */

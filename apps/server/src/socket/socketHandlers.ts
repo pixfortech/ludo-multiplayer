@@ -11,6 +11,7 @@ import type { SlidingWindowLimiter } from "../rooms/rateLimiter.js";
 import type { AuthenticatedPlayer, RoomService } from "../rooms/roomService.js";
 import type { SocketPublisher } from "./broadcaster.js";
 import { RULES, peekRequestId, readEnvelope, readFields } from "./payload.js";
+import type { SeatRequests } from "./seatRequests.js";
 import type { SessionManager } from "./sessions.js";
 import { TransportError, toProtocolError, type Logger } from "./socketErrors.js";
 import type { LudoSocket } from "./socketEvents.js";
@@ -20,6 +21,7 @@ export interface HandlerDeps {
   gameplay: GameplayService;
   publisher: SocketPublisher;
   sessions: SessionManager;
+  seatRequests: SeatRequests;
   /** Events per connection. */
   connectionLimiter: SlidingWindowLimiter;
   /** Gameplay requests per player, across all their connections. */
@@ -169,6 +171,54 @@ export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
     const room = await rooms.closeRoom(actor, input);
     publisher.roomUpdated(room);
     return { data: { room }, roomVersion: room.roomVersion };
+  });
+
+  // ── Seat takeover ────────────────────────────────────────────────────────
+
+  on("room:requestSeat", async (_requestId, body) => {
+    requireUnbound();
+    const input = readFields<{ code: string; playerId: string; displayName: string }>(body, RULES.requestSeat);
+    const checked = await rooms.checkSeatTakeover(input, { clientKey: socket.data.clientKey });
+    const request = deps.seatRequests.add({ ...checked, socketId: socket.id });
+    if (!request) throw new RoomError("rate-limited", "This game has too many open requests; try again shortly", { retryAfterSeconds: 30 });
+    return { data: { seatRequestId: request.id, expiresAt: request.expiresAt } };
+  });
+
+  on("room:answerSeatRequest", async (_requestId, body) => {
+    const actor = requireActor();
+    const input = readFields<{ seatRequestId: string; approve: boolean }>(body, RULES.answerSeatRequest);
+    const open = deps.seatRequests.get(input.seatRequestId);
+    if (!open || open.roomId !== actor.roomId) throw new RoomError("seat-request-gone", "That request was already answered, withdrawn or has expired");
+    await rooms.assertMayAnswer(actor, open.playerId);
+    if (!input.approve) {
+      deps.seatRequests.close(open.id, "declined");
+      return { data: { approved: false } };
+    }
+    const requester = deps.seatRequests.socketOf(open);
+    if (!requester || requester.data.actor) {
+      deps.seatRequests.close(open.id, "withdrawn");
+      throw new RoomError("seat-request-gone", "The person asking is no longer here");
+    }
+    // Off the list before anything changes: a second approval finds nothing.
+    const request = deps.seatRequests.take(open.id);
+    if (!request) throw new RoomError("seat-request-gone", "That request was already answered");
+    let granted: Awaited<ReturnType<RoomService["approveSeatTakeover"]>>;
+    try {
+      granted = await rooms.approveSeatTakeover(actor, request.playerId, request.displayName);
+    } catch (error) {
+      deps.seatRequests.close(request.id, "unavailable", request);
+      throw error;
+    }
+    // The seat is theirs: their connection takes control of it (joining the room's broadcasts).
+    const newcomer = await sessions.claim(requester, await rooms.authenticate(granted.credential), false);
+    const { room } = await gameplay.snapshot(newcomer);
+    requester.emit("seat:granted", {
+      seatRequestId: request.id,
+      membership: { room, player: room.players.find((p) => p.playerId === newcomer.playerId)!, credential: granted.credential, controlEpoch: newcomer.sessionEpoch },
+    });
+    publisher.roomUpdated(room);
+    deps.seatRequests.granted(request);
+    return { data: { approved: true }, roomVersion: room.roomVersion };
   });
 
   // ── Sessions ─────────────────────────────────────────────────────────────

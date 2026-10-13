@@ -9,7 +9,8 @@ import { SlidingWindowLimiter, type RateLimitPolicy } from "../rooms/rateLimiter
 import type { RoomService } from "../rooms/roomService.js";
 import { SocketPublisher } from "./broadcaster.js";
 import { ConnectionRegistry } from "./presence.js";
-import { SessionManager, type GraceScheduler } from "./sessions.js";
+import { SeatRequests } from "./seatRequests.js";
+import { SessionManager, realTimeScheduler, type GraceScheduler } from "./sessions.js";
 import { handshakeAuth } from "./socketAuth.js";
 import { toProtocolError, type Logger } from "./socketErrors.js";
 import type { LudoServer } from "./socketEvents.js";
@@ -40,6 +41,8 @@ export interface RealtimeHandle {
   publisher: SocketPublisher;
   registry: ConnectionRegistry;
   sessions: SessionManager;
+  /** Open seat-takeover requests. */
+  seatRequests: SeatRequests;
   /** Stops timers; call before closing the server. */
   dispose(): void;
 }
@@ -60,11 +63,14 @@ export function attachRealtime(io: LudoServer, options: RealtimeOptions): Realti
     log,
   });
 
+  const seatRequests = new SeatRequests(io, options.graceScheduler ?? realTimeScheduler);
+
   const deps: HandlerDeps = {
     rooms: options.rooms,
     gameplay: options.gameplay,
     publisher,
     sessions,
+    seatRequests,
     connectionLimiter: new SlidingWindowLimiter(options.limits?.perConnection ?? DEFAULT_CONNECTION_LIMIT),
     playerLimiter: new SlidingWindowLimiter(options.limits?.perPlayer ?? DEFAULT_PLAYER_LIMIT),
     log,
@@ -83,6 +89,7 @@ export function attachRealtime(io: LudoServer, options: RealtimeOptions): Realti
     socket.emit("server:hello", { protocolVersion: PROTOCOL_VERSION, serverTime: Date.now() });
     registerHandlers(socket, deps);
     socket.on("disconnect", () => {
+      seatRequests.withdrawFrom(socket.id);
       sessions.release(socket).catch((error: unknown) => toProtocolError(error, "disconnect", log));
     });
     socket.on("error", (error) => toProtocolError(error, "socket", log));
@@ -103,5 +110,14 @@ export function attachRealtime(io: LudoServer, options: RealtimeOptions): Realti
     }
   });
 
-  return { publisher, registry, sessions, dispose: () => sessions.dispose() };
+  return {
+    publisher,
+    registry,
+    sessions,
+    seatRequests,
+    dispose: () => {
+      seatRequests.dispose();
+      sessions.dispose();
+    },
+  };
 }

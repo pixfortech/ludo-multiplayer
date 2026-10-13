@@ -415,6 +415,37 @@ export function runGameStoreContract(name: string, setup: () => Promise<{ store:
         expect(await store.setPendingCredential(guest.id, 1, issueCredential().hash)).toBe(false);
       });
 
+      it("gives an offline member's seat to someone new only while a game is in progress, atomically", async () => {
+        const { room, host, guest, state } = await seededRoom(store);
+        const newcomer = issueCredential();
+        // Not before the game starts.
+        await expectStoreError(store.replaceSeatHolder(room.id, room.roomVersion, guest.id, { displayName: "Dev", credentialHash: newcomer.hash }), "invalid-state");
+        const started = await store.startGame(room.id, room.roomVersion, state, { playerId: host.id, actionType: "game:start", requestId: null, payload: {} });
+        // Not while the player is connected, not with another member's name, not for someone who is not a member.
+        await store.setConnectionStatus(guest.id, "connected");
+        await expectStoreError(store.replaceSeatHolder(room.id, started.room.roomVersion, guest.id, { displayName: "Dev", credentialHash: newcomer.hash }), "invalid-state");
+        await store.setConnectionStatus(guest.id, "disconnected");
+        await expectStoreError(store.replaceSeatHolder(room.id, started.room.roomVersion, guest.id, { displayName: "asha", credentialHash: newcomer.hash }), "name-taken");
+        await expectStoreError(store.replaceSeatHolder(room.id, started.room.roomVersion, randomUUID(), { displayName: "Dev", credentialHash: newcomer.hash }), "not-found");
+        await expectStoreError(store.replaceSeatHolder(room.id, started.room.roomVersion + 5, guest.id, { displayName: "Dev", credentialHash: newcomer.hash }), "version-conflict");
+        const before = (await store.getPlayer(guest.id))!;
+        const credentialBefore = (await store.getCredential(guest.id))!;
+        await store.setPendingCredential(guest.id, credentialBefore.version, issueCredential().hash);
+        const replaced = await store.replaceSeatHolder(room.id, started.room.roomVersion, guest.id, { displayName: "Dev", credentialHash: newcomer.hash });
+        expect(replaced.room.roomVersion).toBe(started.room.roomVersion + 1);
+        // Same seat, colour and id; the new name; a new epoch.
+        expect(replaced.player).toMatchObject({ id: guest.id, seat: before.seat, colour: before.colour, displayName: "Dev", sessionEpoch: before.sessionEpoch + 1 });
+        // Only the newcomer's secret works now: the old one and the pending one are gone.
+        const after = (await store.getCredential(guest.id))!;
+        expect(after.hash.equals(newcomer.hash)).toBe(true);
+        expect(verifyCredential(guest.secret, after.hash)).toBe(false);
+        expect(after.pendingHash).toBeNull();
+        expect(after.version).toBe(credentialBefore.version + 1);
+        expect(after.revokedAt).toBeNull();
+        // The game is untouched.
+        expect((await store.getGameSession(room.id))!.stateVersion).toBe(0);
+      });
+
       it("moves the session epoch on for active members only", async () => {
         const { room, host, guest } = await seededRoom(store);
         expect((await store.getPlayer(host.id))!.sessionEpoch).toBe(0);

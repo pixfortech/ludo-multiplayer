@@ -11,6 +11,7 @@ import { TextField } from "../components/ui/Field";
 import { ArrowLeftIcon, CrownIcon, EnterIcon, ResumeIcon } from "../components/ui/Icons";
 import { Spinner } from "../components/ui/Spinner";
 import { useToasts } from "../components/ui/Toasts";
+import { SeatRequestDeclined } from "../lib/connection";
 import { errorCode, friendlyError } from "../lib/errors";
 import { SEAT_CORNERS, formatRoomCode, isCompleteCode, normaliseCodeInput } from "../lib/format";
 import { identityFor } from "../lib/identities";
@@ -38,6 +39,9 @@ export function JoinRoomPage({ initialCode }: { initialCode: string | null }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const latestRequest = useRef(0);
+  // Taking over an offline player's seat in a game in progress (the host decides).
+  const [takeoverSeat, setTakeoverSeat] = useState<string | null>(null);
+  const [takeover, setTakeover] = useState<{ kind: "idle" } | { kind: "waiting" } | { kind: "failed"; message: string }>({ kind: "idle" });
   const savedSeats = isCompleteCode(code) ? seats.forRoom(code) : [];
 
   const loadPreview = useCallback(
@@ -98,6 +102,32 @@ export function JoinRoomPage({ initialCode }: { initialCode: string | null }) {
       setJoining(false);
       // Availability changed since the preview: show the server's current picture.
       if (code === "colour-taken" || code === "room-full" || code === "game-already-started" || code === "name-taken") void loadPreview(room.code);
+    }
+  };
+
+  const offline = room && !room.joinable ? room.takeoverSeats : [];
+  const chosenSeat = offline.find((t) => t.playerId === takeoverSeat) ?? offline[0] ?? null;
+
+  const askForSeat = async () => {
+    if (!room || !chosenSeat) return;
+    const trimmed = name.trim().replace(/\s+/g, " ");
+    if (trimmed.length < 1 || [...trimmed].length > 24) {
+      setNameError("Choose a name of 1–24 characters.");
+      return;
+    }
+    setNameError(null);
+    setTakeover({ kind: "waiting" });
+    try {
+      const { granted } = await client.requestSeat({ code: room.code, playerId: chosenSeat.playerId, displayName: trimmed });
+      const seat = await granted;
+      rememberName(trimmed);
+      seats.save({ roomCode: seat.room.code, playerId: seat.player.playerId, secret: seat.credential.secret, displayName: seat.player.displayName, roomName: seat.room.name });
+      tab.set({ roomCode: seat.room.code, playerId: seat.player.playerId });
+      toasts.push({ tone: "success", title: `You're playing ${identityFor(seat.player.colour).name}`, body: `You took over ${chosenSeat.displayName}'s seat.` });
+      navigate(paths.lobby(seat.room.code));
+    } catch (error) {
+      setTakeover({ kind: "failed", message: error instanceof SeatRequestDeclined ? error.message : friendlyError(error) });
+      void loadPreview(room.code);
     }
   };
 
@@ -198,6 +228,43 @@ export function JoinRoomPage({ initialCode }: { initialCode: string | null }) {
           </Card>
         </div>
 
+        {chosenSeat ? (
+        <Card className="flex flex-col gap-5 self-start p-5 sm:p-7 lg:sticky lg:top-20" data-testid="takeover">
+          <h2 className="font-display text-xl font-semibold text-ink">Take over a seat</h2>
+          <p className="text-[15px] text-ink-muted">This game is in progress. You can carry on for a player who is offline: their tokens, colour and place in the game become yours. {room?.hostName ?? "The host"} decides.</p>
+          <div role="radiogroup" aria-label="Seat to take over" className="flex flex-col gap-2">
+            {offline.map((t) => (
+              <button
+                key={t.playerId}
+                type="button"
+                role="radio"
+                aria-checked={chosenSeat.playerId === t.playerId}
+                onClick={() => setTakeoverSeat(t.playerId)}
+                disabled={takeover.kind === "waiting"}
+                className={`press flex items-center gap-3 rounded-[var(--radius-control)] border px-3 py-2 text-left ${chosenSeat.playerId === t.playerId ? "border-ink bg-[#f6f3ee]" : "border-border bg-surface"}`}
+              >
+                <PlayerToken identity={identityFor(t.colour)} size={32} shadow={false} />
+                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">{t.displayName}</span>
+                <span className="text-[13px] text-ink-muted">offline</span>
+              </button>
+            ))}
+          </div>
+          <TextField label="Your name" autoComplete="nickname" maxLength={24} placeholder="e.g. Dev" value={name} onChange={(e) => setName(e.target.value)} error={nameError} disabled={takeover.kind === "waiting"} />
+          {takeover.kind === "failed" ? (
+            <p role="alert" className="rounded-[var(--radius-control)] border border-[#f5c6cd] bg-[#fff5f6] px-3.5 py-2.5 text-sm font-medium text-danger">
+              {takeover.message}
+            </p>
+          ) : null}
+          {takeover.kind === "waiting" ? (
+            <p className="flex items-center gap-2 text-[15px] font-medium text-ink-muted" data-testid="takeover-waiting" aria-live="polite">
+              <Spinner size={18} /> Waiting for {room?.hostName ?? "the host"} to answer…
+            </p>
+          ) : null}
+          <Button type="button" variant="primary" size="lg" block loading={takeover.kind === "waiting"} icon={<EnterIcon />} onClick={() => void askForSeat()}>
+            {takeover.kind === "waiting" ? "Asking…" : `Ask to play as ${identityFor(chosenSeat.colour).name}`}
+          </Button>
+        </Card>
+        ) : (
         <Card className={`flex flex-col gap-5 self-start p-5 sm:p-7 lg:sticky lg:top-20 ${room && joinable ? "" : "opacity-60"}`}>
           <h2 className="font-display text-xl font-semibold text-ink">Your seat</h2>
           <TextField label="Your name" autoComplete="nickname" maxLength={24} placeholder="e.g. Ben" value={name} onChange={(e) => setName(e.target.value)} error={nameError} disabled={!room || !joinable} />
@@ -214,9 +281,10 @@ export function JoinRoomPage({ initialCode }: { initialCode: string | null }) {
           ) : null}
           <div className="hidden md:block">{joinButton}</div>
         </Card>
+        )}
       </div>
 
-      <MobileActionBar>{joinButton}</MobileActionBar>
+      {chosenSeat ? null : <MobileActionBar>{joinButton}</MobileActionBar>}
     </form>
   );
 }

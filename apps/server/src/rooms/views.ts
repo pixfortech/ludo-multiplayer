@@ -73,5 +73,13 @@ export function toRoomPreview(room: RoomRecord, players: readonly PlayerRecord[]
     cityTheme: normaliseSettings(room.settings).cityTheme,
     joinable: blocked === null,
     blockedReason: blocked,
+    // Names and colours of offline players are what anyone with the code already sees on the board.
+    takeoverSeats:
+      room.status === "playing" || room.status === "paused"
+        ? players
+            .filter((p) => p.connectionStatus !== "connected")
+            .map((p) => ({ playerId: p.id, displayName: p.displayName, seat: p.seat, colour: p.colour }))
+            .sort((a, b) => a.seat - b.seat)
+        : [],
   };
 }

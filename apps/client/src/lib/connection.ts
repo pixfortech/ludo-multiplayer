@@ -21,6 +21,8 @@ import type {
   ResumeData,
   RoomPreview,
   RoomStateData,
+  SeatRequestData,
+  SeatRequestNotice,
   RoomView,
   ServerToClientEvents,
   SessionEndReason,
@@ -45,6 +47,16 @@ export interface ConnectionState {
   game: GameStateView | null;
   /** Set when the server detached this connection from its seat. */
   ended: SessionEndReason | null;
+  /** Open requests from newcomers to take over an offline player's seat in this game. */
+  seatRequests: SeatRequestNotice[];
+}
+
+/** Why a takeover request ended without a seat. */
+export class SeatRequestDeclined extends Error {
+  override name = "SeatRequestDeclined";
+  constructor(readonly reason: "declined" | "expired" | "unavailable" | "disconnected") {
+    super(reason === "declined" ? "The host said no this time." : reason === "expired" ? "Nobody answered in time." : reason === "disconnected" ? "The connection was lost." : "That seat is no longer available.");
+  }
 }
 
 /** Lobby-worthy changes, derived from authoritative updates (for toasts and announcements). */
@@ -106,13 +118,15 @@ export class GameConnection {
   private controlEpoch: number | null = null;
   private everConnected = false;
   private reconciling: Promise<void> | null = null;
+  /** Takeover requests this connection made, waiting for their answer. */
+  private readonly seatWaiters = new Map<string, { resolve: (m: MembershipData) => void; reject: (e: Error) => void }>();
   private stateWatch: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly socket: ClientSocket,
     private readonly options: { requestTimeoutMs?: number } = {},
   ) {
-    this.state = { link: socket.connected ? "connected" : "connecting", seat: null, room: null, game: null, ended: null };
+    this.state = { link: socket.connected ? "connected" : "connecting", seat: null, room: null, game: null, ended: null, seatRequests: [] };
     socket.on("connect", () => {
       const wasReconnect = this.everConnected;
       this.everConnected = true;
@@ -141,6 +155,33 @@ export class GameConnection {
     });
     socket.on("game:resumed", ({ roomId }) => {
       if (this.state.room?.roomId === roomId) this.emit({ kind: "game-resumed" });
+    });
+    socket.on("seat:requested", (notice) => {
+      if (this.state.room?.roomId !== notice.roomId) return;
+      this.patch({ seatRequests: [...this.state.seatRequests.filter((r) => r.seatRequestId !== notice.seatRequestId), notice] });
+    });
+    socket.on("seat:requestClosed", ({ seatRequestId }) => {
+      if (this.state.seatRequests.some((r) => r.seatRequestId === seatRequestId)) this.patch({ seatRequests: this.state.seatRequests.filter((r) => r.seatRequestId !== seatRequestId) });
+    });
+    socket.on("seat:granted", ({ seatRequestId, membership }) => {
+      const waiter = this.seatWaiters.get(seatRequestId);
+      this.seatWaiters.delete(seatRequestId);
+      this.bind(membership.room, membership.player.playerId, membership.credential, membership.controlEpoch);
+      // The game in progress (bind keeps no game from another room).
+      this.reconcile();
+      waiter?.resolve(membership);
+    });
+    socket.on("seat:declined", ({ seatRequestId, reason }) => {
+      const waiter = this.seatWaiters.get(seatRequestId);
+      this.seatWaiters.delete(seatRequestId);
+      waiter?.reject(new SeatRequestDeclined(reason));
+    });
+    socket.on("disconnect", () => {
+      // A takeover request lives only as long as the connection that made it.
+      for (const [id, waiter] of this.seatWaiters) {
+        this.seatWaiters.delete(id);
+        waiter.reject(new SeatRequestDeclined("disconnected"));
+      }
     });
     socket.on("session:ended", ({ reason }) => {
       this.credential = null;
@@ -202,6 +243,25 @@ export class GameConnection {
     return data;
   }
 
+  /**
+   * Asks to take over an offline player's seat in a game in progress. Resolves once the request is open; `granted`
+   * settles with the seat (this connection then controls it) or rejects with SeatRequestDeclined.
+   */
+  async requestSeat(input: { code: string; playerId: string; displayName: string }): Promise<{ request: SeatRequestData; granted: Promise<MembershipData> }> {
+    const request = await this.request("room:requestSeat", input);
+    const granted = new Promise<MembershipData>((resolve, reject) => this.seatWaiters.set(request.seatRequestId, { resolve, reject }));
+    // Callers may not await it at once; an unhandled rejection is not an error here.
+    granted.catch(() => undefined);
+    return { request, granted };
+  }
+
+  /** The host's (or, while the host is away, another player's) answer to a takeover request. */
+  async answerSeatRequest(seatRequestId: string, approve: boolean): Promise<boolean> {
+    const data = await this.request("room:answerSeatRequest", { seatRequestId, approve });
+    this.patch({ seatRequests: this.state.seatRequests.filter((r) => r.seatRequestId !== seatRequestId) });
+    return data.approved;
+  }
+
   /** Re-attaches a stored seat. `takeover` moves control from another tab or device (it is told). */
   resume(credential: PlayerSessionCredential, options: { takeover?: boolean } = {}): Promise<ResumeData> {
     return this.resumeSeat(credential, options.takeover ? { takeover: true } : {});
@@ -258,7 +318,7 @@ export class GameConnection {
     await this.request("room:leave", {});
     this.credential = null;
     this.controlEpoch = null;
-    this.patch({ seat: null, room: null, game: null, ended: null });
+    this.patch({ seat: null, room: null, game: null, ended: null, seatRequests: [] });
   }
 
   async refresh(): Promise<RoomStateData> {

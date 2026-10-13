@@ -216,6 +216,81 @@ export class RoomService {
     }
   }
 
+  // ── Seat takeover ────────────────────────────────────────────────────────
+  //
+  // Someone new may take over the seat of a player who is offline in a game in progress (an old game resumed
+  // without them). They ask; the host decides, or, while the host is away (or is the one being replaced),
+  // another player in the game. On approval the seat keeps its id, colour, tokens and place in the game, takes
+  // the newcomer's name and a new credential: the absent player's secret stops working.
+
+  /** Checks a takeover request from someone without a seat (rate-limited like joining); nothing changes. */
+  async checkSeatTakeover(input: unknown, context: RequestContext): Promise<{ roomId: string; playerId: string; displayName: string }> {
+    const request = asRecord(input);
+    assertKnownKeys(request, ["code", "playerId", "displayName"], "invalid-request");
+    const code = this.parseCode(request.code);
+    const playerId = parsePlayerId(request.playerId);
+    const displayName = normaliseDisplayName(request.displayName);
+    this.throttle(this.lookupGuard.begin(context.clientKey));
+    try {
+      const room = await this.findRoom(code, context);
+      const players = await this.store.listPlayers(room.id);
+      this.assertTakeoverPossible(room, players, playerId, displayName);
+      return { roomId: room.id, playerId, displayName };
+    } catch (error) {
+      throw translate(error);
+    }
+  }
+
+  /**
+   * The approver's answer to a takeover request: gives the seat to the newcomer. Allowed for the host, or for
+   * another player in the game while the host is offline or is the player being replaced. Returns the room and
+   * the newcomer's credential (for them only).
+   */
+  async approveSeatTakeover(approver: AuthenticatedPlayer, playerId: string, displayName: string): Promise<{ room: RoomView; credential: PlayerSessionCredential }> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const { room, players } = await this.loadMember(approver);
+        this.assertMayApprove(room, players, approver.playerId, playerId);
+        this.assertTakeoverPossible(room, players, playerId, displayName);
+        const credential = issueCredential();
+        const replaced = await this.store.replaceSeatHolder(room.id, room.roomVersion, playerId, { displayName, credentialHash: credential.hash });
+        const now = await this.store.listPlayers(room.id);
+        return { room: toRoomView(replaced.room, now), credential: { playerId, secret: credential.secret } };
+      } catch (error) {
+        if (error instanceof StoreError && error.code === "version-conflict" && attempt < this.maxAttempts) continue;
+        if (error instanceof StoreError && error.code === "invalid-state") throw new RoomError("seat-not-available", "That seat cannot be taken over now");
+        throw translate(error);
+      }
+    }
+  }
+
+  /** May this member answer takeover requests for `target`'s seat? */
+  async assertMayAnswer(approver: AuthenticatedPlayer, target: string): Promise<void> {
+    try {
+      const { room, players } = await this.loadMember(approver);
+      this.assertMayApprove(room, players, approver.playerId, target);
+    } catch (error) {
+      throw translate(error);
+    }
+  }
+
+  private assertMayApprove(room: RoomRecord, players: readonly PlayerRecord[], approverId: string, target: string): void {
+    if (approverId === target) throw new RoomError("invalid-target", "You cannot answer a request for your own seat");
+    if (approverId === room.hostPlayerId) return;
+    const host = players.find((p) => p.id === room.hostPlayerId);
+    const hostAway = !host || host.id === target || host.connectionStatus !== "connected";
+    if (!hostAway) throw new RoomError("not-host", "Only the host can answer this while they are here");
+  }
+
+  private assertTakeoverPossible(room: RoomRecord, players: readonly PlayerRecord[], playerId: string, displayName: string): void {
+    if (room.status !== "playing" && room.status !== "paused") throw new RoomError("seat-not-available", "Only a game in progress has seats to take over");
+    const target = players.find((p) => p.id === playerId);
+    if (!target) throw new RoomError("invalid-target", "That player is not in this game");
+    if (target.connectionStatus === "connected") throw new RoomError("seat-not-available", "That player is still connected");
+    const key = displayNameKey(displayName);
+    if (players.some((p) => p.id !== playerId && displayNameKey(p.displayName) === key)) throw new RoomError("name-taken", "That name is already used in this room");
+  }
+
   // ── Identity ─────────────────────────────────────────────────────────────
 
   /**

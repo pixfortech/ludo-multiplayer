@@ -39,6 +39,8 @@ const MESSAGES: Record<ProtocolErrorCode | "timeout" | "offline", string> = {
   "session-in-use": "This seat is open in another tab or device.",
   "session-replaced": "You continued this game in another tab or device.",
   "credential-conflict": "Your seat details changed at the same moment. Please try again.",
+  "seat-not-available": "That seat can't be taken over now: its player is back, or the game has ended.",
+  "seat-request-gone": "That request was already answered or has expired.",
   "game-not-started": "The game hasn't started yet.",
   "game-paused": "The game is paused.",
   "game-finished": "The game is over.",

@@ -128,6 +128,25 @@ export interface MoveRequest extends RequestBase {
   tokenId: number;
 }
 
+/**
+ * Ask to take over an offline player's seat in a game in progress (from a connection with no seat). The host
+ * decides (or, while the host is away, another player in the game): the answer arrives as seat:granted (with
+ * the seat's new credential) or seat:declined.
+ */
+export interface RequestSeatRequest extends RequestBase {
+  code: string;
+  /** The offline player whose seat to take (from RoomPreview.takeoverSeats). */
+  playerId: string;
+  /** The newcomer's name: the seat is shown under it from then on. */
+  displayName: string;
+}
+
+/** The host's (or, while the host is away, another player's) answer to a takeover request. */
+export interface AnswerSeatRequest extends RequestBase {
+  seatRequestId: string;
+  approve: boolean;
+}
+
 export interface HistoryRequest extends RequestBase {
   /** Return actions after this sequence number (default 0 = from the start). */
   afterSeq?: number;
@@ -199,6 +218,24 @@ export interface RotateCredentialData {
   credential: PlayerSessionCredential;
 }
 
+export interface SeatRequestData {
+  /** Identifies this takeover request (for the answer). */
+  seatRequestId: string;
+  /** When it lapses unanswered (ms since the epoch). */
+  expiresAt: number;
+}
+
+/** A takeover request, as the players in the game see it. */
+export interface SeatRequestNotice {
+  roomId: string;
+  seatRequestId: string;
+  /** The offline player whose seat is asked for. */
+  playerId: string;
+  /** Who is asking. */
+  displayName: string;
+  expiresAt: number;
+}
+
 export interface HistoryData {
   actions: GameActionView[];
   /** Pass as afterSeq to fetch the next page. */
@@ -225,6 +262,8 @@ export interface ClientToServerEvents {
   "game:resume": (request: HostRoomRequest, ack: AckCallback<{ room: RoomView; changed: boolean }>) => void;
   "session:rotate": (request: RotateCredentialRequest, ack: AckCallback<RotateCredentialData>) => void;
   "session:confirmCredential": (request: ConfirmCredentialRequest, ack: AckCallback<{ credentialVersion: number }>) => void;
+  "room:requestSeat": (request: RequestSeatRequest, ack: AckCallback<SeatRequestData>) => void;
+  "room:answerSeatRequest": (request: AnswerSeatRequest, ack: AckCallback<{ approved: boolean }>) => void;
 }
 
 export type SessionEndReason =
@@ -256,4 +295,12 @@ export interface ServerToClientEvents {
   "game:resumed": (payload: { roomId: string; roomVersion: number }) => void;
   /** This connection no longer controls its seat; it has been detached from the room. */
   "session:ended": (payload: { roomId: string; reason: SessionEndReason }) => void;
+  /** To the players in a game: someone asks to take over an offline player's seat. */
+  "seat:requested": (payload: SeatRequestNotice) => void;
+  /** To the players in a game: a takeover request is no longer open. */
+  "seat:requestClosed": (payload: { roomId: string; seatRequestId: string; outcome: "approved" | "declined" | "expired" | "withdrawn" }) => void;
+  /** To the asking connection: the seat is yours (store the credential; it is never shown again). */
+  "seat:granted": (payload: { seatRequestId: string; membership: MembershipData }) => void;
+  /** To the asking connection: no seat (declined, expired, or no longer available). */
+  "seat:declined": (payload: { seatRequestId: string; reason: "declined" | "expired" | "unavailable" }) => void;
 }

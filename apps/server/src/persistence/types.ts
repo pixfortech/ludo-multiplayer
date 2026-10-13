@@ -212,6 +212,15 @@ export interface GameStore {
    * operation are skipped and re-checked next time. Never deletes anything.
    */
   expireInactiveRooms(cutoffs: RetentionCutoffs, limit: number): Promise<{ expired: string[]; archived: string[] }>;
+  /**
+   * Gives an active member's seat to someone new (a takeover the host approved), in one transaction under the
+   * room lock: the new display name, a new credential digest (the old secret and any pending one stop working)
+   * and a new session epoch (any connection still holding the seat loses it). Bumps the room version. The game,
+   * the seat, its colour and its tokens are unchanged. Fails with not-found unless the player is an active member,
+   * invalid-state unless the game is in progress (playing or paused) and the player is offline, and name-taken
+   * if another member already has the name.
+   */
+  replaceSeatHolder(roomId: string, expectedRoomVersion: number, playerId: string, holder: { displayName: string; credentialHash: Buffer }): Promise<{ room: RoomRecord; player: PlayerRecord }>;
   /** Replaces the credential digest (rotation); returns the new version. */
   rotateCredential(playerId: string, newHash: Buffer): Promise<number>;
   revokeCredential(playerId: string): Promise<void>;

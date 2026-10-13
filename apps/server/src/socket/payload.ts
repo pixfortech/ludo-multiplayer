@@ -98,4 +98,6 @@ export const RULES = {
   },
   confirmCredential: { secret: { kind: "string", required: true, max: 128 } },
   transferHost: { playerId: { kind: "string", required: true, max: 64 }, expectedRoomVersion: { ...VERSION, required: false } },
+  requestSeat: { code: { kind: "string", required: true, max: 32 }, playerId: { kind: "string", required: true, max: 64 }, displayName: { kind: "string", required: true, max: 64 } },
+  answerSeatRequest: { seatRequestId: { kind: "string", required: true, max: 64 }, approve: { kind: "boolean", required: true } },
 } satisfies Record<string, Record<string, FieldRule>>;

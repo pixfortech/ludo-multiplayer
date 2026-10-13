@@ -333,6 +333,31 @@ export class PostgresGameStore implements GameStore {
     });
   }
 
+  async replaceSeatHolder(roomId: string, expectedRoomVersion: number, playerId: string, holder: { displayName: string; credentialHash: Buffer }) {
+    return this.tx(async (client) => {
+      const room = await this.lockRoom(client, roomId, expectedRoomVersion);
+      const { rows: found } = await client.query("SELECT connection_status FROM players WHERE id = $1 AND room_id = $2 AND left_at IS NULL FOR UPDATE", [playerId, roomId]);
+      if (found.length === 0) throw new StoreError("not-found", "Player is not an active member of this room");
+      if (room.status !== "playing" && room.status !== "paused") throw new StoreError("invalid-state", "Only a game in progress can change hands");
+      if (found[0].connection_status === "connected") throw new StoreError("invalid-state", "That player is connected");
+      let player: PlayerRecord;
+      try {
+        const { rows } = await client.query(
+          `UPDATE players SET display_name = $3, credential_hash = $4, credential_version = credential_version + 1,
+             credential_issued_at = now(), credential_revoked_at = NULL, pending_credential_hash = NULL,
+             pending_credential_issued_at = NULL, session_epoch = session_epoch + 1, last_seen_at = now()
+           WHERE id = $1 AND room_id = $2 RETURNING *`,
+          [playerId, roomId, holder.displayName, holder.credentialHash],
+        );
+        player = toPlayer(rows[0]);
+      } catch (error) {
+        if (isUniqueViolation(error, "players_active_name_idx")) throw new StoreError("name-taken", "That name is already used in this room");
+        throw error;
+      }
+      return { room: await this.bumpRoom(client, roomId), player };
+    });
+  }
+
   async setFinishPlace(playerId: string, place: number | null) {
     await this.pool.query("UPDATE players SET finish_place = $2 WHERE id = $1", [playerId, place]);
   }

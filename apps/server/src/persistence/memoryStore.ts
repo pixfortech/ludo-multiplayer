@@ -259,6 +259,25 @@ export class MemoryGameStore implements GameStore {
     return this.bump(room);
   }
 
+  async replaceSeatHolder(roomId: string, expectedRoomVersion: number, playerId: string, holder: { displayName: string; credentialHash: Buffer }) {
+    const room = this.room(roomId, expectedRoomVersion);
+    const p = this.players.get(playerId);
+    if (!p || p.roomId !== roomId || p.leftAt !== null) throw new StoreError("not-found", "Player is not an active member of this room");
+    if (room.status !== "playing" && room.status !== "paused") throw new StoreError("invalid-state", "Only a game in progress can change hands");
+    if (p.connectionStatus === "connected") throw new StoreError("invalid-state", "That player is connected");
+    const key = asciiLower(holder.displayName);
+    if (this.active(roomId).some((x) => x.id !== playerId && asciiLower(x.displayName) === key)) throw new StoreError("name-taken", "That name is already used in this room");
+    p.displayName = holder.displayName;
+    p.credentialHash = Buffer.from(holder.credentialHash);
+    p.credentialVersion += 1;
+    p.credentialIssuedAt = now();
+    p.credentialRevokedAt = null;
+    p.pendingHash = null;
+    p.sessionEpoch += 1;
+    p.lastSeenAt = now();
+    return { room: this.bump(room), player: this.publicPlayer(p) };
+  }
+
   async setFinishPlace(playerId: string, place: number | null) {
     const p = this.players.get(playerId);
     if (p) p.finishPlace = place;

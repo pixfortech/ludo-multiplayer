@@ -427,6 +427,43 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
 
   const dice = <DicePanel die={playback.die} identity={trayIdentity} canRoll={canRoll} rolling={dieRolling} waitingLabel={waitingLabel} onRoll={() => void roll()} reduced={reduced} active={myTurn} flat={die3d} />;
 
+  // Someone new asks to take over an offline player's seat: the host answers, or, while the host is away (or is
+  // the one being replaced), any other player in the game.
+  const hostId = room.hostPlayerId;
+  const hostHere = room.players.find((p) => p.playerId === hostId)?.connectionStatus === "connected";
+  const seatRequests = (state.seatRequests ?? []).filter((r) => me !== null && r.playerId !== me && (me === hostId || !hostHere || r.playerId === hostId));
+  const [answering, setAnswering] = useState<string | null>(null);
+  const answerSeat = async (seatRequestId: string, approve: boolean) => {
+    setAnswering(seatRequestId);
+    try {
+      await client.answerSeatRequest(seatRequestId, approve);
+    } catch (error) {
+      say("error", friendlyError(error));
+    } finally {
+      setAnswering(null);
+    }
+  };
+  const seatRequestPrompt = seatRequests.length ? (
+    <div className="pointer-events-none fixed inset-x-0 top-20 z-50 flex flex-col items-center gap-2 px-4">
+      {seatRequests.map((r) => (
+        <div key={r.seatRequestId} role="alertdialog" aria-label={`${r.displayName} asks to take over ${nameOf(r.playerId)}'s seat`} data-testid="seat-request" className="pointer-events-auto w-full max-w-md rounded-[var(--radius-card)] border border-border bg-surface p-4 shadow-raised">
+          <p className="text-[15px] font-semibold text-ink">
+            {r.displayName} asks to take over {nameOf(r.playerId)}&apos;s seat
+          </p>
+          <p className="mt-1 text-[13px] text-ink-muted">{nameOf(r.playerId)} is offline. {r.displayName} would carry on with the same tokens, colour and turn.</p>
+          <div className="mt-3 flex gap-2">
+            <Button variant="primary" loading={answering === r.seatRequestId} onClick={() => void answerSeat(r.seatRequestId, true)}>
+              Let them play
+            </Button>
+            <Button variant="secondary" disabled={answering === r.seatRequestId} onClick={() => void answerSeat(r.seatRequestId, false)}>
+              Not now
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : null;
+
   const quiet = !choosing && !playback.busy;
   useEffect(() => {
     if (!pendingView || !quiet) return;
@@ -644,6 +681,7 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       </MobileActionBar>
       {victoryScreen}
       <PresentationLog />
+      {seatRequestPrompt}
     </div>
   );
 }

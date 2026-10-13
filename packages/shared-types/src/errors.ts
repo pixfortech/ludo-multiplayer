@@ -42,6 +42,11 @@ export type RoomErrorCode =
   | "session-replaced"
   /** A concurrent credential rotation won; fetch state and retry. */
   | "credential-conflict"
+  // seat takeover
+  /** That seat cannot be taken over now: its player is connected, or the game is not in progress. */
+  | "seat-not-available"
+  /** The takeover request was already answered, withdrawn or has expired. */
+  | "seat-request-gone"
   // concurrency and infrastructure
   | "version-conflict"
   | "rate-limited"

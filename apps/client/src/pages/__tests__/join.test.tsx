@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { RoomPreview } from "@ludo/shared-types";
 import App from "../../App";
-import { ProtocolRequestError } from "../../lib/connection";
+import { ProtocolRequestError, SeatRequestDeclined } from "../../lib/connection";
 import { membership, player, roomView, services } from "../../test/fakes";
 
 function preview(over: Partial<RoomPreview> = {}): RoomPreview {
@@ -25,6 +25,7 @@ function preview(over: Partial<RoomPreview> = {}): RoomPreview {
     cityTheme: "classic",
     joinable: true,
     blockedReason: null,
+    takeoverSeats: [],
     ...over,
   };
 }
@@ -88,5 +89,38 @@ describe("join room", () => {
     render(<App services={s} initialPath="/join/ABC234" />);
     expect(await screen.findByText(/This game has already started/)).toBeTruthy();
     expect((screen.getAllByRole("button", { name: /Join game/ })[0] as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("offers an offline player's seat in a game in progress, asks the host, and takes the seat when they agree", async () => {
+    const s = services();
+    s.client.previewResult = preview({
+      joinable: false,
+      blockedReason: "game-already-started",
+      status: "playing",
+      lifecycle: "playing",
+      takeoverSeats: [{ playerId: "p-ben", displayName: "Ben", seat: 2, colour: "emerald" }],
+    });
+    const room = roomView({ players: [player(), player({ playerId: "p-ben", displayName: "Dev", seat: 2, colour: "emerald", isHost: false })] });
+    s.client.seatResult = membership(room, "p-ben", "dev-secret");
+    render(<App services={s} initialPath="/join/ABC234" />);
+    expect(await screen.findByText("Take over a seat")).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /Ben/ }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Dev" } });
+    fireEvent.click(screen.getByRole("button", { name: /Ask to play as Emerald/ }));
+    await waitFor(() => expect(window.location.pathname).toBe("/room/ABC234"));
+    expect(s.client.calls.find((c) => c.method === "requestSeat")).toEqual({ method: "requestSeat", args: [{ code: "ABC234", playerId: "p-ben", displayName: "Dev" }] });
+    expect(s.seats.get("ABC234", "p-ben")?.secret).toBe("dev-secret");
+  });
+
+  it("says so when the host declines a takeover", async () => {
+    const s = services();
+    s.client.previewResult = preview({ joinable: false, blockedReason: "game-already-started", status: "playing", lifecycle: "playing", takeoverSeats: [{ playerId: "p-ben", displayName: "Ben", seat: 2, colour: "emerald" }] });
+    s.client.seatResult = new SeatRequestDeclined("declined");
+    render(<App services={s} initialPath="/join/ABC234" />);
+    expect(await screen.findByText("Take over a seat")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Dev" } });
+    fireEvent.click(screen.getByRole("button", { name: /Ask to play as/ }));
+    expect(await screen.findByText("The host said no this time.")).toBeTruthy();
+    expect(s.seats.get("ABC234", "p-ben"), "no seat without the host's yes").toBeNull();
   });
 });
