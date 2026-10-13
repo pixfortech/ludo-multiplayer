@@ -36,8 +36,7 @@ const close = async (players: Player[]) => {
 const WIN_MS = 3200;
 
 async function kolkata(host: { name: string; device: Device; board: BoardView; quality?: "low"; reduced?: boolean }, guest: { name: string; device: Device; board: BoardView; reduced?: boolean }, browser: Browser) {
-  const aman = await openPlayer(browser, host.name, host.device, { board: host.board, reducedMotion: host.reduced ?? false });
-  if (host.quality) await aman.context.addInitScript(([mode, q]) => localStorage.setItem("ludo.board-view.v1", JSON.stringify({ mode, quality: q })), [host.board, host.quality] as const);
+  const aman = await openPlayer(browser, host.name, host.device, { board: host.board, reducedMotion: host.reduced ?? false, ...(host.quality ? { quality: host.quality } : {}) });
   const ben = await openPlayer(browser, guest.name, guest.device, { board: guest.board, reducedMotion: guest.reduced ?? false });
   const code = await createRoom(aman, { players: 2, city: "Kolkata" });
   await joinRoom(ben, code);

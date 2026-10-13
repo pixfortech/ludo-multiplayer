@@ -2,8 +2,8 @@
 // Kept tiny and free of three.js: it ships in the main bundle, while the 3D
 // renderer itself is a lazily loaded chunk.
 
-import { useCallback, useEffect, useState } from "react";
-import { browserStorage } from "../../lib/session";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { browserStorage, type KeyValueStorage } from "../../lib/session";
 
 /** The board views. "2.5d" is the default; "3d" is the immersive camera preview; "2d" is the lightweight SVG board. */
 export type BoardViewMode = "2.5d" | "3d" | "2d";
@@ -47,44 +47,92 @@ export interface ViewPreference {
   quality: QualityLevel | null;
 }
 
-const KEY = "ludo.board-view.v1";
+// A board view is one player's own presentation choice: it never leaves this tab (no shared room setting,
+// no Socket.IO message) and never follows another tab. Two places keep it:
+//  - this tab (sessionStorage), so a refresh keeps it, and two players in two tabs of one browser each keep
+//    their own;
+//  - this seat (localStorage, keyed by room and player), so the player who resumes their seat in a new tab
+//    or after closing the browser gets their own choice back, and nobody else's.
+// Nothing listens for other tabs' changes.
+export const TAB_VIEW_KEY = "ludo.view.tab.v2";
+export const SEAT_VIEWS_KEY = "ludo.view.seats.v2";
+const SEAT_VIEWS_KEPT = 20;
 const MODES: readonly BoardViewMode[] = ["2.5d", "3d", "2d"];
 const QUALITIES: readonly QualityLevel[] = ["low", "medium", "high"];
+const NONE: ViewPreference = { mode: null, quality: null };
 
-export function readViewPreference(): ViewPreference {
+function parsePreference(raw: unknown): ViewPreference | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Partial<Record<keyof ViewPreference, unknown>>;
+  return {
+    mode: MODES.includes(r.mode as BoardViewMode) ? (r.mode as BoardViewMode) : null,
+    quality: QUALITIES.includes(r.quality as QualityLevel) ? (r.quality as QualityLevel) : null,
+  };
+}
+
+function readJson(storage: KeyValueStorage | null, key: string): unknown {
   try {
-    const raw = JSON.parse(browserStorage("local")?.getItem(KEY) ?? "{}") as Partial<Record<keyof ViewPreference, unknown>>;
-    return {
-      mode: MODES.includes(raw.mode as BoardViewMode) ? (raw.mode as BoardViewMode) : null,
-      quality: QUALITIES.includes(raw.quality as QualityLevel) ? (raw.quality as QualityLevel) : null,
-    };
+    const raw = storage?.getItem(key);
+    return raw ? JSON.parse(raw) : null;
   } catch {
-    return { mode: null, quality: null };
+    return null;
   }
 }
 
-function writeViewPreference(pref: ViewPreference): void {
+function writeJson(storage: KeyValueStorage | null, key: string, value: unknown): void {
   try {
-    browserStorage("local")?.setItem(KEY, JSON.stringify(pref));
+    storage?.setItem(key, JSON.stringify(value));
   } catch {
     // a convenience only
   }
 }
 
-/** The player's board view and quality, remembered in this browser. */
-export function useViewPreference(): [ViewPreference, (next: Partial<ViewPreference>) => void] {
-  const [pref, setPref] = useState<ViewPreference>(readViewPreference);
+/** The seat a preference belongs to (room code and player), or null for someone without a seat. */
+export function seatViewKey(roomCode: string | null | undefined, playerId: string | null | undefined): string | null {
+  return roomCode && playerId ? `${roomCode}:${playerId}` : null;
+}
+
+/** This tab's board view, else the seat's remembered one, else the defaults. */
+export function readViewPreference(seat: string | null, stores: { tab: KeyValueStorage | null; local: KeyValueStorage | null } = { tab: browserStorage("session"), local: browserStorage("local") }): ViewPreference {
+  const tab = parsePreference(readJson(stores.tab, TAB_VIEW_KEY));
+  if (tab) return tab;
+  if (seat) {
+    const seats = readJson(stores.local, SEAT_VIEWS_KEY);
+    const own = seats && typeof seats === "object" ? parsePreference((seats as Record<string, unknown>)[seat]) : null;
+    if (own) return own;
+  }
+  return NONE;
+}
+
+export function writeViewPreference(pref: ViewPreference, seat: string | null, stores: { tab: KeyValueStorage | null; local: KeyValueStorage | null } = { tab: browserStorage("session"), local: browserStorage("local") }, now = Date.now()): void {
+  writeJson(stores.tab, TAB_VIEW_KEY, pref);
+  if (!seat) return;
+  const raw = readJson(stores.local, SEAT_VIEWS_KEY);
+  const seats = raw && typeof raw === "object" && !Array.isArray(raw) ? { ...(raw as Record<string, { at?: number }>) } : {};
+  seats[seat] = { ...pref, at: now } as unknown as { at: number };
+  // Keep the most recently used seats only.
+  const kept = Object.entries(seats)
+    .sort(([, a], [, b]) => (Number(b?.at) || 0) - (Number(a?.at) || 0))
+    .slice(0, SEAT_VIEWS_KEPT);
+  writeJson(stores.local, SEAT_VIEWS_KEY, Object.fromEntries(kept));
+}
+
+/**
+ * This player's board view and quality in this tab (see above). `seat` is the seat this tab plays (or null):
+ * when it becomes known and this tab has not chosen yet, the seat's own remembered choice applies.
+ */
+export function useViewPreference(seat: string | null = null): [ViewPreference, (next: Partial<ViewPreference>) => void] {
+  const [pref, setPref] = useState<ViewPreference>(() => readViewPreference(seat));
+  const seatRef = useRef(seat);
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === KEY) setPref(readViewPreference());
-    };
-    globalThis.addEventListener?.("storage", onStorage);
-    return () => globalThis.removeEventListener?.("storage", onStorage);
-  }, []);
+    if (seatRef.current === seat) return;
+    seatRef.current = seat;
+    setPref(readViewPreference(seat));
+  }, [seat]);
   const update = useCallback((next: Partial<ViewPreference>) => {
     setPref((current) => {
       const merged = { ...current, ...next };
-      writeViewPreference(merged);
+      writeViewPreference(merged, seatRef.current);
       return merged;
     });
   }, []);

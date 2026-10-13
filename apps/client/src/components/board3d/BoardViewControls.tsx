@@ -19,9 +19,16 @@ export interface BoardViewControlsProps {
   onFollow: () => void;
   /** Human characters are shown (a prototype, C.3A): say so. */
   characters?: boolean;
+  /** Where the characters stand (loading, all on the board, or which failed and why), or null. */
+  characterStatus?: string | null;
+  /** A character failed to load: offer a retry. */
+  characterFailed?: boolean;
+  onRetryCharacters?: () => void;
+  /** Why pawns are shown in a city with characters (the 2D board, a fallback), or null. */
+  pawnNotice?: string | null;
 }
 
-export function BoardViewControls({ mode, unavailable, quality, immersiveView, onMode, onQuality, onOverview, onFollow, characters = false }: BoardViewControlsProps) {
+export function BoardViewControls({ mode, unavailable, quality, immersiveView, onMode, onQuality, onOverview, onFollow, characters = false, characterStatus = null, characterFailed = false, onRetryCharacters, pawnNotice = null }: BoardViewControlsProps) {
   return (
     <div className="flex flex-col gap-2" data-testid="board-view-controls">
       <Segmented
@@ -38,6 +45,21 @@ export function BoardViewControls({ mode, unavailable, quality, immersiveView, o
       {characters && mode !== "2d" ? (
         <p className="text-[12px] text-ink-muted" data-testid="characters-prototype">
           Prototype characters: every team is played by four Kolkata people.
+        </p>
+      ) : null}
+      {characterStatus && mode !== "2d" ? (
+        <div className="flex items-start gap-2" data-testid="character-status" data-failed={characterFailed ? "true" : undefined} aria-live="polite">
+          <p className={`text-[12px] ${characterFailed ? "text-[#a10d25]" : "text-ink-muted"}`}>{characterStatus}</p>
+          {characterFailed && onRetryCharacters ? (
+            <button type="button" onClick={onRetryCharacters} className="press shrink-0 rounded-[var(--radius-control)] border border-border bg-surface px-2.5 py-1 text-[12px] font-semibold text-ink">
+              Retry
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {pawnNotice ? (
+        <p className="text-[12px] text-ink-muted" data-testid="pawn-notice">
+          {pawnNotice}
         </p>
       ) : null}
       {mode !== "2d" ? (

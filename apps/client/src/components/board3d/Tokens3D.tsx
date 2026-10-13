@@ -12,7 +12,7 @@
 // rules: it receives the token's identity and state; Token3D places it,
 // scales it and moves it along the motion sample.
 
-import { Suspense, lazy, memo, useCallback, useEffect, useLayoutEffect, useRef } from "react";
+import { Component, Suspense, lazy, memo, useCallback, useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import type { Group} from "three";
 import { CylinderGeometry, Frustum, Matrix4, MeshBasicMaterial, MeshPhysicalMaterial, MeshStandardMaterial, Sphere, SpriteMaterial, Vector3, type BufferGeometry, type Camera, type Material } from "three";
@@ -31,7 +31,8 @@ import type { ChosenReaction } from "./characters/reactions";
 
 // The character code (glTF loader, meshopt decoder, skeleton cloning) is its own chunk: only cities with characters fetch it.
 const CharacterBody = lazy(() => import("./characters/CharacterBody").then((m) => ({ default: m.CharacterBody })));
-import { CHARACTERS, characterScale } from "./characters/catalog";
+import { CHARACTERS, characterScale, characterUrl } from "./characters/catalog";
+import { errorMessage } from "./characters/status";
 
 /** A token shown as a human character (C.3A). */
 export interface TokenCharacter {
@@ -48,6 +49,8 @@ export interface TokenCharacter {
   load: boolean;
   /** A reaction to a game event (from the playback's cues), or null. */
   reaction: ChosenReaction | null;
+  /** Bumped by a retry: a character that failed to load tries again. */
+  attempt: number;
 }
 
 /** A character's plinth (world units). */
@@ -215,6 +218,29 @@ export interface Token3DProps {
   onPreview?: ((key: string | null) => void) | undefined;
   /** A character has loaded (its key and level of detail). */
   onCharacterLoaded?: ((key: string, level: string) => void) | undefined;
+  /** A character could not load (the token, its file and the error): a pawn stands in. */
+  onCharacterFailed?: ((token: string, character: string, level: string, url: string, error: string) => void) | undefined;
+}
+
+/**
+ * Catches a character that cannot load or draw (a missing file, a decoder or parsing error, a failed code chunk)
+ * and shows the pawn in its place, so one person's file never takes the whole 3D board down. A new `attempt`
+ * (a retry) tries again.
+ */
+class CharacterBoundary extends Component<{ attempt: number; fallback: ReactNode; onError: (error: unknown) => void; children: ReactNode }, { failed: boolean; attempt: number }> {
+  override state = { failed: false, attempt: this.props.attempt };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  static getDerivedStateFromProps(props: { attempt: number }, state: { failed: boolean; attempt: number }) {
+    return props.attempt !== state.attempt ? { failed: false, attempt: props.attempt } : null;
+  }
+  override componentDidCatch(error: unknown) {
+    this.props.onError(error);
+  }
+  override render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
 }
 
 /** What a token's visual receives. A GLB character (Batch C.3) implements the same props. */
@@ -237,7 +263,7 @@ export function PawnBody({ identity, state, kit, textures, shadows }: TokenBodyP
   );
 }
 
-export const Token3D = memo(function Token3D({ token, kit, textures, shadows, reduced, register, onActivate, onPreview, onCharacterLoaded }: Token3DProps) {
+export const Token3D = memo(function Token3D({ token, kit, textures, shadows, reduced, register, onActivate, onPreview, onCharacterLoaded, onCharacterFailed }: Token3DProps) {
   const group = useRef<Group>(null);
   const body = useRef<Group>(null);
   const ring = useRef<Group>(null);
@@ -269,6 +295,17 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
       gl.compileAsync(root, camera, scene).then(loaded, loaded);
     },
     [invalidate, onCharacterLoaded, token.key, gl, camera, scene],
+  );
+  const characterKey = character?.key ?? null;
+  const characterQuality = character?.quality ?? null;
+  const onCharacterError = useCallback(
+    (error: unknown) => {
+      if (!characterKey || !characterQuality) return;
+      if (group.current) group.current.userData.characterReady = false;
+      onCharacterFailed?.(token.key, characterKey, characterQuality, characterUrl(characterKey, characterQuality), errorMessage(error));
+      invalidate();
+    },
+    [characterKey, characterQuality, onCharacterFailed, token.key, invalidate],
   );
 
   // A new placement: travel there if the playback says how, otherwise jump.
@@ -419,6 +456,7 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
       ) : null}
       <group ref={body}>
         {character?.load ? (
+          <CharacterBoundary attempt={character.attempt} onError={onCharacterError} fallback={<PawnBody identity={token.identity} state={token.state} kit={kit} textures={textures} shadows={shadows} />}>
           <Suspense fallback={<PawnBody identity={token.identity} state={token.state} kit={kit} textures={textures} shadows={shadows} />}>
             {/* A miniature on its plinth: the seat colour reads from any camera, and the base is the obvious thing to pick. */}
             <mesh geometry={kit.plinth} material={kit.body(token.identity, token.state === "unmovable")} dispose={null} />
@@ -427,6 +465,7 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
               <CharacterBody ref={controller} characterKey={character.key} quality={character.quality} teamColour={token.identity.body} onReady={onCharacterReady} />
             </group>
           </Suspense>
+          </CharacterBoundary>
         ) : (
           <PawnBody identity={token.identity} state={token.state} kit={kit} textures={textures} shadows={shadows} />
         )}

@@ -32,14 +32,27 @@ export interface Player {
 /** The board view a page starts with. The suites written for the SVG board pin "2d"; the 3D suites choose "2.5d" or "3d". */
 export type BoardView = "2d" | "2.5d" | "3d" | "default";
 
-export async function openPlayer(browser: Browser, name: string, device: Device, options: { reducedMotion?: boolean; board?: BoardView } = {}): Promise<Player> {
+/** Where a tab keeps its own board view (apps/client capabilities.ts): per tab, never shared between players. */
+export const TAB_VIEW_KEY = "ludo.view.tab.v2";
+
+export async function openPlayer(browser: Browser, name: string, device: Device, options: { reducedMotion?: boolean; board?: BoardView; quality?: "low" | "medium" | "high" } = {}): Promise<Player> {
   const { viewport, touch } = DEVICES[device];
   // E2E_RECORD_DIR records each player's screen to video (for reviewing animation; off in CI).
   const record = process.env.E2E_RECORD_DIR ? { recordVideo: { dir: `${process.env.E2E_RECORD_DIR}/${name.toLowerCase()}`, size: viewport } } : {};
   const context = await browser.newContext({ viewport, hasTouch: touch, isMobile: device === "phone", reducedMotion: options.reducedMotion ? "reduce" : "no-preference", ...record });
   const board = options.board ?? "2d";
-  if (board !== "default") await context.addInitScript((mode) => localStorage.setItem("ludo.board-view.v1", JSON.stringify({ mode, quality: null })), board);
-  const page = await context.newPage();
+  // The tab starts on this view (and quality); a refresh keeps whatever the player has chosen since.
+  if (board !== "default" || options.quality)
+    await context.addInitScript(
+      ([key, mode, quality]) => {
+        if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify({ mode, quality }));
+      },
+      [TAB_VIEW_KEY, board === "default" ? null : board, options.quality ?? null] as const,
+    );
+  return watch(name, device, touch, context, await context.newPage());
+}
+
+function watch(name: string, device: Device, touch: boolean, context: BrowserContext, page: Page): Player {
   const errors: string[] = [];
   const sent = { roll: 0, move: 0 };
   page.on("websocket", (ws) =>
@@ -54,6 +67,14 @@ export async function openPlayer(browser: Browser, name: string, device: Device,
     if (m.type() === "error") errors.push(`console: ${m.text()}`);
   });
   return { name, device, touch, context, page, id: "", errors, sent };
+}
+
+/**
+ * Another player in a new tab of the same browser as `other` (one browser profile: shared localStorage and
+ * cookies, a separate sessionStorage per tab), as when two people play from one computer.
+ */
+export async function openTab(other: Player, name: string): Promise<Player> {
+  return watch(name, other.device, other.touch, other.context, await other.context.newPage());
 }
 
 export const visible = (locator: Locator) => locator.filter({ visible: true }).first();

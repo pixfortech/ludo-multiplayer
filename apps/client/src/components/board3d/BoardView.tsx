@@ -12,6 +12,7 @@ import type { ImmersiveView } from "./CameraRig";
 import type { BoardViewMode, QualityLevel } from "./capabilities";
 import type { Die3DState } from "./dice/Die3D";
 import type { PresentationCue } from "../game/presentation";
+import type { CharacterSummary } from "./characters/status";
 
 const Board3D = lazy(() => import("./Board3D"));
 const NO_CUES: readonly PresentationCue[] = [];
@@ -55,9 +56,13 @@ export interface BoardViewProps {
   die?: Die3DState | null;
   /** Moments the characters react to (from the playback). */
   cues?: readonly PresentationCue[];
+  /** Where the human characters stand (loading, ready, failed), whenever it changes. */
+  onCharacterStatus?: (summary: CharacterSummary) => void;
+  /** Bumped to retry characters that failed to load. */
+  characterRetry?: number;
 }
 
-export function BoardView({ board, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy, characterCity = null, die = null, cues = NO_CUES }: BoardViewProps) {
+export function BoardView({ board, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy, characterCity = null, die = null, cues = NO_CUES, onCharacterStatus, characterRetry = 0 }: BoardViewProps) {
   const flat = (
     <CityPlinth material={material}>
       <ClassicBoard {...board} material={material} />
@@ -86,6 +91,8 @@ export function BoardView({ board, mode, quality, reduced, material, immersiveVi
           busy={busy}
           die={die}
           cues={cues}
+          characterRetry={characterRetry}
+          {...(onCharacterStatus ? { onCharacterStatus } : {})}
         />
       </Suspense>
     </RendererBoundary>

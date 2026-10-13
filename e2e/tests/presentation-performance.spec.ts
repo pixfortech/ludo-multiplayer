@@ -95,9 +95,8 @@ async function phase(p: Player, cdp: CDPSession, name: string, act: () => Promis
 }
 
 async function kolkataRoom(browser: Browser) {
-  const aman = await openPlayer(browser, "Aman", "desktop", { board: "2.5d" });
+  const aman = await openPlayer(browser, "Aman", "desktop", { board: "2.5d", quality: "low" });
   await aman.context.addInitScript(() => {
-    localStorage.setItem("ludo.board-view.v1", JSON.stringify({ mode: "2.5d", quality: "low" }));
     const w = window as unknown as { __click: number; __sent: number };
     addEventListener("pointerup", () => (w.__click = performance.now()), true);
     const send = WebSocket.prototype.send;

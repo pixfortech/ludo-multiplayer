@@ -27,9 +27,8 @@ const close = async (players: Player[]) => {
 };
 
 async function kolkataGame(browser: Browser, views: [BoardView, BoardView], devices: [Device, Device], reduced: [boolean, boolean] = [false, false], amanQuality?: "low" | "medium" | "high") {
-  const aman = await openPlayer(browser, "Aman", devices[0], { board: views[0], reducedMotion: reduced[0] });
   // A fixed graphics level, where a test is not about the automatic one (its steps rebuild the canvas).
-  if (amanQuality) await aman.context.addInitScript(([mode, q]) => localStorage.setItem("ludo.board-view.v1", JSON.stringify({ mode, quality: q })), [views[0], amanQuality] as const);
+  const aman = await openPlayer(browser, "Aman", devices[0], { board: views[0], reducedMotion: reduced[0], ...(amanQuality ? { quality: amanQuality } : {}) });
   const ben = await openPlayer(browser, "Ben", devices[1], { board: views[1], reducedMotion: reduced[1] });
   const code = await createRoom(aman, { players: 2, city: "Kolkata" });
   await joinRoom(ben, code);

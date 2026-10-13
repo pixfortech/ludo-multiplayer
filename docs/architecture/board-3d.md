@@ -9,7 +9,21 @@ never touches the game:
 | **3D (preview)** | The same scene through a perspective camera: isometric overview, constrained orbit (drag, pinch, wheel), follow the active token, reset | When the player chooses it |
 | **2D** | The approved SVG board | No WebGL, a renderer failure, the player's choice, or (automatic setting only) a device too slow even at Low quality |
 
-The choice and the graphics quality (Auto, Low, Medium, High) are remembered per browser.
+Each player's view, graphics quality (Auto, Low, Medium, High) and camera are their own. They
+are presentation only: never stored in the room, never sent over Socket.IO, and different renderers
+play the same game side by side.
+
+- The view and quality are kept per tab (`sessionStorage`, `ludo.view.tab.v2`), so a refresh keeps
+  them and two players in two tabs of one browser keep their own. Nothing listens for other tabs'
+  changes.
+- They are also remembered per seat (`localStorage`, `ludo.view.seats.v2`, keyed by room code and
+  player, the 20 most recent), so a player who resumes their seat in a new tab gets their own choice
+  back and nobody else's.
+- The camera (overview, follow, free orbit, zoom) lives in the page only; a 3D failure, the
+  automatic quality steps and the slow-device fallback affect only that tab.
+- Before this fix (after C.3C.1) the choice was one browser-wide key (`ludo.board-view.v1`) followed live through
+  `storage` events, so a second player in another tab changed the first player's view. That key is
+  no longer read or written.
 
 ## One source of positions
 

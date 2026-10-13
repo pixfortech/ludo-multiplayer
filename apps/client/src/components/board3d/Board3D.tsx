@@ -34,6 +34,7 @@ import type { IdleBehaviour } from "./characters/brain";
 import { CHARACTERS, characterFor, loadableSeats, loadOrder, routinePhase } from "./characters/catalog";
 import { characterWork } from "./characters/work";
 import { reactionFor } from "./characters/reactions";
+import { sameSummary, summarise, type CharacterFailure, type CharacterStatus, type CharacterSummary } from "./characters/status";
 import { Die3D, type Die3DState } from "./dice/Die3D";
 import type { PresentationCue } from "../game/presentation";
 
@@ -68,6 +69,10 @@ export interface Board3DProps extends ClassicBoardProps {
   die?: Die3DState | null;
   /** Moments the characters react to (the playback's presentation cues). */
   cues?: readonly PresentationCue[];
+  /** Where the human characters stand (loading, ready, failed and why), whenever it changes. */
+  onCharacterStatus?: (summary: CharacterSummary) => void;
+  /** Bumped to retry characters that failed to load. */
+  characterRetry?: number;
 }
 
 const NO_CUES: readonly PresentationCue[] = [];
@@ -131,8 +136,14 @@ function CharacterClock({ quality, busy, active, city }: { quality: QualityLevel
   return null;
 }
 
-function FrameWatch({ onReady, onFrameStats, host }: { onReady: () => void; onFrameStats?: ((ms: number) => void) | undefined; host: React.RefObject<HTMLElement | null> }) {
+function FrameWatch({ onReady, onFrameStats, host, paused }: { onReady: () => void; onFrameStats?: ((ms: number) => void) | undefined; host: React.RefObject<HTMLElement | null>; paused: boolean }) {
   const ready = useRef(false);
+  // The latest callback and pause, read when a stretch completes: the measurement is not restarted by
+  // every render of the game screen (a new callback each time), only by loading.
+  const statsRef = useRef(onFrameStats);
+  statsRef.current = onFrameStats;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   const gl = useThree((s) => s.gl);
   const publish = useCallback(
     (frameMs?: number) => {
@@ -158,18 +169,25 @@ function FrameWatch({ onReady, onFrameStats, host }: { onReady: () => void; onFr
     });
     const after = addAfterEffect(() => {
       const now = performance.now();
-      total += now - start;
-      frames++;
       // Frames drawn since the canvas was created (tests and tooling compare ambient frame rates).
       const el = host.current;
       if (el) el.dataset.frames = String(Number(el.dataset.frames ?? 0) + 1);
+      if (pausedRef.current) {
+        // Characters are loading (decoding, compiling): not a cost of every frame. Measure afterwards.
+        total = 0;
+        frames = 0;
+        since = now;
+        return;
+      }
+      total += now - start;
+      frames++;
       if (frames >= 20 && now - since >= 2000) {
         const ms = total / frames;
         publish(ms);
         // Of which animating the characters (their mixers), per frame.
         if (el) el.dataset.characterMs = (characterWork.ms / frames).toFixed(2);
         characterWork.ms = 0;
-        onFrameStats?.(ms);
+        statsRef.current?.(ms);
         total = 0;
         frames = 0;
         since = now;
@@ -184,7 +202,7 @@ function FrameWatch({ onReady, onFrameStats, host }: { onReady: () => void; onFr
       before();
       after();
     };
-  }, [publish, onFrameStats, host]);
+  }, [publish, host]);
   useFrame(() => {
     if (!ready.current) {
       ready.current = true;
@@ -352,7 +370,7 @@ function useStageViewport(slot: React.RefObject<HTMLElement | null>, host: HTMLE
 }
 
 const Board3D = memo(function Board3D(props: Board3DProps) {
-  const { tokens, identityOf, activeSeats, currentSeat, youSeat, states = {}, badges = {}, labels = {}, motion = {}, preview = null, effects = [], onActivate, onPreview, title, dimmed = false, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy, characterCity = null, die = null, cues = NO_CUES } = props;
+  const { tokens, identityOf, activeSeats, currentSeat, youSeat, states = {}, badges = {}, labels = {}, motion = {}, preview = null, effects = [], onActivate, onPreview, title, dimmed = false, mode, quality, reduced, material, immersiveView, resetKey, onImmersiveViewChange, onReady, onFailure, onFrameStats, environment, stageHost, stage, busy, characterCity = null, die = null, cues = NO_CUES, onCharacterStatus, characterRetry = 0 } = props;
   const q = QUALITY[quality];
   const textures = useMemo(() => new TextureCache(), []);
   const kit = useMemo(() => new TokenKit(q.detail, q.physical), [q.detail, q.physical]);
@@ -394,14 +412,53 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
   // (decoding, first upload) must not count as the frames this device can afford.
   const [loadedCharacters, setLoadedCharacters] = useState<ReadonlySet<string>>(() => new Set());
   const onCharacterLoaded = useCallback((key: string, level: string) => setLoadedCharacters((s) => (s.has(`${key}@${level}`) ? s : new Set(s).add(`${key}@${level}`))), []);
-  const charactersLoading = !reduced && [...cast.byKey.keys()].some((k) => !loadedCharacters.has(`${k}@${quality}`));
+  // A character that could not load (token key -> what failed, at this level): a pawn stands in, the error is
+  // reported, and the next team still loads (a failure never stalls the order). A retry clears them.
+  const [failedCharacters, setFailedCharacters] = useState<ReadonlyMap<string, CharacterFailure & { level: string }>>(() => new Map());
+  const onCharacterFailed = useCallback((token: string, character: string, level: string, url: string, error: string) => {
+    if (import.meta.env.DEV) console.error(`[characters] ${character} (${level}) could not load from ${url}: ${error}`);
+    setFailedCharacters((m) => (m.get(token)?.error === error && m.get(token)?.level === level ? m : new Map(m).set(token, { key: character, token, url, error, level })));
+  }, []);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (characterRetry === 0) return;
+    setFailedCharacters((m) => {
+      if (m.size === 0) return m;
+      const urls = [...m.values()].map((f) => f.url);
+      void import("./characters/CharacterBody").then((mod) => mod.forgetCharacterFiles(urls)).catch(() => undefined);
+      return new Map();
+    });
+    setAttempt((a) => a + 1);
+  }, [characterRetry]);
+  const failedNow = (token: string) => failedCharacters.get(token)?.level === quality;
+  const charactersLoading = !reduced && [...cast.byKey.keys()].some((k) => !loadedCharacters.has(`${k}@${quality}`) && !failedNow(k));
   const sceneBusy = busy || charactersLoading;
   // One team's files at a time (decoding sixteen people at once would stall the page): yours first.
   const loadable = useMemo(() => {
     const seats = [...cast.byKey.values()].map((c) => c.seat);
     const keysOf = (seat: number) => [...cast.byKey].filter(([, c]) => c.seat === seat).map(([k]) => k);
-    return loadableSeats(loadOrder(seats, youSeat), (seat) => keysOf(seat).every((k) => loadedCharacters.has(`${k}@${quality}`)));
-  }, [cast, youSeat, loadedCharacters, quality]);
+    const settled = (k: string) => loadedCharacters.has(`${k}@${quality}`) || failedCharacters.get(k)?.level === quality;
+    return loadableSeats(loadOrder(seats, youSeat), (seat) => keysOf(seat).every(settled));
+  }, [cast, youSeat, loadedCharacters, failedCharacters, quality]);
+  // Each character's status, for the mirror and the game screen.
+  const characterStatus = useMemo(() => {
+    const out = new Map<string, { status: CharacterStatus; failure?: CharacterFailure }>();
+    for (const [k, c] of cast.byKey) {
+      const failure = failedCharacters.get(k);
+      if (failure && failure.level === quality) out.set(k, { status: "failed", failure });
+      else if (loadedCharacters.has(`${k}@${quality}`)) out.set(k, { status: "ready" });
+      else out.set(k, { status: loadable.has(c.seat) ? "loading" : "waiting" });
+    }
+    return out;
+  }, [cast, failedCharacters, loadedCharacters, loadable, quality]);
+  const lastSummary = useRef<CharacterSummary | null>(null);
+  useEffect(() => {
+    const summary = summarise([...characterStatus.values()]);
+    if (lastSummary.current && sameSummary(lastSummary.current, summary)) return;
+    lastSummary.current = summary;
+    onCharacterStatus?.(summary);
+    if (import.meta.env.DEV && summary.total > 0 && summary.ready === summary.total) console.info(`[characters] all ${summary.total} characters on the board (${quality})`);
+  }, [characterStatus, onCharacterStatus, quality]);
   const items: Token3DInput[] = useMemo(
     () => {
       const now = performance.now();
@@ -417,6 +474,7 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
               turnStartedAt: currentSeat === c.seat ? turnStartedAt : null,
               phase: routinePhase(c.seat),
               load: loadable.has(c.seat),
+              attempt,
               reaction: reactionFor({ tokenKey: p.key, seat: c.seat, tokenId: c.tokenId, step: c.step }, cues, now),
             }
           : null;
@@ -435,7 +493,7 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
         };
       });
     },
-    [placements, states, identityOf, motion, badges, onActivate, cast, quality, currentSeat, turnStartedAt, loadable, cues],
+    [placements, states, identityOf, motion, badges, onActivate, cast, quality, currentSeat, turnStartedAt, loadable, cues, attempt],
   );
   const candidates = useMemo(() => items.filter((t) => t.interactive).map((t) => ({ key: t.key, at: t.at })), [items]);
 
@@ -524,7 +582,7 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
         <ContextWatch onFailure={fail} />
         <CharacterClock quality={quality} busy={sceneBusy} active={cast.byKey.size > 0 && !reduced} city={env ? (ambient ?? CITY_UNDECIDED) : null} />
         <RedrawOnResize />
-        <FrameWatch onReady={ready} onFrameStats={onFrameStats} host={root} />
+        <FrameWatch onReady={ready} onFrameStats={onFrameStats} host={root} paused={charactersLoading} />
         <CameraRig mode={mode === "2.5d" ? "aerial" : "immersive"} view={immersiveView} resetKey={resetKey} focus={focus} reduced={reduced} onViewChange={onImmersiveViewChange} viewport={staged ? viewport : null} obstacles={obstacles} />
         <Lights shadows={Boolean(q.shadows)} mapSize={q.shadowMap} />
         {env ? (
@@ -535,7 +593,7 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
         <BoardMesh3D model={model} material={material} currentSeat={currentSeat} youSeat={youSeat} detail={q.detail} shadows={Boolean(q.shadows)} textures={textures} />
         {preview ? <MovePreview3D preview={preview} detail={q.detail} /> : null}
         {items.map((t) => (
-          <Token3D key={t.key} token={t} kit={kit} textures={textures} shadows={Boolean(q.shadows)} reduced={reduced} register={register} onCharacterLoaded={onCharacterLoaded} {...(t.interactive ? { onActivate, onPreview } : {})} />
+          <Token3D key={t.key} token={t} kit={kit} textures={textures} shadows={Boolean(q.shadows)} reduced={reduced} register={register} onCharacterLoaded={onCharacterLoaded} onCharacterFailed={onCharacterFailed} {...(t.interactive ? { onActivate, onPreview } : {})} />
         ))}
         <TapCatcher candidates={candidates} onActivate={onActivate} />
         {die ? <Die3D die={die} reduced={reduced} segments={quality === "low" ? 2 : 4} viewport={staged ? viewport : null} mirror={dieMirror} /> : null}
@@ -565,7 +623,13 @@ const Board3D = memo(function Board3D(props: Board3DProps) {
       {/* The board for assistive tech and tests: each token's step and state (the move tray offers the choices). */}
       <ul ref={mirror} className="sr-only" aria-hidden="true" data-testid="board-mirror">
         {items.map((t) => (
-          <li key={t.key} data-key={t.key} data-character={t.character?.key} data-testid={`token-${t.key}`} data-step={t.step === null ? "base" : t.step} data-state={t.state} data-floor={floorFor(t.step)} data-label={labels[t.key]} />
+          <li
+            key={t.key}
+            data-key={t.key}
+            data-character={t.character?.key}
+            data-character-status={characterStatus.get(t.key)?.status}
+            data-character-error={characterStatus.get(t.key)?.failure?.error}
+            data-testid={`token-${t.key}`} data-step={t.step === null ? "base" : t.step} data-state={t.state} data-floor={floorFor(t.step)} data-label={labels[t.key]} />
         ))}
       </ul>
       {/* The board's cells with their drawn colours and on-screen centres (tests check the pixels against the layout). */}

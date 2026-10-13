@@ -149,6 +149,33 @@ Cues are presented only for seats played by characters and never under
 reduced motion. A refresh, a reconnect or a skipped version shows the
 server's state as it is: no cue, no reaction, no replay.
 
+## 5b. Loading, failures and diagnostics
+
+Each character's status is reported, never assumed:
+
+| Status | Meaning | On the board |
+| --- | --- | --- |
+| waiting | Its team's turn to load has not come (one team at a time, the player's own first) | A pawn stands in |
+| loading | Its GLB is being fetched, decoded and compiled | A pawn stands in |
+| ready | The person is drawn in place of the pawn | The person |
+| failed | It could not load; the actual error is kept (a 404, a decoder or parse error, a failed code chunk) | A pawn keeps the game playable |
+
+- The game screen shows one line under the board view controls: loading progress, "All 16
+  characters are on the board.", or which characters failed and why, with **Retry** (it forgets the
+  cached file and loads it again).
+- A failure is caught per character (an error boundary round each one), so it never takes the 3D
+  board down, and the next team still loads (a failed team no longer stalls the order).
+- The token mirror reports each one: `data-character-status`, `data-character-error`, and
+  `data-character-ready` only once the person is actually drawn.
+- In development builds the console logs each failure (`[characters] adda (medium) could not load
+  from …: …`) and when all have loaded.
+- The 2D board uses pawns and says so; if the board fell back to 2D (a slow device, a 3D failure, no
+  WebGL) the notice says which, and choosing 2.5D or 3D brings the characters back.
+- The automatic quality governor no longer counts the frames spent loading characters (decoding and
+  shader compilation), which used to push slower machines down to Low and then to the 2D board.
+- React's development double effects no longer break the animation mixer (it is created and torn
+  down with each mount); before, `npm run dev` threw `_cacheIndex` errors every frame.
+
 ## 6. Movement
 
 Characters walk the same cell-by-cell path as the pawns (`hopSteps`): never a

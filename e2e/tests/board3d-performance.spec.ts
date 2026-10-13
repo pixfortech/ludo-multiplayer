@@ -76,8 +76,7 @@ function frames(page: Page, ms: number): Promise<{ count: number; worst: number 
 }
 
 async function measure(browser: Browser, view: Exclude<BoardView, "default">, quality: "low" | "medium" | null, city?: "Kolkata", players: 2 | 4 = 2): Promise<Sample> {
-  const aman = await openPlayer(browser, "Aman", "desktop", { board: view });
-  if (quality) await aman.context.addInitScript((q) => localStorage.setItem("ludo.board-view.v1", JSON.stringify({ mode: localStorage.getItem("ludo.board-view.v1") ? JSON.parse(localStorage.getItem("ludo.board-view.v1")!).mode : null, quality: q })), quality);
+  const aman = await openPlayer(browser, "Aman", "desktop", { board: view, ...(quality ? { quality } : {}) });
   // Record when a pointer is released and when a move request leaves the page.
   await aman.context.addInitScript(() => {
     const w = window as unknown as { __tap: number; __sent: number };

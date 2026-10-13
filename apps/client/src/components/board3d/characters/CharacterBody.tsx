@@ -9,7 +9,7 @@
 // pointer events (the token's own pick target does), casts shadows or touches
 // game state.
 
-import { forwardRef, useEffect, useImperativeHandle, useMemo } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef } from "react";
 import { useLoader } from "@react-three/fiber";
 import { AnimationMixer, Color, LoopOnce, LoopRepeat, type AnimationAction, type Group, type Material, type Mesh, type Object3D, type Skeleton, type SkinnedMesh } from "three";
 import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -59,11 +59,25 @@ export function shareSkeletons(root: Object3D): Skeleton[] {
   return kept;
 }
 
+/** Forgets cached character files (after a failed load), so a retry fetches them again. */
+export function forgetCharacterFiles(urls: readonly string[]): void {
+  for (const url of urls) useLoader.clear(GLTFLoader, url);
+}
+
+interface Animation {
+  mixer: AnimationMixer;
+  actions: Map<string, AnimationAction>;
+  current: { clip: ClipName; action: AnimationAction } | null;
+}
+
 export const CharacterBody = forwardRef<CharacterController, CharacterBodyProps>(function CharacterBody({ characterKey, quality, teamColour, onReady }, ref) {
   const gltf = useLoader(GLTFLoader, characterUrl(characterKey, quality), (loader) => {
     loader.setMeshoptDecoder(MeshoptDecoder);
   }) as GLTF;
 
+  // The body: a clone of the file's scene (its own skeleton), the team colour on its clothing. Pure: no
+  // mixer here, so a remount (React's development double effects, a renderer remount) never reuses a mixer
+  // that a cleanup has already torn down.
   const rig = useMemo(() => {
     const root = cloneSkinned(gltf.scene) as Group;
     const scale = characterScale(characterKey);
@@ -89,20 +103,31 @@ export const CharacterBody = forwardRef<CharacterController, CharacterBodyProps>
       mesh.material = Array.isArray(mesh.material) ? next : next[0]!;
     });
     const skeletons = shareSkeletons(root);
-    const mixer = new AnimationMixer(root);
-    const actions = new Map<string, AnimationAction>();
-    for (const clip of gltf.animations) actions.set(clip.name, mixer.clipAction(clip));
     const props = ["Prop_cup", "Prop_newspaper"].map((n) => root.getObjectByName(n)).filter((o): o is Object3D => Boolean(o));
-    return { root, mixer, actions, owned, props, skeletons };
+    return { root, owned, props, skeletons };
   }, [gltf, characterKey, teamColour]);
 
-  useEffect(() => onReady?.({ team: `#${new Color(teamColour).getHexString()}`, clips: [...rig.actions.keys()].sort(), level: quality }), [rig, onReady, teamColour, quality]);
+  // Its animation: one mixer per mounted body, created and torn down with the mount.
+  const animation = useRef<Animation | null>(null);
+  useLayoutEffect(() => {
+    const mixer = new AnimationMixer(rig.root);
+    const actions = new Map<string, AnimationAction>();
+    for (const clip of gltf.animations) actions.set(clip.name, mixer.clipAction(clip));
+    const mine: Animation = { mixer, actions, current: null };
+    animation.current = mine;
+    return () => {
+      mixer.stopAllAction();
+      mixer.uncacheRoot(rig.root);
+      if (animation.current === mine) animation.current = null;
+    };
+  }, [rig, gltf]);
+
+  useEffect(() => onReady?.({ team: `#${new Color(teamColour).getHexString()}`, clips: gltf.animations.map((c) => c.name).sort(), level: quality }), [rig, gltf, onReady, teamColour, quality]);
   useEffect(
     () => () => {
-      rig.mixer.stopAllAction();
-      rig.mixer.uncacheRoot(rig.root);
+      // The tinted materials and bone textures are this body's own (geometry and textures are shared with the
+      // loader's cache). three re-uploads a disposed resource if it is drawn again, so a remount stays safe.
       for (const m of rig.owned) m.dispose();
-      // The bone textures are this character's own (geometry and textures are shared with the loader's cache).
       for (const s of rig.skeletons) s.dispose();
     },
     [rig],
@@ -110,30 +135,29 @@ export const CharacterBody = forwardRef<CharacterController, CharacterBodyProps>
 
   useImperativeHandle(
     ref,
-    () => {
-      let current: { clip: ClipName; action: AnimationAction } | null = null;
-      return {
-        root: rig.root,
-        update(pose: CharacterPose, dt: number) {
-          const action = rig.actions.get(pose.clip) ?? rig.actions.get("idle");
-          if (!action) return;
-          if (!current || current.clip !== pose.clip) {
-            action.reset();
-            action.setLoop(pose.loop ? LoopRepeat : LoopOnce, pose.loop ? Infinity : 1);
-            action.clampWhenFinished = !pose.loop;
-            action.play();
-            if (current) current.action.crossFadeTo(action, FADE, false);
-            current = { clip: pose.clip, action };
-          }
-          action.timeScale = pose.timeScale;
-          for (const p of rig.props) p.visible = pose.prop;
-          // A long gap (the tab was hidden, the city rested) must not jump the animation.
-          const t0 = performance.now();
-          rig.mixer.update(Math.min(dt, 0.1));
-          characterWork.ms += performance.now() - t0;
-        },
-      };
-    },
+    () => ({
+      root: rig.root,
+      update(pose: CharacterPose, dt: number) {
+        const a = animation.current;
+        if (!a) return;
+        const action = a.actions.get(pose.clip) ?? a.actions.get("idle");
+        if (!action) return;
+        if (!a.current || a.current.clip !== pose.clip) {
+          action.reset();
+          action.setLoop(pose.loop ? LoopRepeat : LoopOnce, pose.loop ? Infinity : 1);
+          action.clampWhenFinished = !pose.loop;
+          action.play();
+          if (a.current) a.current.action.crossFadeTo(action, FADE, false);
+          a.current = { clip: pose.clip, action };
+        }
+        action.timeScale = pose.timeScale;
+        for (const p of rig.props) p.visible = pose.prop;
+        // A long gap (the tab was hidden, the city rested) must not jump the animation.
+        const t0 = performance.now();
+        a.mixer.update(Math.min(dt, 0.1));
+        characterWork.ms += performance.now() - t0;
+      },
+    }),
     [rig],
   );
 

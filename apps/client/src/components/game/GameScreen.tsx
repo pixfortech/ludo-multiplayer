@@ -23,7 +23,7 @@ import { BoardView } from "../board3d/BoardView";
 import { BoardViewControls } from "../board3d/BoardViewControls";
 import { characterSeats } from "../board3d/characters/catalog";
 import type { ImmersiveView } from "../board3d/CameraRig";
-import { autoQuality, deviceClass, hasWebGL2, useViewPreference, type BoardViewMode, type QualityLevel } from "../board3d/capabilities";
+import { autoQuality, deviceClass, hasWebGL2, seatViewKey, useViewPreference, type BoardViewMode, type QualityLevel } from "../board3d/capabilities";
 import { CityBackdrop, cityStyle, useCityDocument } from "../city/CityBackdrop";
 import { CityChip, CitySign } from "../city/CityFrame";
 import type { BoardTokenState } from "../board/BoardToken";
@@ -44,6 +44,7 @@ import { TurnIndicator, type TurnInfo } from "./TurnIndicator";
 import { useBoardPlayback } from "./useBoardPlayback";
 import { VictoryScreen } from "./VictoryScreen";
 import { PresentationLog } from "./PresentationLog";
+import { NO_CHARACTERS, describeCharacters, type CharacterSummary } from "../board3d/characters/status";
 import { CUE_MS, emitPresentationEvent } from "./presentation";
 
 interface GameScreenProps {
@@ -110,7 +111,8 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
 
   // The board view: 2.5D by default where WebGL works, the 3D preview or the 2D board on request.
   // A failure (no WebGL, a lost context, no first frame, an error) falls back to 2D without touching the game.
-  const [viewPref, setViewPref] = useViewPreference();
+  // This player's own view (this tab, then this seat): never shared with other players or other tabs.
+  const [viewPref, setViewPref] = useViewPreference(seatViewKey(room.code, me));
   const webgl = useMemo(() => hasWebGL2(), []);
   const [failure3d, setFailure3d] = useState<string | null>(null);
   const requestedView: BoardViewMode = viewPref.mode ?? "2.5d";
@@ -127,6 +129,11 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
   const quality: QualityLevel = viewPref.quality ?? autoLevel;
   const [immersiveView, setImmersiveView] = useState<ImmersiveView>("overview");
   const [pendingView, setPendingView] = useState<{ quality?: QualityLevel; fallback?: boolean } | null>(null);
+  // The human characters (Kolkata, 2.5D and 3D): what the board reports, and a retry for any that failed.
+  const [characterSummary, setCharacterSummary] = useState<CharacterSummary>(NO_CHARACTERS);
+  const [characterRetry, setCharacterRetry] = useState(0);
+  const charactersShown = characterCity !== null && walkingSeats.size > 0;
+  const characters = charactersShown ? characterSummary : NO_CHARACTERS;
   // A city with a 3D environment surrounds the 3D board. On wide screens it is drawn on a stage: one canvas
   // behind the whole game screen, with the board held in its slot. On narrow screens the 2.5D board keeps
   // the 2D city around it, and the 3D view shows the city round the board inside the board's canvas.
@@ -448,6 +455,20 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
     <BoardViewControls
       mode={boardMode}
       characters={walkingSeats.size > 0}
+      characterStatus={charactersShown ? describeCharacters(characters) : null}
+      characterFailed={characters.failed.length > 0}
+      onRetryCharacters={() => setCharacterRetry((n) => n + 1)}
+      pawnNotice={
+        theme.id === "kolkata" && boardMode === "2d"
+          ? failure3d === "slow"
+            ? "Switched to the 2D board because this device drew the 3D board too slowly. The 2D board uses pawns: choose 2.5D or 3D to see the Kolkata characters."
+            : failure3d
+              ? "The 3D board stopped on this device, so the 2D board (pawns) is shown. Choose 2.5D or 3D to try the Kolkata characters again."
+              : !webgl
+                ? "This browser cannot draw the 3D board, so the Kolkata characters cannot be shown: the 2D board uses pawns."
+                : "The 2D board uses pawns: choose 2.5D or 3D to see the Kolkata characters."
+          : null
+      }
       unavailable={!webgl ? "3D needs WebGL, which this browser does not offer." : failure3d && failure3d !== "slow" ? "The 3D board stopped on this device; choose a 3D view to try again." : null}
       quality={viewPref.quality ?? "auto"}
       immersiveView={immersiveView}
@@ -508,6 +529,8 @@ export function GameScreen({ state, onLeave, leaving, confirmLeave }: GameScreen
       <BoardView
         environment={environment}
         characterCity={characterCity}
+        onCharacterStatus={setCharacterSummary}
+        characterRetry={characterRetry}
         stageHost={stage ? stageHost : null}
         stage={stage}
         busy={playback.busy}
