@@ -68,6 +68,10 @@ test("refresh and network loss mid-game restore the exact board without replayin
   // The network returns: Ben's seat re-attaches by itself and the board snaps to the server's state.
   offline = false;
   table.offline.delete(ben);
+  // The transport reconnects on its own schedule: a reconnection attempt made during the outage can hang until
+  // Socket.IO's 20-second connection timeout before the next attempt (seen on the Windows runner: Ben connected
+  // 19.5 s after the network returned). Wait for the connection, then for the board.
+  await expect(visible(ben.page.getByRole("status").filter({ hasText: /^Connected$/ })), "Ben's connection comes back").toBeVisible({ timeout: 45_000 });
   snap = await table.expectInSync();
   expect(snap.game!.currentPlayerId).toBe(ben.id);
   const steps = await ben.page.evaluate(() => (window as unknown as { __steps: string[] }).__steps);
