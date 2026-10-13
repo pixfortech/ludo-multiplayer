@@ -49,7 +49,7 @@ animation).
 3. **Reveal**: the playback reveals the value when the throw ends; the tray shows it at the same time; tokens move only after.
 4. **Turn passes**: a short toss (520 ms) to the next player's base, still showing its value.
 
-Every motion is a function of time: at any frame the die is where its plan says, so dropped frames, a slow device or a remounted board (a quality or view change) never leave it mid-air, and a remount never replays a throw. Frames are requested only while it moves.
+Every motion is a function of time: at any frame the die is where its plan says, so dropped frames or a slow device never leave it mid-air. A remounted board (a quality or view change, including the automatic quality step) starts the die in the base of the seat whose turn it is on the server's latest value: a throw still in the air carries on for the time it has left and lands on its value, and a throw that has ended is never replayed. Frames are requested only while it moves.
 
 **Reduced motion**: no lift, throw or toss; the die is simply on its value in the right base.
 
