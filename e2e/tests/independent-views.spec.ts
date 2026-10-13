@@ -92,10 +92,9 @@ test("four players in one Kolkata room each keep their own view, quality and cam
   const code = await createRoom(a, { players: 4, city: "Kolkata" });
   for (const p of [b, c, d]) await joinRoom(p, code);
   await startGame(a, players);
-  const table = await seatTable(code, players);
-  // Three WebGL pages (one at High) with sixteen people each, all in software on one CPU here: a walk can take
-  // a while to be drawn cell by cell, especially while another page reloads its people.
-  table.syncTimeout = 90_000;
+  // Three WebGL pages (one at High) with sixteen people each, all in software on one CPU here: the first board
+  // and a walk can take a while to be drawn, especially while another page loads or reloads its people.
+  const table = await seatTable(code, players, { syncTimeout: 90_000 });
   // Their first frames too: three Kolkata canvases start at once (the Windows runner took over 15 s).
   const firstFrame = 90_000;
   await expectBoard3d(a.page, "3d", firstFrame);

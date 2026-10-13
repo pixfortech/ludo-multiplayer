@@ -239,8 +239,9 @@ const stepLabel = (game: GameStateView, playerId: string, tokenId: number) => {
   return step === null ? "base" : String(step);
 };
 
-export async function seatTable(code: string, players: Player[]): Promise<Table> {
+export async function seatTable(code: string, players: Player[], options: { syncTimeout?: number } = {}): Promise<Table> {
   const table = new Table(code, players);
+  if (options.syncTimeout) table.syncTimeout = options.syncTimeout;
   await table.expectInSync();
   return table;
 }
