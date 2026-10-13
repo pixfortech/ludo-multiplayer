@@ -24,7 +24,7 @@ import { PIPS } from "../../game/Die";
 import { TOKEN_FLOOR } from "../BoardMesh3D";
 import type { StageViewport } from "../CameraRig";
 import { dieGeometry } from "./dieGeometry";
-import { BOX_FACE_VALUES, dieSize, faceUp, handSpot, planThrow, restSpot, sampleThrow, valueUp, type Throw } from "./dieMath";
+import { BOX_FACE_VALUES, dieSize, faceUp, handSpot, mountedDie, planThrow, restSpot, sampleThrow, valueUp, type Throw } from "./dieMath";
 
 export interface Die3DState {
   /** The value revealed last (the server's), or null before any roll. */
@@ -149,14 +149,16 @@ export const Die3D = memo(function Die3D({ die, reduced, segments, viewport, mir
     const { at } = restSpot(seat);
     return new Vector3(at.x, restY, at.z);
   };
-  // Where the die is and how it is turned now (every motion starts from here: never a jump).
-  // A remount (another view or quality) puts it straight in the base of the seat whose turn it is: no toss replayed.
-  const startSeat = die.seat ?? die.throw?.seat ?? 0;
+  // Where the die is and how it is turned now (every motion starts from here: never a jump). On mounting (a first
+  // load, another view or quality level) it is in the base of the seat whose turn it is, on the server's latest
+  // value: a throw that has ended is not replayed, and one still in the air carries on to land on its value.
+  const mounted = useRef<ReturnType<typeof mountedDie> | null>(null);
+  if (mounted.current === null) mounted.current = mountedDie(die, performance.now());
   const pose = useRef<{ position: Vector3; quaternion: Quaternion } | null>(null);
-  if (pose.current === null) pose.current = { position: rest3(startSeat), quaternion: faceUp(die.value ?? 1, 0.35) };
+  if (pose.current === null) pose.current = { position: rest3(mounted.current.seat), quaternion: faceUp(mounted.current.value, 0.35 + (die.throw?.id ?? 0)) };
   const motion = useRef<Motion | null>(null);
-  const restSeat = useRef(startSeat);
-  const thrown = useRef<number | null>(die.throw?.id ?? null);
+  const restSeat = useRef(mounted.current.seat);
+  const thrown = useRef<number | null>(mounted.current.resumeMs === null ? (die.throw?.id ?? null) : null);
   const wanted = useRef(die);
   wanted.current = die;
 

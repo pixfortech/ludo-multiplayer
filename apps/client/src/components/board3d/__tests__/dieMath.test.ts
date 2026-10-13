@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { Quaternion, Vector3 } from "three";
 import { baseSlotToWorld, tokenPositionToWorld } from "@ludo/board-layouts";
 import { dieGeometry } from "../dice/dieGeometry";
-import { BOX_FACE_VALUES, FACE_NORMALS, UP, bounceHeight, dieSize, faceUp, handSpot, planThrow, restSpot, sampleThrow, valueUp, variation } from "../dice/dieMath";
+import { BOX_FACE_VALUES, FACE_NORMALS, UP, bounceHeight, dieSize, faceUp, handSpot, mountedDie, planThrow, restSpot, sampleThrow, valueUp, variation } from "../dice/dieMath";
 
 const randomQuaternion = (rnd: () => number) => {
   // Uniform random rotation (Shoemake).
@@ -151,3 +151,20 @@ describe("where the die rests and is held", () => {
     expect(dieSize(200)).toBe(1);
   });
 });
+
+describe("a die mounting (a first load, another view or quality level)", () => {
+  const thrown = { value: 6, seat: 0, ms: 1150, at: 10_000 };
+  it("carries on a throw still in the air, to land on the server's value (never the value shown before it)", () => {
+    expect(mountedDie({ seat: 0, value: null, throw: thrown }, 10_400)).toEqual({ seat: 0, value: 6, resumeMs: 750 });
+    expect(mountedDie({ seat: 0, value: 3, throw: thrown }, 10_000)).toEqual({ seat: 0, value: 6, resumeMs: 1150 });
+  });
+  it("shows a throw that has ended at rest on its value, in the base of the seat whose turn it is (nothing replayed)", () => {
+    expect(mountedDie({ seat: 1, value: 6, throw: thrown }, 20_000)).toEqual({ seat: 1, value: 6, resumeMs: null });
+    expect(mountedDie({ seat: null, value: 6, throw: thrown }, 20_000)).toEqual({ seat: 0, value: 6, resumeMs: null });
+  });
+  it("before any roll: the last value or a 1, in the current player's base", () => {
+    expect(mountedDie({ seat: 2, value: null, throw: null }, 0)).toEqual({ seat: 2, value: 1, resumeMs: null });
+    expect(mountedDie({ seat: 3, value: 4, throw: null }, 0)).toEqual({ seat: 3, value: 4, resumeMs: null });
+  });
+});
+

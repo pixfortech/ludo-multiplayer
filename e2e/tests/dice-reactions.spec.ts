@@ -204,17 +204,22 @@ test("the 3D die shows the server's value before anything moves; one roll per do
   expect(aman.sent.move).toBe(0);
   await expect(visible(aman.page.getByTestId("move-tray")).getByRole("option")).toHaveCount(4);
 
-  // Aman picks the tea-seller (mouse, 2.5D): a wave, then out of the base only once the server has the move.
+  // Aman picks the tea-seller (mouse, 2.5D): she reacts (a wave while the move is on its way, if a frame is drawn
+  // before the server answers; the excited start of her departure in any case), then leaves the base only once
+  // the server has the move.
   await pickToken3d(aman, A(1));
   table.moves++;
   await expect.poll(async () => (await table.state()).game!.players.find((p) => p.id === aman.id)!.tokens[1]!.step).toBe(0);
   await expect.poll(async () => (await characters(aman.page)).find((c) => c.key === A(1))!.step).toBe("0");
   const teaStates = (await states(aman.page)).filter((s) => s.key === A(1));
-  const selectedAt = teaStates.find((s) => s.state === "selected")?.t;
+  const excitedAt = teaStates.find((s) => s.state === "excited")?.t;
+  const walkedAt = teaStates.find((s) => s.state === "leavingBase")?.t;
   const leftAt = teaStates.find((s) => s.state === "excited" || s.state === "leavingBase")?.t;
-  expect(selectedAt, "the chosen one is selected (a wave)").toBeDefined();
-  expect(leftAt, "and leaves").toBeDefined();
-  expect(selectedAt!).toBeLessThan(leftAt!);
+  expect(excitedAt, "the chosen one reacts with excitement as she sets off").toBeDefined();
+  expect(walkedAt, "and walks out").toBeDefined();
+  expect(excitedAt!).toBeLessThan(walkedAt!);
+  const selectedAt = teaStates.find((s) => s.state === "selected")?.t;
+  if (selectedAt !== undefined) expect(selectedAt, "a wave when picked comes before she leaves").toBeLessThan(leftAt!);
   const moved = (await since(aman.page, mark.aman)).find((e) => e.type === "token-move" && e.tokens === A(1));
   expect(moved, "the move came from the server").toMatchObject({ to: "0" });
   expect(leftAt!, "leaves only after the server's move is shown").toBeGreaterThanOrEqual(moved!.t);
@@ -364,8 +369,14 @@ test("reduced motion, switching views and quality with a choice open, a refresh 
   await watch(ben.page);
   const markBen = await lastN(ben.page);
 
-  // Aman rolls a six. Ben (reduced motion): his die is simply on the value; no throw, no reactions.
+  // Aman rolls a six and switches to 3D at once, while his die is in the air: the new board's die carries the
+  // throw on and lands on the server's 6. Ben (reduced motion): his die is simply on the value; no throw, no reactions.
   await table.roll(6);
+  await visible(aman.page.getByRole("radio", { name: "3D board (preview)" })).click();
+  await expectBoard3d(aman.page, "3d");
+  await expect.poll(() => die3d(aman.page), { message: "remounted mid-throw, the die still lands on 6" }).toMatchObject({ state: "rest", value: "6" });
+  await visible(aman.page.getByRole("radio", { name: "2.5D board" })).click();
+  await expectBoard3d(aman.page);
   await expect.poll(() => die3d(ben.page)).toMatchObject({ state: "rest", value: "6" });
   await expect.poll(async () => (await boardTokens(aman.page)).filter((t) => t.state === "movable").length).toBe(4);
 

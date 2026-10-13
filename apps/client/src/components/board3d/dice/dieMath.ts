@@ -211,3 +211,19 @@ export function sampleThrow(t: Throw, k: number, out: { position: Vector3; quate
   const wobble = new Quaternion().setFromAxisAngle(t.wobbleAxis, t.wobble * Math.sin(Math.PI * x) * Math.sin(3 * Math.PI * x));
   out.quaternion.copy(wobble).multiply(roll).multiply(t.q0);
 }
+
+/**
+ * Where a die mounting now starts (a first load, another view or quality level): in the base of the seat whose
+ * turn it is, showing the server's latest value. A throw still in the air is not over: `resumeMs` is the time it
+ * has left, so the die carries on and lands on its value; a throw that has ended is simply shown at rest.
+ */
+export function mountedDie(
+  die: { seat: number | null; value: number | null; throw: { value: number; seat: number; ms: number; at: number } | null },
+  now: number,
+): { seat: number; value: number; resumeMs: number | null } {
+  const t = die.throw;
+  const remaining = t ? t.ms - (now - t.at) : 0;
+  if (t && remaining > 40) return { seat: t.seat, value: t.value, resumeMs: remaining };
+  return { seat: die.seat ?? t?.seat ?? 0, value: t?.value ?? die.value ?? 1, resumeMs: null };
+}
+
