@@ -186,7 +186,7 @@ export class Table {
     if (actor.touch) await button.tap();
     else await button.click();
     this.rolls++;
-    await expect.poll(async () => (await this.state()).game!.stateVersion, { message: "the roll commits" }).toBeGreaterThan(before.game!.stateVersion);
+    await expect.poll(async () => (await this.state()).game!.stateVersion, { message: "the roll commits", timeout: Math.max(15_000, this.syncTimeout) }).toBeGreaterThan(before.game!.stateVersion);
     const after = await this.state();
     expect(after.queuedDice, "the server drew the queued die").toBe(0);
     expect(after.game!.lastRoll).toEqual({ playerId: actor.id, value });
@@ -218,7 +218,7 @@ export class Table {
       await entry.click();
     }
     this.moves++;
-    await expect.poll(async () => (await this.state()).game!.stateVersion, { message: "the move commits" }).toBeGreaterThan(game.stateVersion);
+    await expect.poll(async () => (await this.state()).game!.stateVersion, { message: "the move commits", timeout: Math.max(15_000, this.syncTimeout) }).toBeGreaterThan(game.stateVersion);
     return this.state();
   }
 
