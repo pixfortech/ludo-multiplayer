@@ -181,7 +181,9 @@ function FrameWatch({ onReady, onFrameStats, host, paused }: { onReady: () => vo
       }
       total += now - start;
       frames++;
-      if (frames >= 20 && now - since >= 2000) {
+      // Eight drawn frames over two seconds or more: an idle on-demand board draws few, and a slow device must not
+      // wait a minute for its quality to step down (loading is never counted: see above).
+      if (frames >= 8 && now - since >= 2000) {
         const ms = total / frames;
         publish(ms);
         // Of which animating the characters (their mixers), per frame.
