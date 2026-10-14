@@ -356,7 +356,7 @@ export function walkedPath(rec: MoveRecording, seat: number, from: number | null
     // from the centre), it has arrived: that is on the path.
     const onDestination = Math.hypot(p.x - end.x, p.z - end.z) < STACK_SPREAD;
     maxOff = Math.max(maxOff, onDestination ? 0 : at.d);
-    maxBack = Math.max(maxBack, furthest - at.along);
+    if (!onDestination) maxBack = Math.max(maxBack, furthest - at.along);
     furthest = Math.max(furthest, at.along);
     along.push(at.along);
   }

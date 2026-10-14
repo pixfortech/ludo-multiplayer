@@ -239,9 +239,12 @@ test("a six: the chosen character reacts, leaves only once the server accepts, w
   expect(steps).toEqual([...steps].sort((a, b) => a - b));
   expect(steps.at(-1)).toBe(4);
   // A walking pace: about 0.34 s a cell (pawns hop in 0.17 s).
+  // From the move's start on screen to its arrival (not from the first frame that showed it moving: a software
+  // renderer may draw that well into the walk).
   const pace = moveMetrics(rec, adda, "4");
-  console.log(`travel ${pace.travelMs} ms over ${pace.drawnFrames} drawn frames`);
-  expect(pace.travelMs, "four cells at a walking pace").toBeGreaterThan(4 * 170);
+  const walkMs = pace.arrivalAt! - pace.moveEventAt!;
+  console.log(`walk ${walkMs} ms (travel ${pace.travelMs} ms over ${pace.drawnFrames} drawn frames)`);
+  expect(walkMs, "four cells at a walking pace").toBeGreaterThan(4 * 170);
   expect((await states(aman.page)).some((s) => s.key === adda && s.state === "walking")).toBe(true);
   // Standing on its cell: the token's projection sits on the cell of step 4 of seat 0.
   const cells = await boardCells(aman.page);
