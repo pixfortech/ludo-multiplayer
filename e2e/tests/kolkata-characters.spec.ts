@@ -76,7 +76,9 @@ test("four Kolkata teams: all sixteen people load and stand on the board in 2.5D
   const code = await createRoom(asha, { players: 4, city: "Kolkata" });
   for (const p of [bina, chandan, dev]) await joinRoom(p, code);
   await startGame(asha, players);
-  const table = await seatTable(code, players);
+  // Four pages building the city and sixteen characters at once: a software renderer (the Windows runner) can take
+  // longer than the default 20 s to show the first state.
+  const table = await seatTable(code, players, { syncTimeout: 60_000 });
   const seatOf = Object.fromEntries((await table.state()).game!.players.map((p) => [p.id, p.seat]));
   await expectBoard3d(asha.page, "2.5d");
   await expectBoard3d(bina.page, "3d");
