@@ -180,12 +180,21 @@ Each character's status is reported, never assumed:
 
 Characters walk the same cell-by-cell path as the pawns (`hopSteps`): never a
 shortcut, never a cell skipped. For a seat played by characters the playback
-paces each cell at walking speed (`CHARACTER_PACE`: 700 ms a cell, 420 ms in
-the middle of long moves, 1.5 s to leave the base, 1.3 s to reach home, 1.3 s
-caught). The character turns toward its next cell (7 rad/s) and moves at a
-constant speed in a straight line between cell centres. If the page is too
-busy to render a cell in time, the next one waits for it (the character never
-jumps), and each cell is committed to the page on its own render.
+paces each cell at a brisk walk (`CHARACTER_PACE`: 340 ms a cell, so a six takes
+about 2 s; 250 ms in the middle of moves longer than six cells; 0.8 s to leave
+the base; 0.7 s to reach home; 0.8 s caught).
+
+A move is one path (`MovePath`: every cell, its kind and time, and when it
+started on the playback's clock). The 3D board follows the path by elapsed time
+(`pathMotion.ts`): each frame asks where the move is now, not which cell is
+next. A late frame lands part-way along a later segment, always on the path
+between two cell centres; nothing queues, nothing waits for a frame, and the
+character arrives when the move's time is up. The character turns toward its
+next cell (12 rad/s) and moves at constant speed between cell centres. Its
+walk or run clip plays at the speed that matches the ground (up to 3.2× the
+clip's own speed; beyond that, in a long move's sprint or the dash out of the
+base, the feet slide a little). No cell forces a render of its own: the board's
+logical state advances by ordinary batched updates.
 
 ## 7. Cameras and picking
 

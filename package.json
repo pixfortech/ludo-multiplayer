@@ -30,7 +30,8 @@
     "design:png": "node scripts/render-png.mjs",
     "db:migrate": "npm run db:migrate -w @ludo/server",
     "test:e2e": "playwright test",
-    "perf:gpu": "node scripts/perf/gpu-audit.mjs"
+    "perf:gpu": "node scripts/perf/gpu-audit.mjs",
+    "perf:movement": "node scripts/perf/movement-audit.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

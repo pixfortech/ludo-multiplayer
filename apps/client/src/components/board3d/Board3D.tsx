@@ -301,6 +301,11 @@ function Projection({ objects, mirror, cells, anchors }: { objects: Map<string, 
         put("characterLevel", String(u.characterLevel));
         put("characterClips", (u.characterClips as string[]).join(" "));
       }
+      // Where it stands on the board (board units, the cells' frame), for checking a walked path.
+      const wx = obj.position.x.toFixed(3);
+      const wz = obj.position.z.toFixed(3);
+      if (el.dataset.wx !== wx) el.dataset.wx = wx;
+      if (el.dataset.wz !== wz) el.dataset.wz = wz;
       obj.getWorldPosition(v);
       v.y += 0.3;
       v.project(camera);

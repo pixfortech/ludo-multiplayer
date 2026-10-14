@@ -8,8 +8,8 @@
 import { memo, useId, useLayoutEffect, useRef, type KeyboardEvent } from "react";
 import { BOARD_SURFACES, INK, SYMBOL_PATHS, TOKEN_2D, TOKEN_HALO, type PlayerIdentity } from "@ludo/design-tokens";
 import type { TokenMotion } from "../game/useBoardPlayback";
-import { CELL } from "./geometry";
-import { tokenKeyframes } from "./tokenMotion";
+import { CELL, piecePosition } from "./geometry";
+import { throughCells, tokenKeyframes } from "./tokenMotion";
 
 export type BoardTokenState = "idle" | "movable" | "selected" | "unmovable" | "captured" | "finished";
 
@@ -79,17 +79,17 @@ export interface BoardTokenProps {
 }
 
 /** Runs one travel animation from the previous drawn position; cancels any still running. */
-function useTokenTravel(x: number, y: number, size: number, motion: TokenMotion | undefined) {
+function useTokenTravel(x: number, y: number, size: number, motion: TokenMotion | undefined, step: number | null) {
   const outer = useRef<SVGGElement>(null);
   const body = useRef<SVGGElement>(null);
   const shadow = useRef<SVGEllipseElement>(null);
-  const previous = useRef({ x, y });
+  const previous = useRef({ x, y, step });
   const running = useRef<Animation[]>([]);
   const played = useRef<number | null>(null);
 
   useLayoutEffect(() => {
     const from = previous.current;
-    previous.current = { x, y };
+    previous.current = { x, y, step };
     const moved = from.x !== x || from.y !== y;
     if (!moved) return;
     for (const a of running.current) a.cancel();
@@ -98,12 +98,15 @@ function useTokenTravel(x: number, y: number, size: number, motion: TokenMotion 
     // No motion (a snapshot, a reconnect, a fast-forward): jump. A motion plays once.
     if (!motion || motion.id === played.current || !el || typeof el.animate !== "function") return;
     played.current = motion.id;
-    const frames = tokenKeyframes(motion.kind, from, { x, y }, CELL);
+    // Cells of the move it has not been drawn on (a busy page caught up several at once): through them, in order.
+    const path = motion.path;
+    const skipped = path && from.step !== null && step !== null && step - from.step > 1 ? path.segments.filter((s) => s.step > from.step! && s.step < step).map((s) => piecePosition(path.seat, s.step)) : [];
+    const frames = throughCells(tokenKeyframes(motion.kind, from, { x, y }, CELL), motion.kind, from, skipped, { x, y });
     const timing: KeyframeAnimationOptions = { duration: motion.ms, easing: frames.easing };
     const origin = motion.kind === "capture" ? "0px 0px" : `0px ${size * 0.42}px`;
     if (body.current) body.current.style.transformOrigin = origin;
     running.current = [el.animate(frames.travel, timing), body.current?.animate(frames.body, timing), shadow.current?.animate(frames.shadow, timing)].filter((a): a is Animation => Boolean(a));
-  }, [x, y, size, motion]);
+  }, [x, y, size, motion, step]);
 
   useLayoutEffect(
     () => () => {
@@ -116,7 +119,7 @@ function useTokenTravel(x: number, y: number, size: number, motion: TokenMotion 
 
 export const BoardToken = memo(function BoardToken({ identity, x, y, size, state, motion, badge = null, count = null, label, onActivate, onPreview, testId, step = null }: BoardTokenProps) {
   const interactive = Boolean(onActivate);
-  const { outer, body, shadow } = useTokenTravel(x, y, size, motion);
+  const { outer, body, shadow } = useTokenTravel(x, y, size, motion, step);
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();

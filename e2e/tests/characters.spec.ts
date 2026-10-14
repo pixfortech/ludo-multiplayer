@@ -15,6 +15,7 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { boardCells, boardTokens, expectBoard3d, pickToken3d } from "../support/board3d";
 import { createRoom, joinRoom, openPlayer, seatTable, startGame, visible, type BoardView, type Device, type Player } from "../support/game";
+import { installMoveRecorder, moveMetrics, startRecording, stopRecording, walkedPath } from "../support/movement";
 import { readTimeline, startTimeline } from "../support/timeline";
 
 const CLIPS = ["cheer", "dismay", "drink", "excited", "exercise", "idle", "listen", "look_around", "read", "run", "stretch", "talk", "upset", "walk", "wave"];
@@ -55,6 +56,22 @@ function characters(page: Page): Promise<CharacterView[]> {
 }
 
 /** Every character on the board has loaded (two teams in a two-player game). */
+/**
+ * A departure as drawn: the departure's states on the frames the page drew (excited, then walking off; a
+ * software renderer drawing a frame or two a second may show only one of them), and every drawn position on the
+ * straight line from its base slot to the seat's start cell, ending there.
+ */
+async function expectDeparture(page: Page, key: string, seat: number, message: string) {
+  await expect.poll(async () => (await states(page)).filter((x) => x.key === key).some((x) => x.state === "excited" || x.state === "leavingBase"), { message, timeout: 20_000 }).toBe(true);
+  await expect.poll(async () => (await characters(page)).find((c) => c.key === key)!.step, { message: `${message}: on the start cell` }).toBe("0");
+  await expect.poll(async () => (await characters(page)).find((c) => c.key === key)!.state, { message: `${message}: standing`, timeout: 15_000 }).not.toMatch(/^(excited|leavingBase)$/);
+  const path = walkedPath(await stopRecording(page), seat, null, 0);
+  console.log(`${message}: ${JSON.stringify(path)}`);
+  expect(path.maxOffPath, `${message}: straight from its base slot to the start cell`).toBeLessThan(0.12);
+  expect(path.maxBackwards, `${message}: never back`).toBeLessThan(0.05);
+  expect(path.endOff, `${message}: on the start cell`).toBeLessThan(0.05);
+}
+
 async function allReady(page: Page, count = 8) {
   await expect.poll(async () => (await characters(page)).filter((c) => c.ready).length, { message: "the characters have loaded", timeout: 90_000 }).toBe(count);
 }
@@ -143,12 +160,12 @@ test("each Kolkata seat is played by its own team of four distinct characters in
   await pickToken3d(ben, bens);
   await expect.poll(async () => (await characters(ben.page)).find((c) => c.key === bens)!.state, { message: "Ben's character is selected" }).toBe("selected");
   const before = (await table.state()).game!.stateVersion;
+  await installMoveRecorder(aman.page);
+  await startRecording(aman.page, bens);
   await pickToken3d(ben, bens);
   await expect.poll(async () => (await table.state()).game!.stateVersion, { message: "Ben's tap plays the move" }).toBeGreaterThan(before);
   table.moves++;
-  await expect
-    .poll(async () => (await states(aman.page)).filter((x) => x.key === bens).map((x) => x.state), { message: "Ben's character leaves his base", timeout: 20_000 })
-    .toEqual(expect.arrayContaining(["excited", "leavingBase"]));
+  await expectDeparture(aman.page, bens, (await table.state()).game!.players.find((p) => p.id === ben.id)!.seat, "Ben's character leaves his base");
   await table.expectInSync();
   noErrors([aman, ben]);
   await close([aman, ben]);
@@ -183,26 +200,39 @@ test("a six: the chosen character reacts, leaves only once the server accepts, w
   expect((await characters(aman.page)).find((c) => c.key === adda)!.state).toBe("selectable");
   await startTimeline(aman.page);
   const before = (await table.state()).game!.stateVersion;
+  await installMoveRecorder(aman.page);
+  await startRecording(aman.page, adda);
   await pickToken3d(aman, adda);
   await expect.poll(async () => (await table.state()).game!.stateVersion, { message: "the server accepts the move" }).toBeGreaterThan(before);
   table.moves++;
-  await expect.poll(async () => (await states(aman.page)).filter((s) => s.key === adda).map((s) => s.state), { message: "excited, then off to the start cell, then standing", timeout: 15_000 }).toEqual(expect.arrayContaining(["excited", "leavingBase"]));
-  const leftAt = (await states(aman.page)).find((s) => s.key === adda && s.state === "excited")!.t;
+  await expectDeparture(aman.page, adda, 0, "excited, then off to the start cell, then standing");
+  const leftAt = (await states(aman.page)).find((s) => s.key === adda && (s.state === "excited" || s.state === "leavingBase"))!.t;
   const committedAt = (await readTimeline(aman.page)).find((e) => e.target === adda)!.t;
   expect(leftAt, "it reacts only once the move is on the board").toBeGreaterThanOrEqual(committedAt - 5);
   await table.expectInSync();
 
-  // The bonus roll: four cells, walked one by one at a walking pace (not the pawns' 170 ms hops).
+  // The bonus roll: four cells, walked one by one at a walking pace (not the pawns' 170 ms hops), recorded frame by
+  // frame in board units and checked against the seat's path.
   await startTimeline(aman.page);
+  await installMoveRecorder(aman.page);
+  await startRecording(aman.page, adda);
   await table.act(4);
   await expect.poll(async () => (await characters(aman.page)).find((c) => c.key === adda)!.state, { timeout: 15_000 }).toBe("idle");
-  const steps = (await readTimeline(aman.page)).filter((e) => e.target === adda);
-  expect(steps.map((e) => e.value)).toEqual(["1", "2", "3", "4"]);
-  const gaps = steps.slice(1).map((e, i) => e.t - steps[i]!.t);
-  console.log(`walked cells every ${gaps.map((g) => Math.round(g)).join(", ")} ms`);
-  // A walking pace: about 0.7 s a cell (pawns hop in 0.17 s). Software WebGL can starve the step timers so a
-  // few arrive together; the walk as a whole still takes its time.
-  expect(steps[steps.length - 1]!.t - steps[0]!.t, "three cells at a walking pace").toBeGreaterThan(3 * 500);
+  const rec = await stopRecording(aman.page);
+  const walked = walkedPath(rec, 0, 0, 4);
+  console.log(`walked: ${JSON.stringify(walked)}`);
+  expect(walked.maxOffPath, "every drawn position on the path through cells 1, 2, 3 and 4 in order").toBeLessThan(0.12);
+  expect(walked.maxBackwards, "never back along it").toBeLessThan(0.05);
+  expect(walked.endOff, "standing on step 4").toBeLessThan(0.05);
+  // The board's logical steps go forward to 4 (a busy page may commit two that fell due together at once; the
+  // character still walks through both, as checked above).
+  const steps = (await readTimeline(aman.page)).filter((e) => e.target === adda).map((e) => Number(e.value));
+  expect(steps).toEqual([...steps].sort((a, b) => a - b));
+  expect(steps.at(-1)).toBe(4);
+  // A walking pace: about 0.34 s a cell (pawns hop in 0.17 s).
+  const pace = moveMetrics(rec, adda, "4");
+  console.log(`travel ${pace.travelMs} ms over ${pace.drawnFrames} drawn frames`);
+  expect(pace.travelMs, "four cells at a walking pace").toBeGreaterThan(4 * 170);
   expect((await states(aman.page)).some((s) => s.key === adda && s.state === "walking")).toBe(true);
   // Standing on its cell: the token's projection sits on the cell of step 4 of seat 0.
   const cells = await boardCells(aman.page);
@@ -243,7 +273,9 @@ test("caught: dismay, then back to its own base slot; a refresh mid-walk puts th
   await table.act(6, () => 0);
   const snap = await table.act(2);
   expect(snap.history.filter((e) => e.type === "capture").length).toBe(1);
-  await expect.poll(async () => (await states(aman.page)).filter((s) => s.key === adda).map((s) => s.state), { timeout: 15_000 }).toEqual(expect.arrayContaining(["captured", "returningToBase"]));
+  // Dismayed where it was caught, then sent back (each shown on the frames the page drew: a software renderer
+  // may draw only one of the two); its own base slot is checked below.
+  await expect.poll(async () => (await states(aman.page)).filter((s) => s.key === adda).some((s) => s.state === "captured" || s.state === "returningToBase"), { timeout: 15_000 }).toBe(true);
   await expect.poll(async () => (await characters(aman.page)).find((c) => c.key === adda)!.step).toBe("base");
   // In the Crimson base corner (top left), not on the track.
   const cells = await boardCells(aman.page);

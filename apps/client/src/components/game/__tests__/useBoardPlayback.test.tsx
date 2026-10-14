@@ -8,7 +8,7 @@ import type { GameHistoryEntry, GameStateView } from "@ludo/shared-types";
 import { MOTION } from "@ludo/design-tokens";
 import { gameView } from "../../../test/fakes";
 import { onPresentationEvent } from "../presentation";
-import { useBoardPlayback } from "../useBoardPlayback";
+import { CHARACTER_PACE, useBoardPlayback } from "../useBoardPlayback";
 
 const D = MOTION.duration;
 const HOST = "p-host";
@@ -34,6 +34,14 @@ const nextDue = (by: number) => timers.filter((t) => t.due <= by).sort((a, b) =>
 function blockedUntil(t: number) {
   clock = t;
   for (let x = nextDue(clock); x; x = nextDue(clock)) fire(x);
+}
+/** A slow page: every timer fires `lateMs` after it was due, up to `t`. */
+function lateUntil(t: number, lateMs: number) {
+  for (let x = nextDue(t); x; x = nextDue(t)) {
+    clock = Math.max(clock, x.due + lateMs);
+    fire(x);
+  }
+  clock = t;
 }
 /** The page is free: each timer fires on time, up to `t`. */
 function freeUntil(t: number) {
@@ -87,6 +95,46 @@ describe("the playback on a busy page", () => {
     // And it ends on the server's state, with input free.
     expect(result.current.busy).toBe(false);
     expect(result.current.tokens.find((t) => t.playerId === HOST && t.tokenId === 0)?.step).toBe(13);
+    expect(timers).toEqual([]);
+  });
+
+  it("runs on the plan's clock: timers that each fire late do not add up cell after cell", () => {
+    const before = state(1, [10, null, null, null], [null, null, null, null], []);
+    const after = state(2, [16, null, null, null], [null, null, null, null], [{ seq: 1, type: "move", playerId: HOST, tokenId: 0, from: 10, to: 16, dice: 6 }]);
+    const shown: { type: string; t: number }[] = [];
+    const off = onPresentationEvent((e) => shown.push({ type: e.type, t: clock }));
+    const { result, rerender } = renderHook(({ game }) => useBoardPlayback(game, false, false, { characterSeats: characters, die3d: true }), { initialProps: { game: before } });
+    act(() => rerender({ game: after }));
+    const path = result.current.motion[`${HOST}:0`]!.path!;
+    expect(path.startedAt).toBe(0);
+    // Every timer 120 ms late (a busy page): the walk still ends at its planned time plus one lateness, not six.
+    const settled: number[] = [];
+    while (result.current.busy && clock < 60_000) {
+      lateUntil(clock + 1, 120);
+      if (!result.current.busy) settled.push(clock);
+      if (timers.length && result.current.busy) clock = Math.max(clock, Math.min(...timers.map((x) => x.due)) - 1);
+    }
+    off();
+    expect(result.current.tokens.find((t) => t.playerId === HOST && t.tokenId === 0)?.step).toBe(16);
+    expect(settled[0]).toBeLessThanOrEqual(path.ms + 120 + 1);
+    // The path never restarted: one path, started on the plan's clock (not when a late timer fired).
+    expect(result.current.motion[`${HOST}:0`]?.path?.id ?? path.id).toBe(path.id);
+  });
+
+  it("steps that are due together run together, in order", () => {
+    const before = state(1, [10, null, null, null], [null, null, null, null], []);
+    const after = state(2, [16, null, null, null], [null, null, null, null], [{ seq: 1, type: "move", playerId: HOST, tokenId: 0, from: 10, to: 16, dice: 6 }]);
+    const { result, rerender } = renderHook(({ game }) => useBoardPlayback(game, false, false, { characterSeats: characters, die3d: true }), { initialProps: { game: before } });
+    act(() => rerender({ game: after }));
+    const startedAt = result.current.motion[`${HOST}:0`]!.path!.startedAt;
+    // Blocked for 3 cells' time (cells 12, 13 and 14 were due): the next timer brings the token straight to the
+    // cell the clock says, through every cell in between.
+    blockedUntil(3 * CHARACTER_PACE.walkMs + 5);
+    expect(result.current.tokens.find((t) => t.playerId === HOST && t.tokenId === 0)?.step).toBe(14);
+    // The path is the same one, still on its original clock: the 3D board catches up rather than lagging.
+    expect(result.current.motion[`${HOST}:0`]!.path!.startedAt).toBe(startedAt);
+    freeUntil(60_000);
+    expect(result.current.busy).toBe(false);
     expect(timers).toEqual([]);
   });
 });

@@ -21,6 +21,8 @@ import { INK, type PlayerIdentity } from "@ludo/design-tokens";
 import type { BoardTokenState } from "../board/BoardToken";
 import type { TokenMotion } from "../game/useBoardPlayback";
 import { TOKEN_FLOOR } from "./BoardMesh3D";
+import { piecePosition, svgToWorld } from "../board/geometry";
+import { followPath, samplePath, type FollowedPath, type PathPoint } from "./pathMotion";
 import { PAWN, discGeometry, pawnGeometry, ringGeometry, type Detail } from "./geometry3d";
 import { sampleMotion, type MotionSample } from "./motion3d";
 import type { TextureCache } from "./textures";
@@ -277,19 +279,21 @@ export function PawnBody({ identity, state, kit, textures, shadows }: TokenBodyP
   );
 }
 
+/** A step's centre and floor in world units (the cells of a move's path). */
+const cellPoint = (seat: number, step: number): PathPoint => ({ at: svgToWorld(piecePosition(seat, step)), floor: floorFor(step) });
+
 export const Token3D = memo(function Token3D({ token, kit, textures, shadows, reduced, register, onActivate, onPreview, onCharacterLoaded, onCharacterFailed }: Token3DProps) {
   const group = useRef<Group>(null);
   const body = useRef<Group>(null);
   const ring = useRef<Group>(null);
   const invalidate = useThree((s) => s.invalidate);
   const floor = floorFor(token.step);
-  const previous = useRef({ at: token.at, floor });
+  const previous = useRef({ at: token.at, floor, step: token.step, mounted: false });
   const travel = useRef<Travel | null>(null);
-  // A character still walking a cell when the next arrives walks that one after it: never a skipped cell or a jump.
-  const queued = useRef<Travel[]>([]);
+  // A move in progress: its whole path, followed on its own clock (see pathMotion.ts).
+  const followed = useRef<FollowedPath | null>(null);
   const played = useRef<number | null>(null);
   const character = token.character ?? null;
-  const isCharacter = character !== null;
   const controller = useRef<CharacterController | null>(null);
   const yaw = useRef<number | null>(null);
   const lastPose = useRef<CharacterPose | null>(null);
@@ -322,28 +326,35 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
     [characterKey, characterQuality, onCharacterFailed, token.key, invalidate],
   );
 
-  // A new placement: travel there if the playback says how, otherwise jump.
+  // A new placement. A move with a path is followed whole from its first cell (its later cells only confirm it);
+  // another motion (a capture, a reduced-motion slide) travels there; anything else is a jump.
   useLayoutEffect(() => {
     const from = previous.current;
-    previous.current = { at: token.at, floor };
+    previous.current = { at: token.at, floor, step: token.step, mounted: true };
+    const m = token.motion;
+    if (m?.path) {
+      if (followed.current?.id !== m.path.id) {
+        // From where it stood when it set out; if it was only just mounted mid-move (a quality change), from the
+        // cell the move began on.
+        const stood = from.mounted && from.step === m.path.from;
+        const origin = stood || m.path.from === null ? { at: from.at, floor: from.floor } : cellPoint(m.path.seat, m.path.from);
+        followed.current = followPath(m.path, origin, cellPoint);
+        travel.current = null;
+      }
+      played.current = m.id;
+      invalidate();
+      return;
+    }
     const moved = from.at.x !== token.at.x || from.at.z !== token.at.z || from.floor !== floor;
     if (!moved) return;
-    const m = token.motion;
-    if (!m || m.id === played.current) {
-      travel.current = null;
-      queued.current = [];
-    } else {
+    followed.current = null;
+    if (!m || m.id === played.current) travel.current = null;
+    else {
       played.current = m.id;
-      const next: Travel = { from: from.at, to: token.at, fromFloor: from.floor, toFloor: floor, kind: m.kind, ms: m.ms, start: performance.now() };
-      const walking = travel.current;
-      if (isCharacter && walking && walking.kind !== "capture" && next.kind !== "capture" && performance.now() - walking.start < walking.ms) queued.current.push(next);
-      else {
-        travel.current = next;
-        queued.current = [];
-      }
+      travel.current = { from: from.at, to: token.at, fromFloor: from.floor, toFloor: floor, kind: m.kind, ms: m.ms, start: performance.now() };
     }
     invalidate();
-  }, [token.at, floor, token.motion, isCharacter, invalidate]);
+  }, [token.at, token.step, floor, token.motion, invalidate]);
 
   useEffect(() => {
     register(token.key, group.current);
@@ -368,24 +379,41 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
     if (!g || !b) return;
     let s: MotionSample = { ...token.at, lift: 0, scale: 1, squash: 1, tilt: 0, opacity: 1 };
     let y = floor;
-    let t = travel.current;
-    if (t && queued.current.length > 0 && performance.now() - t.start >= t.ms) {
-      // On to the next cell, one cell a frame at most if the walk has fallen behind.
-      const next = queued.current.shift()!;
-      next.start = t.start + t.ms;
-      t = travel.current = next;
-    }
+    // The segment it is on now (null: standing), and how far along it.
+    let live: { kind: TokenMotion["kind"]; from: WorldPoint; to: WorldPoint; ms: number } | null = null;
     let progress = 1;
-    if (t) {
+    const f = followed.current;
+    if (f) {
+      const at = samplePath(f, performance.now());
+      if (at.done) {
+        // On the last cell; once the board's state has caught up, exactly on its placement (a stack's offset).
+        const last = f.segments[f.segments.length - 1]!;
+        const settled = token.step === last.step;
+        const end = settled ? token.at : last.to;
+        s = { ...s, x: end.x, z: end.z };
+        y = settled ? floor : last.floor;
+        if (settled) followed.current = null;
+        else invalidate();
+      } else {
+        live = { kind: at.kind, from: at.from, to: at.to, ms: at.ms };
+        progress = at.progress;
+        s = sampleMotion(at.kind, at.from, at.to, at.progress);
+        y = at.fromFloor + (at.toFloor - at.fromFloor) * at.progress;
+        invalidate();
+      }
+    } else if (travel.current) {
+      const t = travel.current;
       progress = (performance.now() - t.start) / Math.max(1, t.ms);
       s = sampleMotion(t.kind, t.from, t.to, progress);
       y = t.fromFloor + (t.toFloor - t.fromFloor) * Math.min(1, Math.max(0, progress));
-      if (progress >= 1 && queued.current.length === 0) travel.current = null;
-      else invalidate();
+      if (progress >= 1) travel.current = null;
+      else {
+        live = t;
+        invalidate();
+      }
     }
     if (character && controller.current) {
       // A person walks: straight from cell to cell at a steady pace (no hop, no squash), turning to face the way.
-      const live = t && progress < 1 ? t : null;
       if (live && live.kind !== "capture") {
         const w = walkPosition(live.kind, live.from, live.to, progress);
         s = { ...s, ...w, lift: 0, scale: 1, squash: 1, tilt: 0 };
@@ -415,7 +443,7 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
       else if (pose.face === "partner" && pose.partner && character.partners[pose.partner]) target = yawToward(here, character.partners[pose.partner]!);
       else if (pose.face === "centre") target = yawToward(here, { x: 0, z: 0 });
       if (yaw.current === null) yaw.current = target ?? 0;
-      if (target !== null) yaw.current = reduced ? target : turnToward(yaw.current, target, Math.max(0.05, delta) * 7);
+      if (target !== null) yaw.current = reduced ? target : turnToward(yaw.current, target, Math.max(0.05, delta) * 12);
       controller.current.root.rotation.y = yaw.current;
       // Off screen (a close 3D view), its pose waits: the animation resumes where it was when it comes back into view.
       if (inView(state.camera, s.x, y, s.z)) controller.current.update(pose, delta);

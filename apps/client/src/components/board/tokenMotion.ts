@@ -113,3 +113,26 @@ export function tokenKeyframes(kind: MotionKind, from: Point, to: Point, cell: n
     }
   }
 }
+
+/**
+ * The same travel through the cells in between: when the board has to catch up several cells of a move at once
+ * (a busy page ran their steps together), the token still passes over every cell of its path, in order, instead of
+ * gliding straight to the last one (which would cut a corner). `via` are the cells between `from` and the
+ * destination, in order.
+ */
+export function throughCells(frames: TokenKeyframes, kind: MotionKind, from: Point, via: readonly Point[], to: Point): TokenKeyframes {
+  if (via.length === 0 || (kind !== "hop" && kind !== "land" && kind !== "home")) return frames;
+  const points = [from, ...via, to];
+  const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i]!.x, p.y - points[i]!.y));
+  const total = lengths.reduce((a, b) => a + b, 0) || 1;
+  // Hops glide the whole time; a landing or a home entry arrives at 72% and settles.
+  const span = kind === "hop" ? 1 : 0.72;
+  let along = 0;
+  const travel: Keyframes = [{ transform: at(from), offset: 0 }];
+  points.slice(1).forEach((p, i) => {
+    along += lengths[i]!;
+    travel.push({ transform: at(p), offset: round((along / total) * span * 10_000) / 10_000 });
+  });
+  if (span < 1) travel.push({ transform: at(to), offset: 1 });
+  return { ...frames, travel, easing: "linear" };
+}

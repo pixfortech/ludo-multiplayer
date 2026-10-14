@@ -90,9 +90,31 @@ describe("moves", () => {
     const hops = plan.steps.filter((s) => /^(hop|land):/.test(s.label));
     expect(hops.map((s) => s.label)).toEqual([`hop:${HOST}:0:11`, `hop:${HOST}:0:12`, `land:${HOST}:0:13`]);
     expect(hops[0]!.at).toBe(reveal + D.diceReveal + D.autoMovePause);
-    // Cell by cell at a walking pace, each on its own render.
+    // Cell by cell at a walking pace.
     expect(hops[1]!.at - hops[0]!.at).toBe(CHARACTER_PACE.walkMs);
-    expect(hops.every((s) => s.own)).toBe(true);
+    // One path for the whole move, the same object on every cell's step: every cell in order, its time, and the
+    // moment it started (when its first cell was shown), so the 3D board follows it on its own clock.
+    const views = run(plan, snapshot(before));
+    const paths = views.filter((v) => /^(hop|land):/.test(v.label)).map((v) => v.view.motion[`${HOST}:0`]!.path!);
+    expect(new Set(paths).size).toBe(1);
+    expect(paths[0]).toMatchObject({ seat: 0, from: 10, ms: 3 * CHARACTER_PACE.walkMs, startedAt: 10_000 + hops[0]!.at });
+    expect(paths[0]!.segments).toEqual([
+      { step: 11, kind: "hop", ms: CHARACTER_PACE.walkMs },
+      { step: 12, kind: "hop", ms: CHARACTER_PACE.walkMs },
+      { step: 13, kind: "land", ms: CHARACTER_PACE.walkMs },
+    ]);
+  });
+
+  it("a long walk runs, and an action's next path is a new one", () => {
+    const before = state(1, [10, null, null, null], [null, null, null, null], []);
+    const after = state(2, [16, null, null, null], [null, null, null, null], [{ seq: 1, type: "move", playerId: HOST, tokenId: 0, from: 10, to: 16, dice: 6 }]);
+    const plan = planPlayback(before, after, { reduced: false, die3d: true, characterSeats: characters });
+    const views = run(plan, snapshot(before));
+    const path = views.find((v) => v.label === `land:${HOST}:0:16`)!.view.motion[`${HOST}:0`]!.path!;
+    expect(path.segments.map((s) => s.step)).toEqual([11, 12, 13, 14, 15, 16]);
+    expect(path.ms).toBeLessThanOrEqual(3000);
+    const again = run(planPlayback(before, after, { reduced: false, die3d: true, characterSeats: characters }), snapshot(before));
+    expect(again.find((v) => v.label === `land:${HOST}:0:16`)!.view.motion[`${HOST}:0`]!.path!.id).not.toBe(path.id);
   });
 
   it("a six's departure: the open motion, then the board settles on the server's state", () => {

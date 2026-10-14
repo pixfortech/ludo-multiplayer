@@ -30,13 +30,30 @@ Timings and easings live in `MOTION` (`packages/design-tokens/src/ui.ts`) and ar
 
 One plan per server version (`game/playbackPlan.ts`): a list of steps at fixed
 times (the die thrown, revealed; the cue; each hop; the capture; the home
-entry; settle), executed by one timer queue (`useBoardPlayback`). Each step
+entry; settle), executed on the plan's own clock (`useBoardPlayback`). Each step
 applies its part of the view and emits its presentation events
 (`game/presentation.ts`): `die-throw`, `die-land`, `cue`, `token-move`, and
 `victory-screen` from the game screen. These are the hooks for sound and
 dialogue (dice sounds, reactions, Bengali lines with English subtitles,
 capture, home, victory music); none are connected yet.
 
+- **The plan's clock.** Each step runs at its time after the action began,
+  not after the previous step ran: steps that fell due while the page was busy
+  run together, in order, in one batched update, and lateness never adds up
+  cell after cell. The die's reveal is the one anchor: if it runs late,
+  everything after it moves back by its lateness, so the value is on show
+  (reveal pause, auto-move pause) before anything moves. A step is applied at
+  the time it was due, so a move's path starts on the plan's clock and the 3D
+  board catches up with a late timer instead of lagging behind it.
+- **One path per move.** All of a move's cell steps carry the same `MovePath`
+  (every cell, its kind and time, its start). The 2D board, the token list and
+  the log advance cell by cell from the steps; the 3D board follows the path by
+  elapsed time (`board3d/pathMotion.ts`). A newer server state, a refresh, a
+  reconnect, a pause or a renderer switch drops the path and places tokens on
+  the server's state.
+- Pacing (characters): a cell 340 ms, a six-cell walk about 2 s, cells in the
+  middle of a longer move 250 ms, leaving the base 0.8 s, home 0.7 s, a capture
+  0.8 s; the 3D die's throw 950 ms. Pawns keep their hop timings.
 - Only consecutive versions are played; a refresh, a reconnect or a skipped
   version snaps to the server's state and emits nothing (no replay).
 - A newer version or a pause fast-forwards the plan; every step and cue has a

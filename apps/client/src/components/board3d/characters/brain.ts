@@ -90,6 +90,13 @@ export interface Gait {
 /** Above this ground speed (units per second) a character runs instead of walking briskly. */
 export const RUN_ABOVE = 1.9;
 
+/**
+ * The fastest a walk or run clip is played (times its natural speed). Up to this the feet match the ground
+ * exactly; a faster stretch (a long move's sprint, the dash out of the base) slides a little rather than
+ * turning the legs into a blur.
+ */
+export const MAX_CLIP_RATE = 3.2;
+
 const TURN_ALERT_SECONDS = 1.6;
 
 // The base routine: a team of four shares one schedule of scenes, so their
@@ -142,7 +149,7 @@ function travelPose(i: CharacterInputs, gait: Gait): CharacterPose | null {
   const walkClip = (speed: number): { clip: ClipName; timeScale: number } => {
     const run = speed > RUN_ABOVE;
     const clipSpeed = (run ? gait.runSpeed : gait.walkSpeed) * gait.scale;
-    return { clip: run ? "run" : "walk", timeScale: Math.max(0.3, speed / Math.max(1e-6, clipSpeed)) };
+    return { clip: run ? "run" : "walk", timeScale: Math.min(MAX_CLIP_RATE, Math.max(0.3, speed / Math.max(1e-6, clipSpeed))) };
   };
   switch (t.kind) {
     case "open":
@@ -163,12 +170,13 @@ function travelPose(i: CharacterInputs, gait: Gait): CharacterPose | null {
   }
 }
 
-/** The share of an "open" motion spent in the excited jump before walking to the start cell. */
-export const OPEN_EXCITED = 0.4;
+/** The share of an "open" motion spent in the excited jump before walking to the start cell (kept short: the
+ * departure is a quick hop up and out, not a pause). */
+export const OPEN_EXCITED = 0.25;
 /** The share of a "home" motion spent walking in before celebrating. */
 export const HOME_ARRIVE = 0.62;
 /** The share of a capture spent in dismay before being sent back. */
-export const CAPTURE_DISMAY = 0.45;
+export const CAPTURE_DISMAY = 0.4;
 
 /** Picked by the player: a quick wave back ("ready!"), then waiting for the server to accept the move. */
 export const SELECT_WAVE_SECONDS = 1.1;

@@ -204,9 +204,10 @@ limitations: [characters.md](../design/characters.md).
   have characters, the files, their scale), `brain.ts` (the presentation state machine: pure,
   tested), `CharacterBody.tsx` (loads a level of detail, tints the `team` material, plays clips
   through one mixer), `characters.json` (built by `tools/characters`).
-- `Tokens3D.tsx` swaps the pawn for the character and moves it along the playback's motions;
-  the plinth is the pick target. `useBoardPlayback` paces seats with characters at walking
-  speed (`CHARACTER_PACE`); the server, rules and move tray are unchanged.
+- `Tokens3D.tsx` swaps the pawn for the character and follows each move's whole path by
+  elapsed time (`pathMotion.ts`); the plinth is the pick target. `useBoardPlayback` paces seats
+  with characters at walking speed (`CHARACTER_PACE`) and runs each plan on its own clock (see
+  [motion.md](../design/motion.md)); the server, rules and move tray are unchanged.
 - The token mirror carries `data-character`, `data-character-ready`, `-state`, `-clip`,
   `-team`, `-level` and `-clips` for tests and tooling.
 - The 2D board, other cities and other seats keep the pawns; losing WebGL falls back to the

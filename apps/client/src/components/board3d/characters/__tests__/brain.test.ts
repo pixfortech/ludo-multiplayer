@@ -5,7 +5,7 @@
 // listener.
 import { describe, expect, it } from "vitest";
 import { tokenPositionToWorld } from "@ludo/board-layouts";
-import { CAPTURE_DISMAY, HOME_ARRIVE, OPEN_EXCITED, RUN_ABOVE, SELECT_WAVE_SECONDS, decide, groundSpeed, sceneAt, turnToward, waiting, walkPosition, yawToward, type CharacterInputs, type Gait } from "../brain";
+import { CAPTURE_DISMAY, HOME_ARRIVE, MAX_CLIP_RATE, OPEN_EXCITED, RUN_ABOVE, SELECT_WAVE_SECONDS, decide, groundSpeed, sceneAt, turnToward, waiting, walkPosition, yawToward, type CharacterInputs, type Gait } from "../brain";
 import { CHARACTERS, CHARACTER_HEIGHT, CHARACTER_TEAMS, characterFor, characterScale, characterSeats, loadableSeats, loadOrder, routinePhase } from "../catalog";
 
 const gait: Gait = { walkSpeed: 1.6, runSpeed: 3.0, scale: 0.55 };
@@ -143,6 +143,9 @@ describe("states from gameplay (never invented)", () => {
     const run = decide({ ...base, where: "board", travel: { kind: "hop", progress: 0.5, groundSpeed: RUN_ABOVE + 0.5 } }, gait);
     expect(run.clip).toBe("run");
     expect(run.timeScale * gait.runSpeed * gait.scale).toBeCloseTo(RUN_ABOVE + 0.5, 6);
+    // A sprint faster than the run clip can match plays it at its fastest, never faster.
+    const sprint = decide({ ...base, where: "board", travel: { kind: "hop", progress: 0.5, groundSpeed: 50 } }, gait);
+    expect(sprint).toMatchObject({ clip: "run", timeScale: MAX_CLIP_RATE });
   });
 });
 

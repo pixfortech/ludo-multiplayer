@@ -41,27 +41,27 @@ const NO_MOVE_HOLD_CHARACTERS_MS = 1000;
 const CAPTURE_STAGGER_MS = 60;
 
 /**
- * Pacing for seats shown as walking characters (the 3D board, C.3): a person covers a cell at a walking
- * pace, not in a pawn's 170 ms hop, so their moves take longer here (presentation only: the server, the
- * rules and every other player are unaffected, and a newer state still fast-forwards).
+ * Pacing for seats shown as walking characters (the 3D board): brisk enough that a turn never drags (a six-cell
+ * walk takes about two seconds), slow enough that every cell of the path is seen. Presentation only: the
+ * server, the rules and every other player are unaffected, and a newer state still fast-forwards.
  */
 export const CHARACTER_PACE = {
-  /** A walked cell; the first cells of a long move, and every cell of a short one. */
-  walkMs: 700,
-  /** A run cell, once a long move (more than 6 cells) is under way. */
-  runMs: 420,
-  /** Leaving base: the excited reaction, then the walk to the start cell. */
-  openMs: 1500,
+  /** A walked cell. */
+  walkMs: 340,
+  /** A run cell, in the middle of a long move (more than 6 cells). */
+  runMs: 250,
+  /** Leaving base: a quick excited hop, then the walk to the start cell. */
+  openMs: 800,
   /** Into the centre, with a short celebration. */
-  homeMs: 1300,
+  homeMs: 700,
   /** Caught: dismay where it stands, then back to base. */
-  captureMs: 1300,
+  captureMs: 1100,
 } as const;
 
 /** The 3D die's throw: lifted, thrown, bouncing and rolling onto the server's value at its resting spot. */
-export const DIE3D_ROLL_MS = 1150;
-/** After a six lands, the roller's people react before the choice opens or a token moves (characters only). */
-export const SIX_REACTION_LEAD_MS = 500;
+export const DIE3D_ROLL_MS = 950;
+/** After a six lands, the roller's people begin to react before the choice opens (characters only; the reaction goes on while the player chooses). */
+export const SIX_REACTION_LEAD_MS = 150;
 
 export interface PlaybackOptions {
   /** Seats shown as walking characters: their moves are paced for walking, and they react to events. */
@@ -98,6 +98,32 @@ export interface TokenMotion {
   ms: number;
   /** Unique per scheduled change, so the same kind twice in a row still animates. */
   id: number;
+  /**
+   * The whole move this cell belongs to (every cell of the authorised path, in order, with its timing), the same
+   * object for each of its cells. The 3D board follows it on its own clock: the position at any moment is
+   * sampled from the elapsed time, so a slow frame never holds the walk back or makes it skip a cell.
+   */
+  path?: MovePath;
+}
+
+/** One cell of a move's path: where it ends and how long it takes. */
+export interface PathSegment {
+  step: number;
+  kind: MotionKind;
+  ms: number;
+}
+
+export interface MovePath {
+  /** Stable for the whole move. */
+  id: number;
+  seat: number;
+  /** Where the move starts (null: the base). */
+  from: number | null;
+  segments: PathSegment[];
+  /** The whole move's length (ms). */
+  ms: number;
+  /** When it started on screen (performance.now()). */
+  startedAt: number;
 }
 
 export interface Playback {
@@ -165,14 +191,16 @@ let motionId = 0;
 let cueId = 0;
 let throwId = 0;
 
-function withStep(view: Playback, key: string, step: number | null, kind: MotionKind, ms: number): Playback {
+function withStep(view: Playback, key: string, step: number | null, kind: MotionKind, ms: number, path?: MovePath): Playback {
   return {
     ...view,
     tokens: view.tokens.map((t) => (tokenKey(t.playerId, t.tokenId) === key ? { ...t, step } : t)),
-    motion: { ...view.motion, [key]: { kind, ms, id: ++motionId } },
+    motion: { ...view.motion, [key]: { kind, ms, id: ++motionId, ...(path ? { path } : {}) } },
     raised: [key],
   };
 }
+
+let pathId = 0;
 
 /** Cues still playing (a little slack, so a reaction is never cut at its last frame). */
 export const liveCues = (cues: readonly PresentationCue[], now: number): PresentationCue[] => cues.filter((c) => now - c.at < c.ms + 500);
@@ -182,9 +210,12 @@ export interface PlaybackStep {
   at: number;
   /** What it does, for tests and tooling ("die:throw", "hop:p1:0:5", "cue:six:p1", "settle", ...). */
   label: string;
-  /** Committed on its own render (a walking character's cell: never batched with the next one). */
-  own?: boolean;
   apply: (view: Playback, now: number) => Playback;
+  /**
+   * If this step runs late (a busy page), every later step moves back by as much, so the gaps after it are kept:
+   * the die's reveal, so nothing moves the moment the value appears. Other steps keep to the plan's clock.
+   */
+  anchor?: boolean;
   /** Hooks for sound and dialogue, emitted as the step is shown. */
   events?: (now: number) => PresentationEvent[];
 }
@@ -202,7 +233,7 @@ export function planPlayback(previous: GameStateView, game: GameStateView, optio
   const entries = game.recentHistory.filter((e) => e.seq > lastSeq(previous));
   const seatOf = new Map(game.players.map((p) => [p.id, p.seat]));
   const walks = (playerId: string) => !reduced && (characterSeats?.has(seatOf.get(playerId) ?? -1) ?? false);
-  const step = (at: number, label: string, apply: PlaybackStep["apply"], extra: Pick<PlaybackStep, "own" | "events"> = {}) => steps.push({ at, label, apply, ...extra });
+  const step = (at: number, label: string, apply: PlaybackStep["apply"], extra: Pick<PlaybackStep, "events" | "anchor"> = {}) => steps.push({ at, label, apply, ...extra });
   const cue = (at: number, kind: CueKind, playerId: string, tokens: string[]) => {
     // Only the people of a seat shown as characters react (pawns have nobody to react).
     if (!walks(playerId)) return;
@@ -227,6 +258,7 @@ export function planPlayback(previous: GameStateView, game: GameStateView, optio
     });
     t += rollMs;
     step(t, `die:reveal:${roll.value}`, (v) => ({ ...v, die: { ...v.die, value: roll.value, rolling: false, revealKey: v.die.revealKey + 1 } }), {
+      anchor: true,
       events: () => [{ type: "die-land", playerId: roll.playerId, seat, value: roll.value }],
     });
     const forfeit = entries.some((e) => e.type === "forfeit");
@@ -249,7 +281,7 @@ export function planPlayback(previous: GameStateView, game: GameStateView, optio
       const walking = walks(entry.playerId);
       // Cell by cell along the seat's own path (track, then its own lane): never a shortcut.
       const hops = reduced ? [entry.to] : hopSteps(entry.from, entry.to);
-      hops.forEach((cell, i) => {
+      const segments: PathSegment[] = hops.map((cell, i) => {
         const last = i === hops.length - 1;
         const kind: MotionKind = reduced ? "slide" : entry.from === null ? "open" : cell === 56 ? "home" : last ? "land" : "hop";
         const ms = reduced
@@ -269,13 +301,23 @@ export function planPlayback(previous: GameStateView, game: GameStateView, optio
                 : hops.length > 8 && i >= 4 && !last
                   ? FAST_HOP_MS
                   : D.hopPerCell;
-        // A walking character's cells each get their own render, even when a busy page runs two timers back to
-        // back (React would otherwise batch them and the character would never be told about the cell between).
-        step(t, `${kind}:${key}:${cell}`, (v) => withStep(v, key, cell, kind, ms), {
-          own: walking,
+        return { step: cell, kind, ms };
+      });
+      // One path for the whole move, started when its first cell is shown; the cells' own steps carry the same
+      // path, so the 3D board follows the move on its own clock while the board's logical state advances cell by
+      // cell (the 2D board, the token list and the log). Never a shortcut: every cell is in the path.
+      const seat = seatOf.get(entry.playerId) ?? 0;
+      const id = ++pathId;
+      let path: MovePath | null = null;
+      const total = segments.reduce((sum, x) => sum + x.ms, 0);
+      segments.forEach((seg, i) => {
+        step(t, `${seg.kind}:${key}:${seg.step}`, (v, now) => {
+          path ??= { id, seat, from: entry.from, segments, ms: total, startedAt: now };
+          return withStep(v, key, seg.step, seg.kind, seg.ms, path);
+        }, {
           ...(i === 0 ? { events: () => [{ type: "token-move" as const, playerId: entry.playerId, tokenId: entry.tokenId, from: entry.from, to: entry.to }] } : {}),
         });
-        t += ms;
+        t += seg.ms;
       });
     } else if (entry.type === "capture") {
       // All tokens captured by this move go together (handled at the first capture entry).

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tokenKeyframes } from "../tokenMotion";
+import { throughCells, tokenKeyframes } from "../tokenMotion";
 import { CELL } from "../geometry";
 
 const from = { x: 100, y: 200 };
@@ -44,5 +44,26 @@ describe("token travel keyframes", () => {
     const frames = tokenKeyframes("slide", from, to, CELL);
     expect(frames.travel).toHaveLength(2);
     expect(frames.body.every((f) => f.transform === "none")).toBe(true);
+  });
+
+  it("catching up several cells at once, it passes over each of them in order (never a cut corner)", () => {
+    // Round a corner: right, then up.
+    const a = { x: 100, y: 200 };
+    const via = [{ x: 140, y: 200 }, { x: 180, y: 160 }];
+    const b = { x: 180, y: 120 };
+    for (const kind of ["hop", "land"] as const) {
+      const frames = throughCells(tokenKeyframes(kind, a, b, CELL), kind, a, via, b);
+      const points = frames.travel.map(xy);
+      expect(points.slice(0, 4)).toEqual([[100, 200], [140, 200], [180, 160], [180, 120]]);
+      expect(points.at(-1)).toEqual([180, 120]);
+      const offsets = frames.travel.map((f) => f.offset as number);
+      expect(offsets).toEqual([...offsets].sort((x, y) => x - y));
+      expect(offsets.at(-1)).toBe(1);
+    }
+    // Nothing to catch up, or a capture: unchanged.
+    const plain = tokenKeyframes("hop", a, b, CELL);
+    expect(throughCells(plain, "hop", a, [], b)).toBe(plain);
+    const capture = tokenKeyframes("capture", a, b, CELL);
+    expect(throughCells(capture, "capture", a, via, b)).toBe(capture);
   });
 });
