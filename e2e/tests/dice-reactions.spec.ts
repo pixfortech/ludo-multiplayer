@@ -344,7 +344,9 @@ test("a capture plays in order and sends the victim to its own base; a home entr
   const arrived = timeline.find((e) => e.target === B(runner.id) && e.value === "56")!;
   const counted = timeline.find((e) => e.target === `home:${ben.id}` && e.value === "1")!;
   expect(arrived, "the runner reached the home cell").toBeDefined();
-  expect(counted.t, "counted when he arrives, not before").toBeGreaterThanOrEqual(arrived.t);
+  // Not before he arrives: later, or in the same render (a busy page commits steps that fell due together at once,
+  // and the changes of one render are reported in page order, a fraction of a millisecond apart).
+  expect(counted.t, "counted when he arrives, not before").toBeGreaterThanOrEqual(arrived.t - 1);
   const homeLog = await since(aman.page, markHome);
   expect(indexOf(homeLog, (e) => e.type === "token-move" && e.tokens === B(runner.id) && e.to === "56", "the move home")).toBeLessThan(indexOf(homeLog, (e) => e.type === "cue" && e.kind === "home" && e.player === ben.id, "the home cue"));
 
