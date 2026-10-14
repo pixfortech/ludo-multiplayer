@@ -247,7 +247,7 @@ export class GameConnection {
    * Asks to take over an offline player's seat in a game in progress. Resolves once the request is open; `granted`
    * settles with the seat (this connection then controls it) or rejects with SeatRequestDeclined.
    */
-  async requestSeat(input: { code: string; playerId: string; displayName: string }): Promise<{ request: SeatRequestData; granted: Promise<MembershipData> }> {
+  async requestSeat(input: { code: string; seat: number; displayName: string }): Promise<{ request: SeatRequestData; granted: Promise<MembershipData> }> {
     const request = await this.request("room:requestSeat", input);
     const granted = new Promise<MembershipData>((resolve, reject) => this.seatWaiters.set(request.seatRequestId, { resolve, reject }));
     // Callers may not await it at once; an unhandled rejection is not an error here.

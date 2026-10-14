@@ -226,16 +226,19 @@ export class RoomService {
   /** Checks a takeover request from someone without a seat (rate-limited like joining); nothing changes. */
   async checkSeatTakeover(input: unknown, context: RequestContext): Promise<{ roomId: string; playerId: string; displayName: string }> {
     const request = asRecord(input);
-    assertKnownKeys(request, ["code", "playerId", "displayName"], "invalid-request");
+    assertKnownKeys(request, ["code", "seat", "displayName"], "invalid-request");
     const code = this.parseCode(request.code);
-    const playerId = parsePlayerId(request.playerId);
+    if (typeof request.seat !== "number" || !Number.isInteger(request.seat) || request.seat < 0) throw new RoomError("invalid-request", "Choose a seat");
+    const seat = request.seat;
     const displayName = normaliseDisplayName(request.displayName);
     this.throttle(this.lookupGuard.begin(context.clientKey));
     try {
       const room = await this.findRoom(code, context);
       const players = await this.store.listPlayers(room.id);
-      this.assertTakeoverPossible(room, players, playerId, displayName);
-      return { roomId: room.id, playerId, displayName };
+      const target = players.find((p) => p.seat === seat);
+      if (!target) throw new RoomError("invalid-target", "Nobody plays that seat");
+      this.assertTakeoverPossible(room, players, target.id, displayName);
+      return { roomId: room.id, playerId: target.id, displayName };
     } catch (error) {
       throw translate(error);
     }

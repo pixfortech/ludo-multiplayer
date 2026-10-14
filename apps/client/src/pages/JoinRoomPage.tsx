@@ -40,7 +40,7 @@ export function JoinRoomPage({ initialCode }: { initialCode: string | null }) {
   const [joining, setJoining] = useState(false);
   const latestRequest = useRef(0);
   // Taking over an offline player's seat in a game in progress (the host decides).
-  const [takeoverSeat, setTakeoverSeat] = useState<string | null>(null);
+  const [takeoverSeat, setTakeoverSeat] = useState<number | null>(null);
   const [takeover, setTakeover] = useState<{ kind: "idle" } | { kind: "waiting" } | { kind: "failed"; message: string }>({ kind: "idle" });
   const savedSeats = isCompleteCode(code) ? seats.forRoom(code) : [];
 
@@ -106,7 +106,7 @@ export function JoinRoomPage({ initialCode }: { initialCode: string | null }) {
   };
 
   const offline = room && !room.joinable ? room.takeoverSeats : [];
-  const chosenSeat = offline.find((t) => t.playerId === takeoverSeat) ?? offline[0] ?? null;
+  const chosenSeat = offline.find((t) => t.seat === takeoverSeat) ?? offline[0] ?? null;
 
   const askForSeat = async () => {
     if (!room || !chosenSeat) return;
@@ -118,7 +118,7 @@ export function JoinRoomPage({ initialCode }: { initialCode: string | null }) {
     setNameError(null);
     setTakeover({ kind: "waiting" });
     try {
-      const { granted } = await client.requestSeat({ code: room.code, playerId: chosenSeat.playerId, displayName: trimmed });
+      const { granted } = await client.requestSeat({ code: room.code, seat: chosenSeat.seat, displayName: trimmed });
       const seat = await granted;
       rememberName(trimmed);
       seats.save({ roomCode: seat.room.code, playerId: seat.player.playerId, secret: seat.credential.secret, displayName: seat.player.displayName, roomName: seat.room.name });
@@ -235,13 +235,13 @@ export function JoinRoomPage({ initialCode }: { initialCode: string | null }) {
           <div role="radiogroup" aria-label="Seat to take over" className="flex flex-col gap-2">
             {offline.map((t) => (
               <button
-                key={t.playerId}
+                key={t.seat}
                 type="button"
                 role="radio"
-                aria-checked={chosenSeat.playerId === t.playerId}
-                onClick={() => setTakeoverSeat(t.playerId)}
+                aria-checked={chosenSeat.seat === t.seat}
+                onClick={() => setTakeoverSeat(t.seat)}
                 disabled={takeover.kind === "waiting"}
-                className={`press flex items-center gap-3 rounded-[var(--radius-control)] border px-3 py-2 text-left ${chosenSeat.playerId === t.playerId ? "border-ink bg-[#f6f3ee]" : "border-border bg-surface"}`}
+                className={`press flex items-center gap-3 rounded-[var(--radius-control)] border px-3 py-2 text-left ${chosenSeat.seat === t.seat ? "border-ink bg-[#f6f3ee]" : "border-border bg-surface"}`}
               >
                 <PlayerToken identity={identityFor(t.colour)} size={32} shadow={false} />
                 <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">{t.displayName}</span>

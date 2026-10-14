@@ -135,8 +135,8 @@ export interface MoveRequest extends RequestBase {
  */
 export interface RequestSeatRequest extends RequestBase {
   code: string;
-  /** The offline player whose seat to take (from RoomPreview.takeoverSeats). */
-  playerId: string;
+  /** The seat to take (an offline player's, from RoomPreview.takeoverSeats). */
+  seat: number;
   /** The newcomer's name: the seat is shown under it from then on. */
   displayName: string;
 }

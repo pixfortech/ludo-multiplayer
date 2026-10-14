@@ -177,7 +177,7 @@ export function registerHandlers(socket: LudoSocket, deps: HandlerDeps): void {
 
   on("room:requestSeat", async (_requestId, body) => {
     requireUnbound();
-    const input = readFields<{ code: string; playerId: string; displayName: string }>(body, RULES.requestSeat);
+    const input = readFields<{ code: string; seat: number; displayName: string }>(body, RULES.requestSeat);
     const checked = await rooms.checkSeatTakeover(input, { clientKey: socket.data.clientKey });
     const request = deps.seatRequests.add({ ...checked, socketId: socket.id });
     if (!request) throw new RoomError("rate-limited", "This game has too many open requests; try again shortly", { retryAfterSeconds: 30 });

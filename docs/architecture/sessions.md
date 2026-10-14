@@ -81,8 +81,8 @@ offline, with the host's approval.
 
 | Step | What happens |
 | --- | --- |
-| Find a seat | `room:preview` lists `takeoverSeats`: in a game in progress (`playing` or `paused`), the players who are offline (name, seat, colour; never anything secret) |
-| Ask | A connection without a seat sends `room:requestSeat { code, playerId, displayName }` (rate-limited like joining). Refused with `seat-not-available` if that player is connected or the game is not in progress, and `name-taken` if a member has the name |
+| Find a seat | `room:preview` lists `takeoverSeats`: in a game in progress (`playing` or `paused`), the seats whose players are offline (name, seat number, colour; no ids, nothing secret) |
+| Ask | A connection without a seat sends `room:requestSeat { code, seat, displayName }` (rate-limited like joining). Refused with `seat-not-available` if that player is connected or the game is not in progress, and `name-taken` if a member has the name |
 | Who is asked | Everyone in the game gets `seat:requested`. The **host** answers; while the host is offline, or is the player being replaced, any other player in the game may answer |
 | Answer | `room:answerSeatRequest { seatRequestId, approve }`. Anyone else gets `not-host`. A request can be approved once; a second answer gets `seat-request-gone` |
 | On approval | In one transaction under the room lock: the seat takes the newcomer's name and a **new credential**, so the absent player's secret (and any pending one) stops working, and the session epoch moves on. The seat keeps its id, colour, tokens, turn and place; the game state does not change. The newcomer's connection takes control of the seat and receives `seat:granted` with the credential (never broadcast). Everyone gets `room:updated`; a game paused for that player resumes |

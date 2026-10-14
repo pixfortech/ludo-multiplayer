@@ -127,9 +127,8 @@ export interface RoomPreview {
   takeoverSeats: TakeoverSeat[];
 }
 
-/** A seat in a game in progress whose player is offline (see RoomPreview.takeoverSeats). */
+/** A seat in a game in progress whose player is offline (see RoomPreview.takeoverSeats). No ids: the seat number names it. */
 export interface TakeoverSeat {
-  playerId: string;
   displayName: string;
   seat: number;
   colour: string;

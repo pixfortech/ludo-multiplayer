@@ -166,7 +166,7 @@ export function runRoomServiceSuite(name: string, setup: () => Promise<{ store: 
         const { code, members } = await roomWith(["Ben"], { roomName: "Friday Ludo" });
         const preview = await rooms.previewRoom(code, ctx);
         expect(Object.keys(preview).sort()).toEqual(
-          ["availableColours", "blockedReason", "cityTheme", "code", "colours", "hostName", "joinable", "joinedCount", "lifecycle", "maxPlayers", "name", "occupiedSeats", "status"].sort(),
+          ["availableColours", "blockedReason", "cityTheme", "code", "colours", "hostName", "joinable", "joinedCount", "lifecycle", "maxPlayers", "name", "occupiedSeats", "status", "takeoverSeats"].sort(),
         );
         expect(preview).toMatchObject({
           code,

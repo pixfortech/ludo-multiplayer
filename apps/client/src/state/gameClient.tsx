@@ -20,7 +20,7 @@ export interface GameClient {
   resumeGame(): Promise<void>;
   fullHistory(): Promise<GameActionView[]>;
   leaveRoom(): Promise<void>;
-  requestSeat(input: { code: string; playerId: string; displayName: string }): Promise<{ request: SeatRequestData; granted: Promise<MembershipData> }>;
+  requestSeat(input: { code: string; seat: number; displayName: string }): Promise<{ request: SeatRequestData; granted: Promise<MembershipData> }>;
   answerSeatRequest(seatRequestId: string, approve: boolean): Promise<boolean>;
 }
 

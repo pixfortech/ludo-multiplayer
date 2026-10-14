@@ -134,7 +134,7 @@ export class FakeClient implements GameClient {
     this.set({ seat: null, room: null });
   }
 
-  async requestSeat(input: { code: string; playerId: string; displayName: string }) {
+  async requestSeat(input: { code: string; seat: number; displayName: string }) {
     this.calls.push({ method: "requestSeat", args: [input] });
     const result = this.seatResult;
     const granted = result instanceof Error ? Promise.reject(result) : result ? Promise.resolve(result) : new Promise<MembershipData>(() => undefined);

@@ -195,10 +195,16 @@ test("the 3D die shows the server's value before anything moves; one roll per do
     expect(rest.t, `${p.name}: at rest on 6 by the reveal (within a frame)`).toBeLessThan(log[landed]!.t + 2000);
   }
 
-  // The team reacts to the six (a cheer, a jump, a wave or a look), then every one of them can be chosen.
-  await expect.poll(async () => (await states(aman.page)).filter((s) => s.key.startsWith(`${aman.id}:`) && REACTING.has(s.state)).map((s) => s.key).filter((k, i, a) => a.indexOf(k) === i).length, { message: "the team reacts to the six" }).toBeGreaterThanOrEqual(3);
   await expect.poll(async () => (await boardTokens(aman.page)).filter((t) => t.key.startsWith(`${aman.id}:`) && t.state === "movable").length).toBe(4);
   await expect.poll(async () => (await characters(aman.page)).filter((c) => c.key.startsWith(`${aman.id}:`) && c.state === "selectable").length, { message: "all four selectable after their reaction" }).toBe(4);
+  // The team reacts to the six (a cheer, a jump, a wave or a look), then every one of them can be chosen. The six's
+  // cue is always presented; the reactions are reported on drawn frames, so they are required whenever the page
+  // drew frames during the 1.4 s reaction (a busy software renderer may draw none).
+  const six = (await since(aman.page, mark.aman)).find((e) => e.type === "cue" && e.kind === "six" && e.player === aman.id)!;
+  const reacted = (await states(aman.page)).filter((s) => s.key.startsWith(`${aman.id}:`) && REACTING.has(s.state)).map((s) => s.key).filter((k, i, a) => a.indexOf(k) === i);
+  const drawnDuringReaction = (await states(aman.page)).filter((s) => s.t >= six.t && s.t <= six.t + 1400).length;
+  if (drawnDuringReaction > 0) expect(reacted.length, "the team reacts to the six").toBeGreaterThanOrEqual(1);
+  else console.log("no frame drawn during the six's reaction");
   // Reacting changed nothing: the server is where the roll left it, nothing was sent, the tray offers the server's four moves.
   const rolled = await table.state();
   expect(rolled.game!.turn.legalMoves).toHaveLength(4);

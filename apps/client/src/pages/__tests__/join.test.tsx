@@ -98,7 +98,7 @@ describe("join room", () => {
       blockedReason: "game-already-started",
       status: "playing",
       lifecycle: "playing",
-      takeoverSeats: [{ playerId: "p-ben", displayName: "Ben", seat: 2, colour: "emerald" }],
+      takeoverSeats: [{ displayName: "Ben", seat: 2, colour: "emerald" }],
     });
     const room = roomView({ players: [player(), player({ playerId: "p-ben", displayName: "Dev", seat: 2, colour: "emerald", isHost: false })] });
     s.client.seatResult = membership(room, "p-ben", "dev-secret");
@@ -108,13 +108,13 @@ describe("join room", () => {
     fireEvent.change(screen.getByLabelText("Your name"), { target: { value: "Dev" } });
     fireEvent.click(screen.getByRole("button", { name: /Ask to play as Emerald/ }));
     await waitFor(() => expect(window.location.pathname).toBe("/room/ABC234"));
-    expect(s.client.calls.find((c) => c.method === "requestSeat")).toEqual({ method: "requestSeat", args: [{ code: "ABC234", playerId: "p-ben", displayName: "Dev" }] });
+    expect(s.client.calls.find((c) => c.method === "requestSeat")).toEqual({ method: "requestSeat", args: [{ code: "ABC234", seat: 2, displayName: "Dev" }] });
     expect(s.seats.get("ABC234", "p-ben")?.secret).toBe("dev-secret");
   });
 
   it("says so when the host declines a takeover", async () => {
     const s = services();
-    s.client.previewResult = preview({ joinable: false, blockedReason: "game-already-started", status: "playing", lifecycle: "playing", takeoverSeats: [{ playerId: "p-ben", displayName: "Ben", seat: 2, colour: "emerald" }] });
+    s.client.previewResult = preview({ joinable: false, blockedReason: "game-already-started", status: "playing", lifecycle: "playing", takeoverSeats: [{ displayName: "Ben", seat: 2, colour: "emerald" }] });
     s.client.seatResult = new SeatRequestDeclined("declined");
     render(<App services={s} initialPath="/join/ABC234" />);
     expect(await screen.findByText("Take over a seat")).toBeTruthy();

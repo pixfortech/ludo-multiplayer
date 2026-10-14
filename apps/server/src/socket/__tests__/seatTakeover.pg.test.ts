@@ -42,7 +42,11 @@ async function drop(conn: Connected, playerId: string): Promise<void> {
 }
 
 const preview = async (conn: Connected, code: string) => expectOk(await ask(conn.client, "room:preview", { requestId: rid("preview"), code })).preview as RoomPreview;
-const requestSeat = (conn: Connected, code: string, playerId: string, displayName: string) => ask(conn.client, "room:requestSeat", { requestId: rid("seat"), code, playerId, displayName });
+/** Asks for the seat of the player with this id (as a newcomer would pick it from the preview: by seat). */
+const requestSeat = async (conn: Connected, code: string, playerId: string, displayName: string) => {
+  const seat = (await t.store.getPlayer(playerId))?.seat ?? 99;
+  return ask(conn.client, "room:requestSeat", { requestId: rid("seat"), code, seat, displayName });
+};
 const answer = (conn: Connected, seatRequestId: string, approve: boolean) => ask(conn.client, "room:answerSeatRequest", { requestId: rid("answer"), seatRequestId, approve });
 
 describe.skipIf(skip)("taking over an offline player's seat", () => {
@@ -53,7 +57,9 @@ describe.skipIf(skip)("taking over an offline player's seat", () => {
 
     const dev = await open(t.url);
     const seats = (await preview(dev, code)).takeoverSeats;
-    expect(seats).toEqual([{ playerId: guest.id, displayName: "Ben", seat: 2, colour: "emerald" }]);
+    expect(seats).toEqual([{ displayName: "Ben", seat: 2, colour: "emerald" }]);
+    // Public previews never carry player ids.
+    expect(JSON.stringify(await preview(dev, code))).not.toContain(guest.id);
     const asked = expectOk(await requestSeat(dev, code, guest.id, "Dev"));
     // The host hears the request (and nobody learns any secret from it).
     const notice = await host.rec.waitFor<{ seatRequestId: string; playerId: string; displayName: string }>("seat:requested");
