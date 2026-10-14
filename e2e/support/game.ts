@@ -40,6 +40,24 @@ export async function openPlayer(browser: Browser, name: string, device: Device,
   // E2E_RECORD_DIR records each player's screen to video (for reviewing animation; off in CI).
   const record = process.env.E2E_RECORD_DIR ? { recordVideo: { dir: `${process.env.E2E_RECORD_DIR}/${name.toLowerCase()}`, size: viewport } } : {};
   const context = await browser.newContext({ viewport, hasTouch: touch, isMobile: device === "phone", reducedMotion: options.reducedMotion ? "reduce" : "no-preference", ...record });
+  // When recording: the page's clock (performance.now(), the time base of every measurement) in a corner of the
+  // screen, so a video can be read against the measured timings.
+  if (process.env.E2E_RECORD_DIR)
+    await context.addInitScript(() => {
+      const tick = () => {
+        let el = document.getElementById("e2e-clock");
+        if (!el && document.body) {
+          el = document.createElement("div");
+          el.id = "e2e-clock";
+          el.setAttribute("aria-hidden", "true");
+          el.style.cssText = "position:fixed;left:4px;bottom:4px;z-index:2147483647;pointer-events:none;font:12px/1.2 monospace;color:#fff;background:rgba(0,0,0,.65);padding:2px 5px;border-radius:3px";
+          document.body.appendChild(el);
+        }
+        if (el) el.textContent = `page ${Math.round(performance.now())} ms`;
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
   const board = options.board ?? "2d";
   // The tab starts on this view (and quality); a refresh keeps whatever the player has chosen since.
   if (board !== "default" || options.quality)
