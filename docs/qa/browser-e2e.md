@@ -134,6 +134,26 @@ The city round the 3D board is part of the same WebGL scene. Besides the pixels 
 
 Headless Chromium renders WebGL in software. There the city's frames cost so much that the governor rests it after its first seconds, so the motion checks run in the live window right after a (re)build; the rest of the suite holds whatever the device decides.
 
+## Token movement (P0 movement fix)
+
+Every move on the 2.5D/3D board is recorded inside the page (`e2e/support/movement.ts`): each display frame and
+each frame the board drew, the token's board position (`data-wx`, `data-wz` on the board mirror), its logical step
+and its character's state, the click, the request leaving the page, the presentation events, long animation
+frames and the board's own frame work. `walkedPath` checks a recorded move against the seat's path in board units:
+every drawn position lies on the polyline through the cells in order (a cut corner or a skipped cell would lie off
+it), it never goes back along it (no replay), and it ends on the server's cell.
+
+| Spec | Covers |
+| ---- | ------ |
+| `movement.spec.ts` | A character's whole journey in 3D (the other player on the 2D board): leaving the base, a six-cell walk round a corner, two consecutive bonus turns, a single cell, the long track, the home lane and the finish; each move on its path, never backwards, ending on the server's cell, arriving in about its planned time with no stand-still. Mid-move: Follow and Overview camera, the CPU slowed 4×, graphics quality changed, a refresh (nothing replays), the other player's network dropped and restored, switching to 2.5D and to 2D and back, a lost WebGL context (the 2D board takes over on the server's state). Four players: a capture picked by touch on a phone in 2.5D, the attacker's path, the victim back in its own base slot, every board in sync |
+| `movement-timing.spec.ts` | In Classic 2D, Kolkata 2.5D Low/Medium and 3D Medium (with `MOVEMENT_ALL=1` also 2.5D High, 3D Low and 3D High): the roll's click to the value on show, a six's departure and a six-cell walk (click to request, request to the move on screen, click to motion and to arrival, frames drawn, longest gap and stand-still, frame interval spread, long frames, the board's frame work, draw calls). `npm run perf:movement` runs it on a real GPU |
+| `characters.spec.ts` | The departure and the four-cell walk are checked against the recorded path; on a busy page two cells can be committed together, and the character still walks through both |
+
+Headless Chromium here draws WebGL in software, at times one frame in 0.5–1 s. A state that lasts less than that
+(the 0.2 s hop out of the base, the 0.5 s dismay of a capture) can fall between two drawn frames, so these checks
+look at what was drawn: every frame drawn during a capture's return shows the victim caught, and every position
+drawn during a move is on its path.
+
 ## Bugs found and fixed
 
 1. **A double click sent two requests.** Two clicks in the same moment, before React re-rendered, sent two `game:roll` (or `game:move`) requests. The server's state-version check refused the second as stale, so the game state was never wrong. But the client sent a duplicate request and could briefly show a refusal.
@@ -157,6 +177,8 @@ Headless Chromium renders WebGL in software. There the city's frames cost so muc
 11. **Batch C.2, found by the Kolkata fit test: the 3D board's screen-position mirror lagged the picture by a frame.** It read the camera's world matrix before the renderer updated it. Continuous ambient frames had hidden this. Once the city rests on a slow device, no further frame comes, so after a camera move the mirror could stay stale; picks and drawing were unaffected. The mirror now updates the camera's matrix first.
 12. **Batch C.2, found while measuring: the living city saturated software WebGL.** The header's backdrop blur was re-rasterised over the full-window canvas on every ambient frame. Lit scenery added overdraw, and the city's frame rate was fixed. The fixes were a solid header over the stage, Lambert shading, top-first ground layers, the sky drawn last, and the ambient governor. See [performance budgets](../design/performance-budgets.md).
 13. **Batch C.2, found by CI on Windows: while the city measured what the device could afford, a slow GPU stalled the page.** On the Windows runner's software WebGL, the die's reveal took more than 15 s right after a game started. The governor also judged single frame intervals, which a burst of quickly queued frames could make look cheap; once it decided "live at 12 a second" while 3 arrived. It now counts the frames delivered in a 2 s window after a 1 s warm-up. The board also reports `measuring` until it has decided.
+
+14. **P0 movement fix, found by measuring: characters walked slowly, stalled between cells and fell behind.** On 04d94e3 a six-cell walk took 5.2–8.9 s to travel against a 4.2 s plan, standing still for up to 1.1 s between cells. The playback chained each step from the previous one's actual run (lateness added up), committed each cell with a synchronous render, and the 3D board queued cells and started at most one a frame. Now each move is one path followed by elapsed time on the plan's own clock, with brisker pacing; see [motion](../design/motion.md).
 
 ## Not covered here
 

@@ -66,6 +66,35 @@ Lighthouse (mobile profile) for load; a scripted 4-player and 15-player auto-pla
 
 ## Measurements
 
+### Token movement: before and after the P0 movement fix (2026-10-14)
+
+Headless Chromium with **software WebGL** (SwiftShader) on the CI-class Linux container, from
+`e2e/tests/movement-timing.spec.ts` (`MOVEMENT_ALL=1`): 04d94e3 before, the fix after. A six-cell walk of a
+Kolkata character, and a six's departure. **Not real-GPU numbers**: this container rasterises in software on the
+same CPU that runs the server and the page; `npm run perf:movement` measures the same on a real GPU
+([gpu-performance.md](../qa/gpu-performance.md)). High is **not validated** by these runs.
+
+| View | Roll → value | Six cells: click → motion | Six cells: click → arrival | Six cells: travel | Longest stand-still | Frame interval avg / p95 | Departure: click → arrival |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Classic 2D | 780 → 757 ms | 136 → 112 ms | 1022 → 1072 ms | 886 → 960 ms | 74 → 74 ms | 25/37 → 25/40 ms | 382 → 402 ms |
+| Kolkata 2.5D Low | 1474 → 1563 ms | 1203 → 714 ms | 6400 → 2901 ms | 5198 → 2187 ms | 283 → 0 ms | 104/266 → 79/273 ms | 2086 → 1641 ms |
+| Kolkata 2.5D Medium | 1782 → 1508 ms | 2545 → 1106 ms | 10801 → 3722 ms | 8256 → 2615 ms | 588 → 0 ms | 328/875 → 108/637 ms | 2956 → 2070 ms |
+| Kolkata 3D Medium | 2579 → 1863 ms | 1673 → 1438 ms | 8557 → 3482 ms | 6884 → 2044 ms | 1131 → 0 ms | 122/531 → 98/541 ms | 2785 → 1930 ms |
+| Kolkata 2.5D High | 2146 → 2253 ms | 3094 → 2332 ms | 10494 → 4021 ms | 7401 → 1689 ms | 921 → 0 ms | 345/1077 → 111/820 ms | 4198 → 2377 ms |
+| Kolkata 3D Low | 1523 → 1555 ms | 793 → 595 ms | 5960 → 2566 ms | 5167 → 1971 ms | 205 → 0 ms | 87/204 → 72/217 ms | 2252 → 1460 ms |
+| Kolkata 3D High | 2180 → 1998 ms | 1897 → 2093 ms | 10807 → 3865 ms | 8911 → 1772 ms | 894 → 0 ms | 167/850 → 125/868 ms | 3229 → 2557 ms |
+
+What the after-run's main-thread record shows (long-animation-frame entries):
+
+- While waiting for the move and while it travelled, the main thread spent 0–56 ms in long frames (over 50 ms).
+- The board's own work was 5–11 ms per drawn frame; the characters' animation 0.3–4.5 ms of it.
+- 105–115 draw calls; 110k (Low), 190k (Medium) and 315k (High) triangles.
+
+So in this environment the frame interval is set by software rasterisation, not by script. The request-to-move
+delay is 26 ms on the 2D board and grows with the 3D scene's triangle count (198 ms at 3D Low, about 450 ms at
+Medium, 600–770 ms at High). That points to the software renderer taking the CPU that the server and the page
+also need; it is expected to vanish on a real GPU, which only `npm run perf:movement` can confirm.
+
 ### City themes, 2D (Batch B, 2026-10-10)
 
 Headless Chromium on the CI-class Linux container, laptop viewport (1366 × 768), a live two-player game, from `e2e/tests/city-performance.spec.ts`. Headless Chromium rasterises and composites **in software**, so these are relative comparisons on one machine, not device frame rates. No real-device measurement has been made yet.

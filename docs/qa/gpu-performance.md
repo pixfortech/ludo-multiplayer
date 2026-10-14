@@ -51,6 +51,38 @@ For each view it records:
    A browser window opens and plays a few games by itself, for about 4 minutes. Don't touch it or cover it while it runs. Hidden windows aren't drawn, and the city then rests.
 5. **Results.** The console prints a summary table, and the full numbers are saved to `perf-results/gpu-<timestamp>.json`. That folder is git-ignored. The file holds only timings, counts and the GPU's name. Send it back for the report.
 
+## Measuring movement (`npm run perf:movement`)
+
+`npm run perf:movement` runs `e2e/tests/movement-timing.spec.ts` the same way, in every view and quality:
+Classic 2D; Kolkata 2.5D Low, Medium and High; Kolkata 3D Low, Medium and High. For each it measures:
+
+- the roll: click to the die's value on show;
+- a six's departure and a six-cell walk: click to the request, the request to the move starting on screen, click to
+  the first visible motion, click to the arrival, the travel time;
+- the frames the board drew while it moved, the longest gap between two of them and the longest time the token
+  stood still on the way;
+- the display's frame interval (average, p95, p99), which shows the refresh rate the browser offered;
+- the main thread: time in long animation frames (over 50 ms) while waiting for the move and while it travelled,
+  and which scripts took it;
+- the board's own work per drawn frame and the characters' share;
+- draw calls, triangles, GPU geometries and textures, and the GPU's name.
+
+On Windows, in PowerShell, from the repository root:
+
+```powershell
+$env:PG_BIN_DIR = "C:\Program Files\PostgreSQL\17\bin"
+npm ci
+npm run perf:movement                        # Chrome
+npm run perf:movement -- --channel msedge    # or Microsoft Edge
+```
+
+It takes about 6 minutes. The console prints a table, and the numbers are saved to
+`perf-results/movement-<timestamp>.json` (timings, counts and the GPU's name only).
+
+Three rates are kept apart: the **display refresh** (requestAnimationFrame intervals), the **frames the board
+drew** (it draws only when something moves) and the **scene's own animation rate** (the city's traffic is capped
+by quality; characters and moves are sampled from elapsed time on every drawn frame).
+
 ## Reading the results
 
 - **Idle and move frame rates** follow the display's refresh rate (60 Hz, 120 Hz and so on) when the GPU keeps up. They're measured with `requestAnimationFrame`.
