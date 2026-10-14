@@ -215,9 +215,13 @@ export function moveMetrics(rec: MoveRecording, key: string, finalStep: string, 
   let arrival: MoveFrame | null = null;
   if (start && final) {
     motion = drawn.find((f) => f.t >= start.t && !near(f, start)) ?? null;
-    // Arrival: the first drawn frame from which the position no longer changes (to the end of the recording).
+    // Arrival: the first drawn frame from which it stays on its destination: on the 3D board within a stack's
+    // spread of where it ends (it may glide aside for, or back from, a token sharing the cell), on the 2D board
+    // where it ends.
+    const arrived = (f: MoveFrame) =>
+      f.wx !== null && f.wz !== null && final.wx !== null && final.wz !== null ? Math.hypot(f.wx - final.wx, f.wz - final.wz) < STACK_SPREAD : near(f, final);
     for (let i = drawn.length - 1; i >= 0; i--) {
-      if (!near(drawn[i]!, final)) break;
+      if (!arrived(drawn[i]!)) break;
       arrival = drawn[i]!;
     }
   }

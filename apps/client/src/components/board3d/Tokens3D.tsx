@@ -283,6 +283,7 @@ export function PawnBody({ identity, state, kit, textures, shadows }: TokenBodyP
 
 /** Tokens sharing a cell stand side by side: when one arrives or leaves, the others glide to their new places. */
 const MAKE_ROOM_MS = 180;
+const MAKE_ROOM_PAUSE_MS = 200;
 const MAKE_ROOM_MAX = 0.6;
 
 /** A step's centre and floor in world units (the cells of a move's path). */
@@ -366,7 +367,10 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
       played.current = m.id;
       travel.current = { from: from.at, to: token.at, fromFloor: from.floor, toFloor: floor, kind: m.kind, ms: m.ms, start: now };
     } else if (!reduced && from.mounted && from.step === token.step && from.floor === floor && Math.hypot(token.at.x - from.at.x, token.at.z - from.at.z) < MAKE_ROOM_MAX) {
-      travel.current = { from: from.at, to: token.at, fromFloor: floor, toFloor: floor, kind: "slide", ms: MAKE_ROOM_MS, start: now, aside: true };
+      // From where it is drawn now (it may still be gliding, or not have started to).
+      const g = group.current;
+      const here = g ? { x: g.position.x, z: g.position.z } : from.at;
+      travel.current = { from: here, to: token.at, fromFloor: floor, toFloor: floor, kind: "slide", ms: MAKE_ROOM_MS, start: now, aside: true };
     } else travel.current = null;
     invalidate();
   }, [token.at, token.step, floor, token.motion, reduced, invalidate]);
@@ -409,7 +413,8 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
         if (settled) {
           followed.current = null;
           // Sharing the cell (a stack): it glides from the cell's centre to its place beside the others.
-          if (!reduced && Math.hypot(token.at.x - last.to.x, token.at.z - last.to.z) > 1e-6) travel.current = { from: last.to, to: token.at, fromFloor: floor, toFloor: floor, kind: "slide", ms: MAKE_ROOM_MS, start: performance.now(), aside: true };
+          // A moment's pause first: a token it is about to capture is gone by then, and it never steps aside at all.
+          if (!reduced && Math.hypot(token.at.x - last.to.x, token.at.z - last.to.z) > 1e-6) travel.current = { from: last.to, to: token.at, fromFloor: floor, toFloor: floor, kind: "slide", ms: MAKE_ROOM_MS, start: performance.now() + MAKE_ROOM_PAUSE_MS, aside: true };
           else s = { ...s, x: token.at.x, z: token.at.z };
           y = floor;
         }
@@ -423,7 +428,7 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
       }
     } else if (travel.current) {
       const t = travel.current;
-      progress = (performance.now() - t.start) / Math.max(1, t.ms);
+      progress = Math.max(0, (performance.now() - t.start) / Math.max(1, t.ms));
       s = sampleMotion(t.kind, t.from, t.to, progress);
       y = t.fromFloor + (t.toFloor - t.fromFloor) * Math.min(1, Math.max(0, progress));
       if (progress >= 1) travel.current = null;
