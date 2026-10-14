@@ -210,7 +210,12 @@ export interface PlaybackStep {
   at: number;
   /** What it does, for tests and tooling ("die:throw", "hop:p1:0:5", "cue:six:p1", "settle", ...). */
   label: string;
-  apply: (view: Playback, now: number) => Playback;
+  /**
+   * `now` is when the step is shown; `due` when the plan's clock said it should be (earlier if it ran late). A
+   * move's path starts at `due`, so the 3D board catches up; a reaction or the die's throw starts at `now`, so it
+   * plays in full from when it is shown.
+   */
+  apply: (view: Playback, now: number, due?: number) => Playback;
   /**
    * If this step runs late (a busy page), every later step moves back by as much, so the gaps after it are kept:
    * the die's reveal, so nothing moves the moment the value appears. Other steps keep to the plan's clock.
@@ -311,8 +316,8 @@ export function planPlayback(previous: GameStateView, game: GameStateView, optio
       let path: MovePath | null = null;
       const total = segments.reduce((sum, x) => sum + x.ms, 0);
       segments.forEach((seg, i) => {
-        step(t, `${seg.kind}:${key}:${seg.step}`, (v, now) => {
-          path ??= { id, seat, from: entry.from, segments, ms: total, startedAt: now };
+        step(t, `${seg.kind}:${key}:${seg.step}`, (v, now, due = now) => {
+          path ??= { id, seat, from: entry.from, segments, ms: total, startedAt: due };
           return withStep(v, key, seg.step, seg.kind, seg.ms, path);
         }, {
           ...(i === 0 ? { events: () => [{ type: "token-move" as const, playerId: entry.playerId, tokenId: entry.tokenId, from: entry.from, to: entry.to }] } : {}),

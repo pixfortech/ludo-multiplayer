@@ -38,13 +38,14 @@ export function useBoardPlayback(game: GameStateView | null, reduced: boolean, p
       return;
     }
     const plan = planPlayback(previous, game, { reduced, die3d, ...(characterSeats ? { characterSeats } : {}) });
-    // A step is applied at the time it was due on the plan's clock (not when the timer happened to fire), so a
-    // move's path starts when the plan says and the 3D board catches up with a late step instead of lagging.
-    // An ordinary (batched) update: steps due together commit together, and no step forces a synchronous
-    // render of its own (the 3D board animates from the path, not from a commit per cell).
-    const run = (step: (typeof plan.steps)[number], at: number) => {
-      setView((v) => step.apply(v, at));
-      if (step.events) for (const e of step.events(performance.now())) emitPresentationEvent(e);
+    // A step knows when it was due on the plan's clock as well as when it is shown: a move's path starts when the
+    // plan says, so the 3D board catches up with a late step instead of lagging; a reaction plays in full from
+    // when it is shown. An ordinary (batched) update: steps due together commit together, and no step forces a
+    // synchronous render of its own (the 3D board animates from the path, not from a commit per cell).
+    const run = (step: (typeof plan.steps)[number], due: number) => {
+      const now = performance.now();
+      setView((v) => step.apply(v, now, due));
+      if (step.events) for (const e of step.events(now)) emitPresentationEvent(e);
     };
     // The plan's own clock: each step at its time after the action started; steps that are due run together, in
     // order. A busy page that runs a step late does not delay the ones after it (no lag that grows step after

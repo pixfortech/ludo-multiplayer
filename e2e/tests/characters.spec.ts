@@ -15,7 +15,7 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { boardCells, boardTokens, expectBoard3d, pickToken3d } from "../support/board3d";
 import { createRoom, joinRoom, openPlayer, seatTable, startGame, visible, type BoardView, type Device, type Player } from "../support/game";
-import { installMoveRecorder, moveMetrics, startRecording, stopRecording, walkedPath } from "../support/movement";
+import { cellWorld, installMoveRecorder, moveMetrics, startRecording, stopRecording, walkedPath } from "../support/movement";
 import { readTimeline, startTimeline } from "../support/timeline";
 
 const CLIPS = ["cheer", "dismay", "drink", "excited", "exercise", "idle", "listen", "look_around", "read", "run", "stretch", "talk", "upset", "walk", "wave"];
@@ -57,19 +57,28 @@ function characters(page: Page): Promise<CharacterView[]> {
 
 /** Every character on the board has loaded (two teams in a two-player game). */
 /**
- * A departure as drawn: the departure's states on the frames the page drew (excited, then walking off; a
- * software renderer drawing a frame or two a second may show only one of them), and every drawn position on the
- * straight line from its base slot to the seat's start cell, ending there.
+ * A departure as drawn, from the page's recording (started before the pick): every frame the board drew between
+ * the base slot and the start cell shows the departure (the excited hop, then walking off; a software renderer
+ * drawing a frame or two a second may show either, or neither), every drawn position lies on the straight line
+ * from the base slot to the start cell, and it ends standing there. Returns when it first showed leaving.
  */
-async function expectDeparture(page: Page, key: string, seat: number, message: string) {
-  await expect.poll(async () => (await states(page)).filter((x) => x.key === key).some((x) => x.state === "excited" || x.state === "leavingBase"), { message, timeout: 20_000 }).toBe(true);
-  await expect.poll(async () => (await characters(page)).find((c) => c.key === key)!.step, { message: `${message}: on the start cell` }).toBe("0");
+async function expectDeparture(page: Page, key: string, seat: number, message: string): Promise<number | null> {
+  await expect.poll(async () => (await characters(page)).find((c) => c.key === key)!.step, { message: `${message}: on the start cell`, timeout: 20_000 }).toBe("0");
   await expect.poll(async () => (await characters(page)).find((c) => c.key === key)!.state, { message: `${message}: standing`, timeout: 15_000 }).not.toMatch(/^(excited|leavingBase)$/);
-  const path = walkedPath(await stopRecording(page), seat, null, 0);
+  const rec = await stopRecording(page);
+  const path = walkedPath(rec, seat, null, 0);
   console.log(`${message}: ${JSON.stringify(path)}`);
   expect(path.maxOffPath, `${message}: straight from its base slot to the start cell`).toBeLessThan(0.12);
   expect(path.maxBackwards, `${message}: never back`).toBeLessThan(0.05);
   expect(path.endOff, `${message}: on the start cell`).toBeLessThan(0.05);
+  const drawn = rec.frames.filter((f, i, a) => i > 0 && f.boardFrames !== a[i - 1]!.boardFrames && f.wx !== null);
+  const base = drawn[0]!;
+  const start = cellWorld(seat, 0);
+  const away = (f: (typeof drawn)[number]) => Math.hypot(f.wx! - base.wx!, f.wz! - base.wz!) > 0.01;
+  const onTheWay = drawn.filter((f) => away(f) && Math.hypot(f.wx! - start.x, f.wz! - start.z) > 0.05);
+  console.log(`${message}: ${onTheWay.length} frames drawn on the way: ${onTheWay.map((f) => f.state).join(", ")}`);
+  for (const f of onTheWay) expect(["excited", "leavingBase"], `${message}: leaving`).toContain(f.state);
+  return drawn.find((f) => f.state === "excited" || f.state === "leavingBase" || away(f))?.t ?? null;
 }
 
 async function allReady(page: Page, count = 8) {
@@ -205,10 +214,10 @@ test("a six: the chosen character reacts, leaves only once the server accepts, w
   await pickToken3d(aman, adda);
   await expect.poll(async () => (await table.state()).game!.stateVersion, { message: "the server accepts the move" }).toBeGreaterThan(before);
   table.moves++;
-  await expectDeparture(aman.page, adda, 0, "excited, then off to the start cell, then standing");
-  const leftAt = (await states(aman.page)).find((s) => s.key === adda && (s.state === "excited" || s.state === "leavingBase"))!.t;
+  const leftAt = await expectDeparture(aman.page, adda, 0, "excited, then off to the start cell, then standing");
   const committedAt = (await readTimeline(aman.page)).find((e) => e.target === adda)!.t;
-  expect(leftAt, "it reacts only once the move is on the board").toBeGreaterThanOrEqual(committedAt - 5);
+  expect(leftAt, "it was drawn leaving").not.toBeNull();
+  expect(leftAt!, "it reacts only once the move is on the board").toBeGreaterThanOrEqual(committedAt - 5);
   await table.expectInSync();
 
   // The bonus roll: four cells, walked one by one at a walking pace (not the pawns' 170 ms hops), recorded frame by

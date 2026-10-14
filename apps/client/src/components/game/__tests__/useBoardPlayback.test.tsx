@@ -137,4 +137,21 @@ describe("the playback on a busy page", () => {
     expect(result.current.busy).toBe(false);
     expect(timers).toEqual([]);
   });
+
+  it("a late reaction plays in full from when it is shown, while the move's path keeps the plan's clock", () => {
+    const before = state(1, [20, null, null, null], [null, 22 - 26 + 52, null, null], []);
+    const after = state(2, [22, null, null, null], [null, null, null, null], [
+      { seq: 1, type: "move", playerId: HOST, tokenId: 0, from: 20, to: 22, dice: 2 },
+      { seq: 2, type: "capture", playerId: HOST, tokenId: 0, cell: 22, victimPlayerId: BEN, victimTokenId: 1 },
+    ]);
+    const { result, rerender } = renderHook(({ game }) => useBoardPlayback(game, false, false, { characterSeats: characters, die3d: true }), { initialProps: { game: before } });
+    act(() => rerender({ game: after }));
+    // Blocked past the cheer's time (the walk's 680 ms, then the 140 ms impact), before the capture has played out.
+    blockedUntil(1_500);
+    const cheer = result.current.cues.find((c) => c.kind === "capture");
+    expect(cheer?.at, "the cheer starts when it is shown").toBe(1_500);
+    expect(result.current.motion[`${HOST}:0`]!.path!.startedAt, "the walk started on the plan's clock").toBe(0);
+    freeUntil(60_000);
+    expect(result.current.busy).toBe(false);
+  });
 });

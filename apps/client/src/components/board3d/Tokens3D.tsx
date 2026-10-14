@@ -221,6 +221,8 @@ interface Travel {
   kind: TokenMotion["kind"];
   ms: number;
   start: number;
+  /** Making room on its own cell: the token glides, but a character keeps whatever it is doing (a cheer, a wait). */
+  aside?: boolean;
 }
 
 export interface Token3DProps {
@@ -364,7 +366,7 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
       played.current = m.id;
       travel.current = { from: from.at, to: token.at, fromFloor: from.floor, toFloor: floor, kind: m.kind, ms: m.ms, start: now };
     } else if (!reduced && from.mounted && from.step === token.step && from.floor === floor && Math.hypot(token.at.x - from.at.x, token.at.z - from.at.z) < MAKE_ROOM_MAX) {
-      travel.current = { from: from.at, to: token.at, fromFloor: floor, toFloor: floor, kind: "slide", ms: MAKE_ROOM_MS, start: now };
+      travel.current = { from: from.at, to: token.at, fromFloor: floor, toFloor: floor, kind: "slide", ms: MAKE_ROOM_MS, start: now, aside: true };
     } else travel.current = null;
     invalidate();
   }, [token.at, token.step, floor, token.motion, reduced, invalidate]);
@@ -407,7 +409,7 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
         if (settled) {
           followed.current = null;
           // Sharing the cell (a stack): it glides from the cell's centre to its place beside the others.
-          if (!reduced && Math.hypot(token.at.x - last.to.x, token.at.z - last.to.z) > 1e-6) travel.current = { from: last.to, to: token.at, fromFloor: floor, toFloor: floor, kind: "slide", ms: MAKE_ROOM_MS, start: performance.now() };
+          if (!reduced && Math.hypot(token.at.x - last.to.x, token.at.z - last.to.z) > 1e-6) travel.current = { from: last.to, to: token.at, fromFloor: floor, toFloor: floor, kind: "slide", ms: MAKE_ROOM_MS, start: performance.now(), aside: true };
           else s = { ...s, x: token.at.x, z: token.at.z };
           y = floor;
         }
@@ -426,7 +428,7 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
       y = t.fromFloor + (t.toFloor - t.fromFloor) * Math.min(1, Math.max(0, progress));
       if (progress >= 1) travel.current = null;
       else {
-        live = t;
+        if (!t.aside) live = t;
         invalidate();
       }
     }
