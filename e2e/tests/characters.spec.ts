@@ -64,7 +64,18 @@ function characters(page: Page): Promise<CharacterView[]> {
  */
 async function expectDeparture(page: Page, key: string, seat: number, message: string): Promise<number | null> {
   await expect.poll(async () => (await characters(page)).find((c) => c.key === key)!.step, { message: `${message}: on the start cell`, timeout: 20_000 }).toBe("0");
-  await expect.poll(async () => (await characters(page)).find((c) => c.key === key)!.state, { message: `${message}: standing`, timeout: 15_000 }).not.toMatch(/^(excited|leavingBase)$/);
+  // Drawn there (the board's step changes when React renders; the picture on the frames the board draws after).
+  const start = cellWorld(seat, 0);
+  await expect
+    .poll(
+      () =>
+        page.evaluate(([k, x, z]) => {
+          const li = document.querySelector<HTMLElement>(`[data-testid="board-mirror"] li[data-key="${k}"]`);
+          return li?.dataset.wx ? Math.hypot(Number(li.dataset.wx) - x, Number(li.dataset.wz) - z) < 0.05 && li.dataset.characterState !== "excited" && li.dataset.characterState !== "leavingBase" : false;
+        }, [key, start.x, start.z] as const),
+      { message: `${message}: drawn standing on the start cell`, timeout: 30_000 },
+    )
+    .toBe(true);
   const rec = await stopRecording(page);
   const path = walkedPath(rec, seat, null, 0);
   console.log(`${message}: ${JSON.stringify(path)}`);
@@ -73,7 +84,6 @@ async function expectDeparture(page: Page, key: string, seat: number, message: s
   expect(path.endOff, `${message}: on the start cell`).toBeLessThan(0.05);
   const drawn = rec.frames.filter((f, i, a) => i > 0 && f.boardFrames !== a[i - 1]!.boardFrames && f.wx !== null);
   const base = drawn[0]!;
-  const start = cellWorld(seat, 0);
   const away = (f: (typeof drawn)[number]) => Math.hypot(f.wx! - base.wx!, f.wz! - base.wz!) > 0.01;
   const onTheWay = drawn.filter((f) => away(f) && Math.hypot(f.wx! - start.x, f.wz! - start.z) > 0.05);
   console.log(`${message}: ${onTheWay.length} frames drawn on the way: ${onTheWay.map((f) => f.state).join(", ")}`);
