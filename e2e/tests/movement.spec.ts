@@ -21,7 +21,8 @@ import { createRoom, joinRoom, openPlayer, readBoard, seatTable, startGame, visi
 import { cellWorld, installMoveRecorder, moveMetrics, startRecording, stopRecording, walkedPath, type MoveMetrics, type WalkedPath } from "../support/movement";
 
 const noErrors = (players: Player[]) => {
-  for (const p of players) expect(p.errors, `${p.name}: no page errors`).toEqual([]);
+  // A page taken offline on purpose logs its failed reconnection attempts: that is the test, not an error.
+  for (const p of players) expect(p.errors.filter((e) => !e.includes("ERR_INTERNET_DISCONNECTED")), `${p.name}: no page errors`).toEqual([]);
 };
 
 /** The presentation's pace for characters (playbackPlan.ts CHARACTER_PACE). */
