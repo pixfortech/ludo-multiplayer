@@ -279,6 +279,10 @@ export function PawnBody({ identity, state, kit, textures, shadows }: TokenBodyP
   );
 }
 
+/** Tokens sharing a cell stand side by side: when one arrives or leaves, the others glide to their new places. */
+const MAKE_ROOM_MS = 180;
+const MAKE_ROOM_MAX = 0.6;
+
 /** A step's centre and floor in world units (the cells of a move's path). */
 const cellPoint = (seat: number, step: number): PathPoint => ({ at: svgToWorld(piecePosition(seat, step)), floor: floorFor(step) });
 
@@ -293,6 +297,7 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
   // A move in progress: its whole path, followed on its own clock (see pathMotion.ts).
   const followed = useRef<FollowedPath | null>(null);
   const played = useRef<number | null>(null);
+  const playedPath = useRef<number | null>(null);
   const character = token.character ?? null;
   const controller = useRef<CharacterController | null>(null);
   const yaw = useRef<number | null>(null);
@@ -327,20 +332,26 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
   );
 
   // A new placement. A move with a path is followed whole from its first cell (its later cells only confirm it);
-  // another motion (a capture, a reduced-motion slide) travels there; anything else is a jump.
+  // another motion (a capture, a reduced-motion slide) travels there; a token making room on its own cell (a stack
+  // forming or breaking up) glides aside; anything else (a snapshot, a refresh, a reconnect) is a jump.
   useLayoutEffect(() => {
     const from = previous.current;
     previous.current = { at: token.at, floor, step: token.step, mounted: true };
     const m = token.motion;
-    if (m?.path) {
-      if (followed.current?.id !== m.path.id) {
-        // From where it stood when it set out; if it was only just mounted mid-move (a quality change), from the
-        // cell the move began on.
-        const stood = from.mounted && from.step === m.path.from;
-        const origin = stood || m.path.from === null ? { at: from.at, floor: from.floor } : cellPoint(m.path.seat, m.path.from);
-        followed.current = followPath(m.path, origin, cellPoint);
-        travel.current = null;
-      }
+    if (m?.path && m.path.id !== playedPath.current) {
+      playedPath.current = m.path.id;
+      // From where it stood when it set out; if it was only just mounted mid-move (a quality change), from the
+      // cell the move began on.
+      const stood = from.mounted && from.step === m.path.from;
+      const origin = stood || m.path.from === null ? { at: from.at, floor: from.floor } : cellPoint(m.path.seat, m.path.from);
+      followed.current = followPath(m.path, origin, cellPoint);
+      travel.current = null;
+      played.current = m.id;
+      invalidate();
+      return;
+    }
+    if (followed.current && m?.path?.id === followed.current.id) {
+      // Still on its way: the board's cells confirm the path it is following.
       played.current = m.id;
       invalidate();
       return;
@@ -348,13 +359,15 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
     const moved = from.at.x !== token.at.x || from.at.z !== token.at.z || from.floor !== floor;
     if (!moved) return;
     followed.current = null;
-    if (!m || m.id === played.current) travel.current = null;
-    else {
+    const now = performance.now();
+    if (m && !m.path && m.id !== played.current) {
       played.current = m.id;
-      travel.current = { from: from.at, to: token.at, fromFloor: from.floor, toFloor: floor, kind: m.kind, ms: m.ms, start: performance.now() };
-    }
+      travel.current = { from: from.at, to: token.at, fromFloor: from.floor, toFloor: floor, kind: m.kind, ms: m.ms, start: now };
+    } else if (!reduced && from.mounted && from.step === token.step && from.floor === floor && Math.hypot(token.at.x - from.at.x, token.at.z - from.at.z) < MAKE_ROOM_MAX) {
+      travel.current = { from: from.at, to: token.at, fromFloor: floor, toFloor: floor, kind: "slide", ms: MAKE_ROOM_MS, start: now };
+    } else travel.current = null;
     invalidate();
-  }, [token.at, token.step, floor, token.motion, invalidate]);
+  }, [token.at, token.step, floor, token.motion, reduced, invalidate]);
 
   useEffect(() => {
     register(token.key, group.current);
@@ -389,11 +402,16 @@ export const Token3D = memo(function Token3D({ token, kit, textures, shadows, re
         // On the last cell; once the board's state has caught up, exactly on its placement (a stack's offset).
         const last = f.segments[f.segments.length - 1]!;
         const settled = token.step === last.step;
-        const end = settled ? token.at : last.to;
-        s = { ...s, x: end.x, z: end.z };
-        y = settled ? floor : last.floor;
-        if (settled) followed.current = null;
-        else invalidate();
+        s = { ...s, x: last.to.x, z: last.to.z };
+        y = last.floor;
+        if (settled) {
+          followed.current = null;
+          // Sharing the cell (a stack): it glides from the cell's centre to its place beside the others.
+          if (!reduced && Math.hypot(token.at.x - last.to.x, token.at.z - last.to.z) > 1e-6) travel.current = { from: last.to, to: token.at, fromFloor: floor, toFloor: floor, kind: "slide", ms: MAKE_ROOM_MS, start: performance.now() };
+          else s = { ...s, x: token.at.x, z: token.at.z };
+          y = floor;
+        }
+        invalidate();
       } else {
         live = { kind: at.kind, from: at.from, to: at.to, ms: at.ms };
         progress = at.progress;

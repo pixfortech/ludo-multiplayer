@@ -297,6 +297,9 @@ export function cellWorld(seat: number, step: number): WorldPoint {
   return gridToWorld(c.col + 0.5, c.row + 0.5);
 }
 
+/** How far from a cell's centre a token sharing the cell can be drawn (stack offsets: up to 0.29 × √2), in board units. */
+const STACK_SPREAD = 0.45;
+
 export interface WalkedPath {
   /** Positions drawn (distinct consecutive board positions). */
   positions: number;
@@ -346,14 +349,17 @@ export function walkedPath(rec: MoveRecording, seat: number, from: number | null
   let furthest = 0;
   let maxBack = 0;
   const along: number[] = [];
+  const end = line[line.length - 1]!;
   for (const p of pts) {
     const at = place(p);
-    maxOff = Math.max(maxOff, at.d);
+    // On its destination cell, beside a token already there (a stack spreads tokens up to about 0.41 of a cell
+    // from the centre), it has arrived: that is on the path.
+    const onDestination = Math.hypot(p.x - end.x, p.z - end.z) < STACK_SPREAD;
+    maxOff = Math.max(maxOff, onDestination ? 0 : at.d);
     maxBack = Math.max(maxBack, furthest - at.along);
     furthest = Math.max(furthest, at.along);
     along.push(at.along);
   }
-  const end = line[line.length - 1]!;
   const lastPt = pts[pts.length - 1]!;
   return {
     positions: pts.length,
