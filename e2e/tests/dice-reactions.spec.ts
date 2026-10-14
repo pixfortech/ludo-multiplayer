@@ -23,6 +23,7 @@ import { expect, test, type Browser, type Page } from "@playwright/test";
 import { boardCells, boardTokens, expectBoard3d, pickToken3d } from "../support/board3d";
 import { queueDice } from "../support/control";
 import { createRoom, expectNoDuplicates, expectResults, joinRoom, openPlayer, playToEnd, playUntil, seatTable, startGame, visible, type BoardView, type Device, type Player } from "../support/game";
+import { installMoveRecorder, startRecording, stopRecording } from "../support/movement";
 import { readTimeline, startTimeline } from "../support/timeline";
 
 const noErrors = (players: Player[]) => {
@@ -161,6 +162,9 @@ test("the 3D die shows the server's value before anything moves; one roll per do
     await startTimeline(p.page);
   }
   const mark = { aman: await lastN(aman.page), ben: await lastN(ben.page) };
+  // Every frame Aman's board draws, with his first character's state (to tell whether it drew the six's reaction).
+  await installMoveRecorder(aman.page);
+  await startRecording(aman.page, A(0));
 
   // A double click on Roll: one request, one roll (the second click lands while the first is on its way).
   await queueDice(6);
@@ -202,8 +206,10 @@ test("the 3D die shows the server's value before anything moves; one roll per do
   // drew frames during the 1.4 s reaction (a busy software renderer may draw none).
   const six = (await since(aman.page, mark.aman)).find((e) => e.type === "cue" && e.kind === "six" && e.player === aman.id)!;
   const reacted = (await states(aman.page)).filter((s) => s.key.startsWith(`${aman.id}:`) && REACTING.has(s.state)).map((s) => s.key).filter((k, i, a) => a.indexOf(k) === i);
-  const drawnDuringReaction = (await states(aman.page)).filter((s) => s.t >= six.t && s.t <= six.t + 1400).length;
-  if (drawnDuringReaction > 0) expect(reacted.length, "the team reacts to the six").toBeGreaterThanOrEqual(1);
+  // Frames drawn while the reaction plays (from a moment after the cue, once it is committed, to its end).
+  const sixFrames = (await stopRecording(aman.page)).frames.filter((f, i, a) => i > 0 && f.boardFrames !== a[i - 1]!.boardFrames && f.t >= six.t + 250 && f.t <= six.t + 1400);
+  console.log(`six: frames drawn during the reaction: ${sixFrames.map((f) => `${Math.round(f.t - six.t)} ms ${f.state}`).join(", ") || "none"}`);
+  if (sixFrames.length > 0) expect(reacted.length, "the team reacts to the six").toBeGreaterThanOrEqual(1);
   else console.log("no frame drawn during the six's reaction");
   // Reacting changed nothing: the server is where the roll left it, nothing was sent, the tray offers the server's four moves.
   const rolled = await table.state();
