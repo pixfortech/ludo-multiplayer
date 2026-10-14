@@ -278,13 +278,22 @@ test("four players: a capture picked by touch in 2.5D — the attacker walks its
   await allReady(ben.page, 16);
   const seats = Object.fromEntries((await table.state()).game!.players.map((p) => [p.id, p.seat]));
 
-  // Aman's character to step 15 of seat 0: two cells past Ben's start (seat 1 starts 13 cells further on).
-  await move(table, 6, 0, { label: "4p: leaving base" });
-  await move(table, 6, 0, { label: "4p: six cells" });
-  await move(table, 4, 0, { label: "4p: four cells" });
-  for (let i = 0; i < 3; i++) await table.act(1);
-  await move(table, 5, 0, { label: "4p: five cells" });
-  expect(seats[ben.id]).toBe(1);
+  // Aman's character to two cells past Ben's start (each seat starts 13 cells further on), recorded move by move;
+  // everyone else passes (nothing out, a 1).
+  const target = 13 * ((seats[ben.id]! - seats[aman.id]! + 4) % 4) + 2;
+  for (let guard = 0; guard < 60; guard++) {
+    const g = (await table.state()).game!;
+    const step = g.players.find((p) => p.id === aman.id)!.tokens[0]!.step;
+    if (step === target && g.currentPlayerId !== aman.id) break;
+    if (g.currentPlayerId !== aman.id) {
+      await table.act(1);
+      continue;
+    }
+    const remaining = step === null ? Infinity : target - step;
+    const value = step === null ? 6 : remaining > 6 ? (g.turn.consecutiveSixes < 2 ? 6 : 5) : remaining === 6 ? 5 : remaining;
+    await move(table, value, 0, { label: `4p: ${step === null ? "leaving base" : `${value} cells`}` });
+  }
+  while ((await table.state()).game!.currentPlayerId !== ben.id) await table.act(1);
 
   // Ben (touch, 2.5D) brings one out and lands on Aman's character with a 2; Aman's 3D board records both.
   await move(table, 6, 0, { label: "4p: Ben leaves base (touch)" });
@@ -293,8 +302,8 @@ test("four players: a capture picked by touch in 2.5D — the attacker walks its
     label: "4p: Ben captures",
     watcher: aman,
     during: async () => {
-      // The victim goes back to its own base slot (seat 0, slot 0) on Aman's board.
-      const slot = classicBaseSlots(0)[0]!;
+      // The victim goes back to its own base slot (its seat's slot 0) on Aman's board.
+      const slot = classicBaseSlots(seats[aman.id]!)[0]!;
       const home = gridToWorld(slot.x, slot.y);
       await expect
         .poll(

@@ -193,14 +193,20 @@ const pct = (sorted: number[], p: number) => (sorted.length ? sorted[Math.min(so
 
 /** Computes the timings of one move from its recording: `finalStep` is where the server put the token. */
 export function moveMetrics(rec: MoveRecording, key: string, finalStep: string, clickName = "pointerup"): MoveMetrics {
-  const click = rec.marks.find((m) => m.name === clickName)?.t ?? rec.marks[0]?.t ?? rec.frames[0]?.t ?? 0;
-  const send = rec.marks.find((m) => m.name.startsWith("send:"))?.t ?? null;
+  // The click that sent the move (the last before its request), else the first click, else the start.
+  const sentMove = rec.marks.find((m) => m.name === "send:move")?.t ?? null;
+  const clicks = rec.marks.filter((m) => m.name === clickName);
+  const click = (sentMove !== null ? clicks.filter((m) => m.t <= sentMove).at(-1)?.t : undefined) ?? clicks[0]?.t ?? rec.marks[0]?.t ?? rec.frames[0]?.t ?? 0;
+  const send = sentMove ?? rec.marks.find((m) => m.name.startsWith("send:"))?.t ?? null;
   const moveEvent = rec.log.find((e) => e.type === "token-move" && e.tokens === key && e.t >= click - 5)?.t ?? null;
   const drawn: MoveFrame[] = [];
   for (const f of rec.frames) if (f.x !== null && (drawn.length === 0 || f.boardFrames !== drawn[drawn.length - 1]!.boardFrames || f.x !== drawn[drawn.length - 1]!.x || f.y !== drawn[drawn.length - 1]!.y)) drawn.push(f);
   const start = drawn.find((f) => f.t >= click) ?? drawn[0];
   const final = [...drawn].reverse().find((f) => f.step === finalStep);
-  const near = (a: MoveFrame, b: MoveFrame) => Math.hypot(a.x! - b.x!, a.y! - b.y!) < 1.5;
+  // Moving or standing: on the 3D board by where it stands on the board (a camera move shifts it on screen
+  // without moving it), on the 2D board by its position on screen.
+  const near = (a: MoveFrame, b: MoveFrame) =>
+    a.wx !== null && b.wx !== null && a.wz !== null && b.wz !== null ? Math.hypot(a.wx - b.wx, a.wz - b.wz) < 0.01 : Math.hypot(a.x! - b.x!, a.y! - b.y!) < 1.5;
   let motion: MoveFrame | null = null;
   let arrival: MoveFrame | null = null;
   if (start && final) {
