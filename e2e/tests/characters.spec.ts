@@ -271,11 +271,22 @@ test("caught: dismay, then back to its own base slot; a refresh mid-walk puts th
 
   // Ben opens and lands on him: dismay, and back to his own base slot.
   await table.act(6, () => 0);
+  await installMoveRecorder(aman.page);
+  await startRecording(aman.page, adda);
   const snap = await table.act(2);
   expect(snap.history.filter((e) => e.type === "capture").length).toBe(1);
-  // Dismayed where it was caught, then sent back (each shown on the frames the page drew: a software renderer
-  // may draw only one of the two); its own base slot is checked below.
-  await expect.poll(async () => (await states(aman.page)).filter((s) => s.key === adda).some((s) => s.state === "captured" || s.state === "returningToBase"), { timeout: 15_000 }).toBe(true);
+  // The capture plays for 1.24 s from when the board showed it: give it that and a slow frame or two.
+  await aman.page.waitForTimeout(3000);
+  // Every frame drawn while it is on its way from the capture cell to its base slot shows it caught (dismay, then
+  // sent back). A software renderer may draw a frame only every second or so, so how many such frames there are
+  // varies; there must be no other state among them.
+  const capRec = await stopRecording(aman.page);
+  const drawnFrames = capRec.frames.filter((f, i, a) => i > 0 && f.boardFrames !== a[i - 1]!.boardFrames && f.wx !== null);
+  const caughtAt = drawnFrames.find((f) => f.step === "base" && f.state !== "idle" && f.state !== "interacting");
+  const slotAt = drawnFrames.at(-1)!;
+  const onTheWay = drawnFrames.filter((f) => f.step === "base" && (f.wx !== slotAt.wx || f.wz !== slotAt.wz) && caughtAt && f.t >= caughtAt.t);
+  console.log(`caught: ${onTheWay.length} frames drawn on the way back: ${onTheWay.map((f) => f.state).join(", ")}`);
+  for (const f of onTheWay) expect(["captured", "returningToBase"], "caught, on its way back").toContain(f.state);
   await expect.poll(async () => (await characters(aman.page)).find((c) => c.key === adda)!.step).toBe("base");
   // In the Crimson base corner (top left), not on the track.
   const cells = await boardCells(aman.page);

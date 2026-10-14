@@ -150,6 +150,10 @@ export async function stopRecording(page: Page): Promise<MoveRecording> {
 }
 
 export interface MoveMetrics {
+  /** Page times (performance.now()): the click, the move's start on screen (its presentation event), the arrival. */
+  clickAt: number;
+  moveEventAt: number | null;
+  arrivalAt: number | null;
   /** Click (pointer release) to the request leaving the page. */
   clickToSendMs: number | null;
   /** The request to the move starting on screen (the server's state arrived and the playback began it). */
@@ -261,6 +265,9 @@ export function moveMetrics(rec: MoveRecording, key: string, finalStep: string, 
   };
   const travelling = motion && arrival ? busy(motion.t, arrival.t) : { ms: 0, script: 0, top: [] };
   return {
+    clickAt: round(click)!,
+    moveEventAt: round(moveEvent),
+    arrivalAt: arrival ? round(arrival.t) : null,
     clickToSendMs: send === null ? null : round(send - click),
     sendToMoveEventMs: send === null || moveEvent === null ? null : round(moveEvent - send),
     clickToMotionMs: motion ? round(motion.t - click) : null,

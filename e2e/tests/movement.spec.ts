@@ -80,6 +80,11 @@ async function move(table: Table, value: number, tokenId: number, o: MoveOptions
     if (await on3d(mover.page)) {
       await expect.poll(async () => (await boardTokens(mover.page)).find((t) => t.key === key)?.state, { message: "the token is offered", timeout: 30_000 }).toBe("movable");
       await pickToken3d(mover, key);
+      // On a touch screen the first tap selects (and previews) the move; a second tap plays it.
+      if (mover.touch) {
+        await expect.poll(async () => (await boardTokens(mover.page)).find((t) => t.key === key)?.state, { message: "the first tap selects it" }).toBe("selected");
+        await pickToken3d(mover, key);
+      }
       table.moves++;
     } else await table.move(tokenId);
   }
@@ -107,9 +112,10 @@ async function move(table: Table, value: number, tokenId: number, o: MoveOptions
     const rec = await stopRecording(watcher.page);
     metrics = moveMetrics(rec, key, String(to));
     path = walkedPath(rec, seat, from, to);
-    const moveEvent = rec.log.find((e) => e.type === "token-move" && e.tokens === key)?.t ?? null;
-    const arrival = metrics.clickToArrivalMs === null ? null : (rec.marks.find((m) => m.name === "pointerup")?.t ?? rec.frames[0]!.t) + metrics.clickToArrivalMs;
-    moveEventToArrivalMs = moveEvent !== null && arrival !== null ? Math.round(arrival - moveEvent) : null;
+    const moveEvent = [...rec.log].reverse().find((e) => e.type === "token-move" && e.tokens === key)?.t ?? null;
+    moveEventToArrivalMs = moveEvent !== null && metrics.arrivalAt !== null ? Math.round(metrics.arrivalAt - moveEvent) : null;
+    if (process.env.MOVE_DEBUG)
+      console.log(`MOVEDEBUG ${o.label} ` + JSON.stringify({ moveEvent, metrics, frames: rec.frames.filter((f, i, a) => i === 0 || f.boardFrames !== a[i - 1]!.boardFrames).map((f) => [Math.round(f.t), f.step, f.state, f.wx, f.wz]), marks: rec.marks }));
   }
   const m: Measured = { label: o.label, from, to, plannedMs: planned(from, to), metrics, path, moveEventToArrivalMs };
   results.push(m);
